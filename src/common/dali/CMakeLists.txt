@@ -1,6 +1,6 @@
 project(DALI LANGUAGES CXX)
 add_library(DALI STATIC
-        "main.cpp")
+        "src/DALI.cpp")
 
-target_include_directories(DALI PUBLIC include)
+target_include_directories(DALI PUBLIC src)
 target_link_libraries(DALI INTERFACE daliC)

@@ -1,4 +1,4 @@
 add_library(eth STATIC
-        "dali.c")
+        "ethernet.c" "ethernet.h")
 
 target_include_directories(eth PUBLIC include)
