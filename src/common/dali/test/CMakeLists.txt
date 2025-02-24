@@ -12,4 +12,4 @@ project(daliMQTTTest)
 set(TESTSRC )
 add_executable(daliMQTTTest.elf TESTSRC)
 
-target_link_libraries(daliMQTTTest.elf idf::freertos idf::spi_flash idf::newlib idf::unity)
+target_link_libraries(daliMQTTTest.elf idf::freertos idf::cxx idf::mqtt idf::driver idf::esp_eth idf::newlib idf::unity)

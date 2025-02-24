@@ -22,6 +22,11 @@ add_subdirectory(../src/esp32 esp32)
 
 
 add_executable(${elf_file} ../src/esp32/main.cpp)
+
+if (${TARGET} MATCHES esp32)
+    target_link_libraries(DALI PRIVATE idf::newlib idf::cxx idf::log)
+endif ()
+
 target_compile_options(${elf_file} PRIVATE -std=gnu++20)
 
 target_link_libraries(${elf_file} idf::freertos idf::newlib idf::log idf::cxx)
