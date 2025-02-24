@@ -21,6 +21,10 @@
 
 #define DALI_TX_TIMEOUT_DEFAULT_MS 50
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /// A union type to make it easier to access individual bytes of a 16-bit
 /// word, and to use as signed or unsigned type.
 typedef union SI_UU16
@@ -78,5 +82,9 @@ inline void dali_wait_between_frames(void) __attribute__((always_inline));
 inline void dali_wait_between_frames(void) {
     vTaskDelay(pdMS_TO_TICKS(20));
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // __DALI_H__

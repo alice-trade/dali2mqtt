@@ -52,7 +52,7 @@ static void got_ip_event_handler(void *arg, esp_event_base_t event_base, int32_t
     ESP_LOGI(TAG, "~~~~~~~~~~~");
 }
 
-esp_err_t init() {
+esp_err_t eth_init() {
     // Initialize TCP/IP stack.
     esp_err_t ret = esp_netif_init();
     if (ret != ESP_OK) {

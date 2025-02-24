@@ -1,4 +1,5 @@
 #include <freertos/FreeRTOS.h>
+#include <freertos/queue.h>
 #include <freertos/task.h>
 #include <esp_log.h>
 #include <driver/rmt_tx.h>
@@ -168,6 +169,7 @@ esp_err_t dali_init(gpio_num_t dali_rx_gpio, gpio_num_t dali_tx_gpio) {
         .gpio_num = dali_rx_gpio,
         .flags.invert_in = true,
     };
+
     CHECK_FOR_ERROR(rmt_new_rx_channel(&rx_channel_cfg, &dali_rxChannel));
         
     // Register RX done callback

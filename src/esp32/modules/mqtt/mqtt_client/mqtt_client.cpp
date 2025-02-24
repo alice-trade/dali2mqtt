@@ -3,8 +3,9 @@
 //
 
 #include "mqtt_client.hpp"
+
+#include <esp_event_base.h>
 #include <esp_log.h>
-#include <esp_mqtt_client.h>
 #include <map>
 
 static const char *TAG = "MqttClient";
