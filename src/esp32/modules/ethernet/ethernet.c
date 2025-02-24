@@ -3,6 +3,7 @@
 //
 
 #include "ethernet.h"
+#include <stdio.h>
 #include <esp_log.h>
 #include <esp_netif.h>
 #include <esp_eth.h>

@@ -2,7 +2,6 @@
 // Created by danil on 23.02.2025.
 //
 
-#include "LightningConfig.hpp"
 #include <nvs_flash.h>
 #include <esp_log.h>
 #include <string>

@@ -5,6 +5,7 @@
 #include "mqtt_client.hpp"
 
 #include <esp_event_base.h>
+#include <mqtt_client.h>
 #include <esp_log.h>
 #include <map>
 

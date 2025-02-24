@@ -5,6 +5,9 @@
 #ifndef LIGHTNINGCONFIG_HPP
 #define LIGHTNINGCONFIG_HPP
 
+#include <nvs_flash.h>
+#include <string>
+
 namespace ConfigManager {
 
     /**

@@ -24,7 +24,7 @@ add_subdirectory(../src/esp32 esp32)
 add_executable(${elf_file} ../src/esp32/main.cpp)
 
 if (${TARGET} MATCHES esp32)
-    target_link_libraries(DALI PRIVATE idf::newlib idf::cxx idf::log)
+    target_link_libraries(DALI PRIVATE idf::newlib idf::cxx idf::log DALIEsp32Modules daliC)
 endif ()
 
 target_compile_options(${elf_file} PRIVATE -std=gnu++20)

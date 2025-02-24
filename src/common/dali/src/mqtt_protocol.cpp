@@ -1,10 +1,10 @@
 //
 // Created by danil on 23.02.2025.
 //
-
+// TODO: Move it to DALI module!
 #include "mqtt_protocol.hpp"
 #include "mqtt_client.hpp"
-#include "DALI.hpp" // Include lighting controller for command handling
+#include "DALI.hpp"
 #include <esp_log.h>
 #include <string>
 #include <sstream>
@@ -71,12 +71,12 @@ void handleMqttMessage(const std::string& topic, const std::string& payload) {
     }
 }
 
-esp_err_t init() {
+int init() {
     // Subscribe to command topics.  Use a wildcard to subscribe to all addresses.
     return MqttClient::subscribe("dali/command/+/+", 0, handleMqttMessage);
 }
 
-esp_err_t publishStatus(uint8_t address, uint8_t brightness, const std::string& state) {
+int publishStatus(uint8_t address, uint8_t brightness, const std::string& state) {
     std::string brightness_topic = createTopic("dali/status", address, "brightness");
     std::string state_topic = createTopic("dali/status", address, "state");
 

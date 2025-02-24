@@ -6,7 +6,6 @@
 #define MQTT_PROTOCOL_HPP
 
 #include <cstdint>
-#include <esp_err.h>
 #include <string>
 
 namespace MqttProtocol {
@@ -16,7 +15,7 @@ namespace MqttProtocol {
       *        Sets up subscriptions and other MQTT related configurations.
       * @return esp_err_t ESP_OK on success, error code otherwise.
       */
-    esp_err_t init();
+    int init();
 
     /**
      * @brief Publishes the DALI device status to MQTT.
@@ -26,7 +25,7 @@ namespace MqttProtocol {
      * @param state The on/off state ("on" or "off").
      * @return esp_err_t ESP_OK on success, error code otherwise.
      */
-    esp_err_t publishStatus(uint8_t address, uint8_t brightness, const std::string& state);
+    int publishStatus(uint8_t address, uint8_t brightness, const std::string& state);
 
 
 } // namespace MqttProtocol
