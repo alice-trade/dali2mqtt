@@ -1,7 +1,7 @@
 // main entry point daliMQTT for esp32
 #include <cstdio>
 #include <esp_log.h>
-#include "DALI_Task.cpp"
+#include "DALI_Runtime.hpp"
 #include "ethernet.h"
 #include "mqtt_client.hpp"
 #include "mqtt_protocol.hpp"
@@ -24,7 +24,7 @@ extern "C" void app_main(void) {
     ESP_LOGI(TAG, "MQTT Protocol Initialized");
 
     // Initialize DALI Module (which includes dalic init and protocol init)
-    if (!DaliModule::init()) {
+    if (!DALI::init()) {
         ESP_LOGE(TAG, "DALI Module initialization failed!");
     } else {
         ESP_LOGI(TAG, "DALI Module Initialized and Started");
