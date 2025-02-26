@@ -17,9 +17,7 @@ idf_build_process(esp32
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(elf_file ${CMAKE_PROJECT_NAME}.elf)
 
-if (${TARGET} MATCHES esp32)
-    target_link_libraries(DALI PRIVATE idf::newlib idf::cxx idf::log DALIEsp32Modules daliC)
-endif ()
+
 
 add_subdirectory(../src/esp32 esp32)
 
@@ -27,9 +25,6 @@ add_subdirectory(../src/esp32 esp32)
 
 add_executable(${elf_file} ../src/esp32/main.cpp)
 
-
-
-target_compile_options(${elf_file} PRIVATE -std=gnu++20)
 
 target_link_libraries(${elf_file} idf::freertos idf::newlib idf::log idf::cxx DALIRuntime)
 # Attach additional targets to the executable file for flashing,

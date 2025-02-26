@@ -2,7 +2,7 @@
 // Created by danil on 23.02.2025.
 //
 
-#include "config_manager.hpp"
+#include "ConfigManager.hpp"
 #include <nvs.h>
 #include <nvs_flash.h>
 #include <esp_log.h>

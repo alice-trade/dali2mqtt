@@ -8,12 +8,11 @@
 project(DALIRuntime LANGUAGES CXX)
 
 add_library(DALIRuntime STATIC
-        "DALI_Runtime.cpp")
-
-target_include_directories(DALIRuntime ${CMAKE_CURRENT_LIST_DIR})
+        "DALI_Runtime.cpp" "DALI_Runtime.hpp" )
 
 target_link_libraries(DALIRuntime PRIVATE
         DALI
         idf::freertos
+        idf::cxx
         idf::log
 )
