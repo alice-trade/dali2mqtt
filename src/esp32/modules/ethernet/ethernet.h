@@ -10,27 +10,12 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-    /**
-     * @brief Initializes the Ethernet interface.
-     *        Configures the Ethernet MAC and PHY, starts the network interface,
-     *        and obtains an IP address (using DHCP or static configuration).
-     * @return esp_err_t ESP_OK on success, error code otherwise.
-     */
-    esp_err_t eth_init();
 
-    /**
-     * @brief Starts the Ethernet interface.
-     *
-     * @return esp_err_t  ESP_OK on success, error code otherwise.
-     */
-    esp_err_t eth_start();
 
-    /**
-     * @brief Stops the Ethernet interface.
-     *
-     * @return esp_err_t ESP_OK on success, error code otherwise.
-     */
-    esp_err_t eth_stop();
+    esp_err_t ethernet_manager_init(void);
+    esp_err_t ethernet_manager_start(void);
+    esp_err_t ethernet_manager_stop(void);
+
 
 #ifdef __cplusplus
 }

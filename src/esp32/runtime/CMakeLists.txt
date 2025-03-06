@@ -5,14 +5,13 @@
 # Tasks are added as separate sub-projects so as compilation errors in
 # one task don't affect another task.
 
-project(DALIRuntime LANGUAGES CXX)
+project(DALIRuntime LANGUAGES C)
 
 add_library(DALIRuntime STATIC
-        "DALI_Runtime.cpp" "DALI_Runtime.hpp" )
+        "DALI_Runtime.c" "DALI_Runtime.h" )
 
 target_link_libraries(DALIRuntime PRIVATE
         DALI
         idf::freertos
-        idf::cxx
         idf::log
 )

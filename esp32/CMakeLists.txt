@@ -23,10 +23,10 @@ add_subdirectory(../src/esp32 esp32)
 
 
 
-add_executable(${elf_file} ../src/esp32/main.cpp)
+add_executable(${elf_file} ../src/esp32/main.c)
 
 
-target_link_libraries(${elf_file} idf::freertos idf::newlib idf::log idf::cxx DALIRuntime)
+target_link_libraries(${elf_file} idf::freertos idf::newlib idf::log DALIRuntime)
 # Attach additional targets to the executable file for flashing,
 # linker script generation, partition_table generation, etc.
 idf_build_executable(${elf_file})

@@ -4,9 +4,9 @@
 
 #include "DALI.hpp"
 
-#include "ConfgManager.hpp"
+#include "ConfigManager.h"
 #include "ethernet.h"
-#include "mqtt_client.hpp"
+#include "mqtt_client.h"
 #include "mqtt_protocol.hpp"
 #include "light_controller.hpp"
 #include "dali_commander.hpp"
@@ -14,6 +14,7 @@
 #include <sstream>
 #include <chrono>
 #include <stdexcept> // For std::runtime_error
+
 
 
 namespace DaliModule {
