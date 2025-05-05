@@ -1,0 +1,199 @@
+menu "DALI MQTT Bridge Settings"
+
+    # --- Настройки DALI ---
+    menu "DALI Interface Configuration" # Используем comment для заголовка раздела
+
+    config DALI2MQTT_DALI_RX_PIN
+        int "DALI RX GPIO Pin"
+        default 16
+        range 0 39
+        help
+            GPIO pin number used for receiving DALI signals.
+
+    config DALI2MQTT_DALI_TX_PIN
+        int "DALI TX GPIO Pin"
+        default 17
+        range 0 39
+        help
+            GPIO pin number used for transmitting DALI signals.
+
+    config DALI2MQTT_DALI_DEFAULT_POLL_INTERVAL_MS
+        int "Default DALI Poll Interval (ms)"
+        default 5000
+        range 100 3600000
+        help
+            Default interval for polling DALI status if not found in NVS.
+
+    config DALI2MQTT_DALI_DEFAULT_POLL_GROUPS_MASK
+        hex "Default DALI Poll Groups Mask (Hex)"
+        default 0x0001
+        help
+            Default bitmask (e.g., 0xFFFF) for polling DALI groups if not found in NVS.
+
+    config DALI2MQTT_DALI_DEFAULT_POLL_DEVICES_MASK
+        hex "Default DALI Poll Devices Mask (Hex, Upper 32bit)"
+        default 0x00000000
+        help
+            Upper 32 bits of the default 64-bit bitmask for polling DALI devices.
+
+    config DALI2MQTT_DALI_DEFAULT_POLL_DEVICES_MASK_LO
+        hex "Default DALI Poll Devices Mask (Hex, Lower 32bit)"
+        default 0x00000000
+        help
+            Lower 32 bits of the default 64-bit bitmask for polling DALI devices.
+
+    config DALI2MQTT_DALI_TRANSACTION_TIMEOUT_MS
+        int "DALI Transaction Timeout (ms)"
+        default 100
+        range 50 1000
+        help
+            Timeout in milliseconds for waiting for a DALI backward frame.
+
+    config DALI2MQTT_DALI_INTER_FRAME_DELAY_MS
+        int "DALI Inter-Frame Delay (ms)"
+        default 20
+        range 10 100
+        help
+            Minimum delay between DALI forward frames.
+
+    config DALI2MQTT_DALI_POLL_DELAY_MS
+        int "DALI Poll Delay (ms)"
+        default 50
+        range 10 200
+        help
+            Delay between polling different DALI addresses within one poll cycle.
+    endmenu
+
+    # --- Настройки MQTT ---
+    menu "MQTT Client Configuration" # Используем comment для заголовка раздела
+
+    config DALI2MQTT_MQTT_DEFAULT_URI
+        string "Default MQTT Broker URI"
+        default "mqtt://192.168.1.100"
+        help
+            Default URI for the MQTT broker (mqtt[s]://[user[:pass]@]host[:port]). Used if not found in NVS.
+
+    config DALI2MQTT_MQTT_DEFAULT_CLIENT_ID
+        string "Default MQTT Client ID"
+        default "esp32_dali_bridge"
+        help
+            Default Client ID for the MQTT connection.
+
+    config DALI2MQTT_MQTT_BASE_TOPIC
+        string "MQTT Base Topic"
+        default "dali_bridge"
+        help
+            Base topic used for publishing status and subscribing to commands.
+
+    config DALI2MQTT_MQTT_AVAILABILITY_TOPIC
+        string "MQTT Availability Topic"
+        default "/status"
+        help
+            Sub-topic for availability status (appended to Base Topic).
+
+    config DALI2MQTT_MQTT_LIGHT_CMD_SUBTOPIC
+        string "MQTT Light Command Sub-Topic"
+        default "/light/+/+/set"
+        help
+            Sub-topic pattern for light commands (appended to Base Topic).
+
+    config DALI2MQTT_MQTT_LIGHT_STATE_SUBTOPIC
+        string "MQTT Light State Sub-Topic Prefix"
+        default "/light"
+        help
+            Sub-topic prefix for light states (e.g., /light/group/0/state).
+
+    config DALI2MQTT_MQTT_CONFIG_SET_SUBTOPIC
+        string "MQTT Config Set Sub-Topic"
+        default "/config/set"
+        help
+            Sub-topic for setting configuration (appended to Base Topic).
+
+    config DALI2MQTT_MQTT_CONFIG_GET_SUBTOPIC
+        string "MQTT Config Get Sub-Topic"
+        default "/config/get"
+        help
+            Sub-topic for requesting configuration (appended to Base Topic).
+
+    config DALI2MQTT_MQTT_CONFIG_RESP_SUBTOPIC
+        string "MQTT Config Response Sub-Topic"
+        default "/config/get/response"
+        help
+            Sub-topic for publishing configuration response (appended to Base Topic).
+
+    config DALI2MQTT_MQTT_GROUP_SET_SUBTOPIC
+        string "MQTT Group Management Set Sub-Topic"
+        default "/config/group/set"
+        help
+            Sub-topic for setting group membership (appended to Base Topic).
+
+    config DALI2MQTT_MQTT_GROUP_RES_SUBTOPIC
+        string "MQTT Group Management Result Sub-Topic"
+        default "/config/group/result"
+        help
+            Sub-topic for group management result (appended to Base Topic).
+
+    config DALI2MQTT_MQTT_PAYLOAD_ONLINE
+        string "MQTT Payload Online"
+        default "online"
+        help
+            Payload for online availability status.
+
+    config DALI2MQTT_MQTT_PAYLOAD_OFFLINE
+        string "MQTT Payload Offline"
+        default "offline"
+        help
+            Payload for offline availability status (LWT).
+    endmenu
+
+    # --- Настройки WiFi по умолчанию ---
+    menu "Default WiFi Credentials"
+
+    config DALI2MQTT_WIFI_DEFAULT_SSID
+        string "Default WiFi SSID"
+        default "YourSSID"
+        help
+            Default WiFi network name (SSID). Used if not found in NVS.
+
+    config DALI2MQTT_WIFI_DEFAULT_PASS
+        string "Default WiFi Password"
+        default "YourPassword"
+        help
+            Default WiFi network password. Used if not found in NVS.
+
+    config DALI2MQTT_WIFI_MAX_RETRY
+        int "WiFi Maximum Connection Retries"
+        default 5
+        range 0 20
+        help
+            Number of times to retry connecting to WiFi before failing.
+
+
+    # --- Настройки Задач ---
+    comment "Task Configuration" # Используем comment для заголовка раздела
+
+    config DALI2MQTT_DALI_POLL_TASK_STACK_SIZE
+        int "DALI Poll Task Stack Size"
+        default 4096
+        range 2048 16384
+        help
+            Stack size for the DALI polling task.
+
+    config DALI2MQTT_DALI_POLL_TASK_PRIORITY
+        int "DALI Poll Task Priority"
+        default 5
+        range 1 24 # tskIDLE_PRIORITY + 1 to configMAX_PRIORITIES - 1
+        help
+            Priority of the DALI polling task.
+    endmenu
+
+    # --- Настройки NVS ---
+    menu "NVS Configuration" # Используем comment для заголовка раздела
+
+    config DALI2MQTT_NVS_NAMESPACE
+        string "NVS Namespace"
+        default "dali_cfg"
+        help
+            Namespace used for storing configuration in NVS.
+    endmenu
+endmenu

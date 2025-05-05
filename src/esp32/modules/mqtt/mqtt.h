@@ -5,7 +5,6 @@
 #ifndef MQTT_H
 #define MQTT_H
 #include "esp_err.h"
-#include "mqtt_client.h" // Для esp_mqtt_client_handle_t
 
 /**
  * @brief Инициализирует MQTT клиент.

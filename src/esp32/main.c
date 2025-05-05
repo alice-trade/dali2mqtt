@@ -2,17 +2,15 @@
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "freertos/timers.h" // Для таймера
-#include "esp_system.h"
 #include "esp_log.h"
 #include "nvs_flash.h"
 #include "esp_event.h" // Для esp_event_loop_create_default
 
 #include "definitions.h"
-#include "config.h"
 #include "wifi_manager.h"
 #include "mqtt.h"
 #include "dali_interface.h"
+#include "config.h"
 
 static const char *TAG = "MAIN";
 
@@ -59,7 +57,7 @@ void app_main(void)
     ESP_LOGI(TAG, "WiFi Connected.");
 
     // 4. Инициализация DALI интерфейса (включая задачу и таймер)
-    ESP_LOGI(TAG, "[5/6] Initializing DALI Interface (RX:%d, TX:%d)...", DALI_RX_PIN, DALI_TX_PIN);
+    ESP_LOGI(TAG, "[5/6] Initializing DALI Interface (RX:%d, TX:%d)...", CONFIG_DALI2MQTT_DALI_RX_PIN, CONFIG_DALI2MQTT_DALI_TX_PIN);
     ret = dali_interface_init(); // Эта функция теперь создает задачу и таймер
     ESP_ERROR_CHECK(ret);
     ESP_LOGI(TAG, "DALI Interface Initialized.");
@@ -92,6 +90,6 @@ void app_main(void)
 
     while(1) {
         vTaskDelay(pdMS_TO_TICKS(60000));
-        ESP_LOGI(TAG, "Heap free: %lu bytes (Uptime: %lus)", (unsigned long)esp_get_free_heap_size(), (unsigned long)(esp_timer_get_time() / 1000000));
+        //ESP_LOGI(TAG, "Heap free: %lu bytes (Uptime: %lus)", (unsigned long)esp_get_free_heap_size(), (unsigned long)(esp_timer_get_time() / 1000000));
     }
-}}
+}

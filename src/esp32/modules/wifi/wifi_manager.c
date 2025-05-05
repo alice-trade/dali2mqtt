@@ -1,5 +1,6 @@
 #include "wifi_manager.h"
 #include "definitions.h"
+#include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
 #include "esp_wifi.h"
 #include "esp_event.h"
@@ -21,13 +22,13 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
         ESP_LOGI(TAG, "WIFI_EVENT_STA_START: Trying to connect...");
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
         ESP_LOGW(TAG, "WIFI_EVENT_STA_DISCONNECTED");
-        if (s_retry_num < WIFI_MAX_RETRY) {
+        if (s_retry_num < CONFIG_DALI2MQTT_WIFI_MAX_RETRY) {
             esp_wifi_connect(); // Попытка переподключения
             s_retry_num++;
-            ESP_LOGI(TAG, "Retry to connect to the AP (%d/%d)", s_retry_num, WIFI_MAX_RETRY);
+            ESP_LOGI(TAG, "Retry to connect to the AP (%d/%d)", s_retry_num, CONFIG_DALI2MQTT_WIFI_MAX_RETRY);
         } else {
             xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT); // Сигнализируем об ошибке
-            ESP_LOGE(TAG, "Connect to the AP failed after %d retries", WIFI_MAX_RETRY);
+            ESP_LOGE(TAG, "Connect to the AP failed after %d retries", CONFIG_DALI2MQTT_WIFI_MAX_RETRY);
         }
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;

@@ -20,7 +20,7 @@ static bool is_connected = false;
 // Парсит топик команды вида <prefix>/light/<type>/<addr>/set
 static bool parse_command_topic(const char *topic, char *type_buf, size_t type_buf_size, uint8_t *addr) {
     char prefix_buffer[128];
-    snprintf(prefix_buffer, sizeof(prefix_buffer), "%s/light/", MQTT_BASE_TOPIC); // e.g., "dali_bridge/light/"
+    snprintf(prefix_buffer, sizeof(prefix_buffer), "%s/light/", CONFIG_DALI2MQTT_MQTT_BASE_TOPIC); // e.g., "dali_bridge/light/"
     const char *prefix = prefix_buffer;
 
     if (strncmp(topic, prefix, strlen(prefix)) != 0) {
@@ -140,18 +140,18 @@ static void handle_incoming_message(const char *topic, int topic_len, const char
 
         if (command_sent) {
             ESP_LOGI(TAG, "Light command for %s %d processed. DALI result: %d. Querying status...", type, addr, dali_result);
-            vTaskDelay(pdMS_TO_TICKS(DALI_POLL_DELAY_MS * 2)); // Пауза перед запросом
+            vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_POLL_DELAY_MS * 2)); // Пауза перед запросом
             dali_interface_query_and_publish_status(addr_type, addr);
         }
 
     }
     // 2. Обработка запроса на получение конфигурации
-    else if (strcmp(topic_str, MQTT_CONFIG_GET_TOPIC) == 0) {
+    else if (strcmp(topic_str, CONFIG_DALI2MQTT_MQTT_BASE_TOPIC CONFIG_DALI2MQTT_MQTT_CONFIG_GET_SUBTOPIC) == 0) {
          ESP_LOGI(TAG, "CMD: Get current configuration");
          mqtt_publish_config();
     }
     // 3. Обработка установки конфигурации (JSON)
-    else if (strcmp(topic_str, MQTT_CONFIG_TOPIC) == 0) {
+    else if (strcmp(topic_str, CONFIG_DALI2MQTT_MQTT_BASE_TOPIC CONFIG_DALI2MQTT_MQTT_CONFIG_GET_SUBTOPIC) == 0) {
          ESP_LOGI(TAG, "CMD: Set configuration");
          cJSON *root = cJSON_Parse(data_str);
          if (root == NULL) {
@@ -203,14 +203,14 @@ static void handle_incoming_message(const char *topic, int topic_len, const char
          // mqtt_publish_config() вызывается из config_manager_save(), если были изменения
     }
     // 4. Обработка команды управления членством в группе
-    else if (strcmp(topic_str, MQTT_GROUP_MANAGEMENT_SET_TOPIC) == 0) {
+    else if (strcmp(topic_str, CONFIG_DALI2MQTT_MQTT_BASE_TOPIC CONFIG_DALI2MQTT_MQTT_GROUP_SET_SUBTOPIC) == 0) {
         ESP_LOGI(TAG, "CMD: Manage Group Membership");
         cJSON *root = cJSON_Parse(data_str);
         if (root == NULL) {
             ESP_LOGE(TAG, "Failed to parse group management JSON: %s", cJSON_GetErrorPtr());
              char err_payload[100];
              snprintf(err_payload, sizeof(err_payload), "{\"status\": \"error\", \"message\": \"Invalid JSON payload\"}");
-             mqtt_manager_publish(MQTT_GROUP_MANAGEMENT_RESULT_TOPIC, err_payload, 0);
+             mqtt_manager_publish(CONFIG_DALI2MQTT_MQTT_BASE_TOPIC CONFIG_DALI2MQTT_MQTT_GROUP_RES_SUBTOPIC, err_payload, 0);
             return;
         }
 
@@ -258,7 +258,7 @@ static void handle_incoming_message(const char *topic, int topic_len, const char
                  "{\"action\": \"%s\", \"device_short_address\": %d, \"group_number\": %d, \"status\": \"%s\", \"message\": \"%s\"}",
                  action_str, device_addr_int, group_num_int, status_str, message_str);
 
-        mqtt_manager_publish(MQTT_GROUP_MANAGEMENT_RESULT_TOPIC, response_payload, 0);
+        mqtt_manager_publish(CONFIG_DALI2MQTT_MQTT_BASE_TOPIC CONFIG_DALI2MQTT_MQTT_GROUP_RES_SUBTOPIC, response_payload, 0);
         ESP_LOGI(TAG, "Published group management result: %s", response_payload);
 
     } else {
@@ -282,23 +282,23 @@ static void mqtt_event_handler_cb(void *handler_args, esp_event_base_t base, int
             is_connected = true;
 
             // Публикуем статус "online"
-            msg_id = mqtt_manager_publish(MQTT_AVAILABILITY_TOPIC, MQTT_PAYLOAD_ONLINE, 1);
-            ESP_LOGI(TAG, "Sent publish successful, msg_id=%d, topic=%s", msg_id, MQTT_AVAILABILITY_TOPIC);
+            msg_id = mqtt_manager_publish(CONFIG_DALI2MQTT_MQTT_AVAILABILITY_TOPIC, CONFIG_DALI2MQTT_MQTT_PAYLOAD_ONLINE, 1);
+            ESP_LOGI(TAG, "Sent publish successful, msg_id=%d, topic=%s", msg_id, CONFIG_DALI2MQTT_MQTT_AVAILABILITY_TOPIC);
 
             // Подписываемся на топики
             char command_topic_wildcard[100];
-            snprintf(command_topic_wildcard, sizeof(command_topic_wildcard), "%s/light/+/+/set", MQTT_BASE_TOPIC);
+            snprintf(command_topic_wildcard, sizeof(command_topic_wildcard), "%s/light/+/+/set", CONFIG_DALI2MQTT_MQTT_BASE_TOPIC);
             msg_id = esp_mqtt_client_subscribe(current_client, command_topic_wildcard, 1);
             ESP_LOGI(TAG, "Subscribed to %s, msg_id=%d", command_topic_wildcard, msg_id);
 
-            msg_id = esp_mqtt_client_subscribe(current_client, MQTT_CONFIG_TOPIC, 1);
-            ESP_LOGI(TAG, "Subscribed to %s, msg_id=%d", MQTT_CONFIG_TOPIC, msg_id);
+            msg_id = esp_mqtt_client_subscribe(current_client, CONFIG_DALI2MQTT_MQTT_BASE_TOPIC CONFIG_DALI2MQTT_MQTT_CONFIG_SET_SUBTOPIC, 1);
+            ESP_LOGI(TAG, "Subscribed to %s, msg_id=%d", CONFIG_DALI2MQTT_MQTT_BASE_TOPIC CONFIG_DALI2MQTT_MQTT_CONFIG_SET_SUBTOPIC, msg_id);
 
-            msg_id = esp_mqtt_client_subscribe(current_client, MQTT_CONFIG_GET_TOPIC, 1);
-            ESP_LOGI(TAG, "Subscribed to %s, msg_id=%d", MQTT_CONFIG_GET_TOPIC, msg_id);
+            msg_id = esp_mqtt_client_subscribe(current_client, CONFIG_DALI2MQTT_MQTT_BASE_TOPIC CONFIG_DALI2MQTT_MQTT_CONFIG_GET_SUBTOPIC, 1);
+            ESP_LOGI(TAG, "Subscribed to %s, msg_id=%d", CONFIG_DALI2MQTT_MQTT_BASE_TOPIC CONFIG_DALI2MQTT_MQTT_CONFIG_GET_SUBTOPIC, msg_id);
 
-            msg_id = esp_mqtt_client_subscribe(current_client, MQTT_GROUP_MANAGEMENT_SET_TOPIC, 1);
-            ESP_LOGI(TAG, "Subscribed to %s, msg_id=%d", MQTT_GROUP_MANAGEMENT_SET_TOPIC, msg_id);
+            msg_id = esp_mqtt_client_subscribe(current_client, CONFIG_DALI2MQTT_MQTT_BASE_TOPIC CONFIG_DALI2MQTT_MQTT_GROUP_SET_SUBTOPIC, 1);
+            ESP_LOGI(TAG, "Subscribed to %s, msg_id=%d", CONFIG_DALI2MQTT_MQTT_BASE_TOPIC CONFIG_DALI2MQTT_MQTT_GROUP_SET_SUBTOPIC, msg_id);
 
             // Публикуем HA Discovery
             ESP_LOGI(TAG, "Publishing HA Discovery config...");
@@ -353,15 +353,15 @@ esp_err_t mqtt_manager_init(void) {
      ESP_LOGI(TAG, "Initializing MQTT...");
      const esp_mqtt_client_config_t mqtt_cfg = {
         .broker.address.uri = g_app_config.mqtt_uri,
-        .credentials.client_id = MQTT_DEFAULT_CLIENT_ID,
+        .credentials.client_id = CONFIG_DALI2MQTT_MQTT_DEFAULT_CLIENT_ID,
         .network.reconnect_timeout_ms = 10000,
         .network.timeout_ms = 20000,
         .task.priority = 5,
         .task.stack_size = 6144,
         .session.last_will = {
-            .topic = MQTT_AVAILABILITY_TOPIC,
-            .msg = MQTT_PAYLOAD_OFFLINE,
-            .msg_len = strlen(MQTT_PAYLOAD_OFFLINE),
+            .topic = CONFIG_DALI2MQTT_MQTT_AVAILABILITY_TOPIC,
+            .msg = CONFIG_DALI2MQTT_MQTT_PAYLOAD_OFFLINE,
+            .msg_len = strlen(CONFIG_DALI2MQTT_MQTT_PAYLOAD_OFFLINE),
             .qos = 1,
             .retain = 1
         },
@@ -456,8 +456,8 @@ void mqtt_publish_config(void) {
          return;
      }
 
-     ESP_LOGI(TAG, "Publishing current config to %s: %s", MQTT_CONFIG_GET_RESPONSE_TOPIC, json_str);
-     mqtt_manager_publish(MQTT_CONFIG_GET_RESPONSE_TOPIC, json_str, 0); // retain=0
+     ESP_LOGI(TAG, "Publishing current config to %s: %s", CONFIG_DALI2MQTT_MQTT_BASE_TOPIC CONFIG_DALI2MQTT_MQTT_CONFIG_RESP_SUBTOPIC, json_str);
+     mqtt_manager_publish(CONFIG_DALI2MQTT_MQTT_BASE_TOPIC CONFIG_DALI2MQTT_MQTT_CONFIG_RESP_SUBTOPIC, json_str, 0); // retain=0
 
      free(json_str);
      cJSON_Delete(root);

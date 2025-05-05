@@ -1,8 +1,8 @@
 #ifndef DALI_INTERFACE_H
 #define DALI_INTERFACE_H
 
+#include "../../dalic/include/dali.h"
 #include "esp_err.h"
-#include "dali.h" // Включаем заголовок низкоуровневого драйвера
 
 /**
  * @brief Инициализирует DALI интерфейс, создает задачу и таймер опроса.

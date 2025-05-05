@@ -10,6 +10,7 @@
 #include "esp_mac.h"
 #include "cJSON.h"
 #include <stdio.h> // для snprintf
+#include <freertos/semphr.h>
 
 static const char *TAG = "DALI_IF";
 static SemaphoreHandle_t dali_mutex = NULL; // Мьютекс для защиты доступа к шине DALI
@@ -49,7 +50,7 @@ static bool lock_dali_bus() {
         return false;
     }
     // Увеличим таймаут мьютекса, чтобы учесть возможные задержки
-    if (xSemaphoreTake(dali_mutex, pdMS_TO_TICKS(DALI_TRANSACTION_TIMEOUT_MS + DALI_INTER_FRAME_DELAY_MS + 50)) != pdTRUE) {
+    if (xSemaphoreTake(dali_mutex, pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_TRANSACTION_TIMEOUT_MS + CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS + 50)) != pdTRUE) {
         ESP_LOGE(TAG, "Failed to take DALI mutex");
         return false;
     }
@@ -112,7 +113,7 @@ esp_err_t dali_interface_init(void) {
     initialize_states();
 
     // 3. Инициализация низкоуровневого драйвера
-    esp_err_t err = dali_init(DALI_RX_PIN, DALI_TX_PIN);
+    esp_err_t err = dali_init(CONFIG_DALI2MQTT_DALI_RX_PIN, CONFIG_DALI2MQTT_DALI_TX_PIN);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Low-level DALI driver initialization failed: %s", esp_err_to_name(err));
         // Не удаляем мьютекс здесь, он может быть уже использован
@@ -124,9 +125,9 @@ esp_err_t dali_interface_init(void) {
     if (s_dali_poll_task_handle == NULL) {
         BaseType_t task_ret = xTaskCreate(dali_poll_task,
                                           "dali_poll_task",
-                                          DALI_POLL_TASK_STACK_SIZE,
+                                          CONFIG_DALI2MQTT_DALI_POLL_TASK_STACK_SIZE,
                                           NULL,
-                                          DALI_POLL_TASK_PRIORITY,
+                                          CONFIG_DALI2MQTT_DALI_POLL_TASK_PRIORITY,
                                           &s_dali_poll_task_handle);
         if (task_ret != pdPASS) {
             ESP_LOGE(TAG, "Failed to create DALI poll task!");
@@ -140,7 +141,7 @@ esp_err_t dali_interface_init(void) {
     // Период берем из глобальной конфигурации g_app_config
     if (s_dali_poll_timer == NULL) {
         s_dali_poll_timer = xTimerCreate("daliPollTimer",
-                                         pdMS_TO_TICKS(g_app_config.poll_interval_ms > 0 ? g_app_config.poll_interval_ms : DALI_DEFAULT_POLL_INTERVAL_MS), // Защита от нулевого интервала
+                                         pdMS_TO_TICKS(g_app_config.poll_interval_ms > 0 ? g_app_config.poll_interval_ms : CONFIG_DALI2MQTT_DALI_DEFAULT_POLL_INTERVAL_MS), // Защита от нулевого интервала
                                          pdTRUE, // Автоматический перезапуск
                                          (void *)0, // ID таймера (не используется)
                                          dali_poll_timer_callback); // Наш статический callback
@@ -168,7 +169,7 @@ esp_err_t dali_interface_start_polling(void) {
     }
 
     // Обновляем период таймера на случай, если он изменился в конфиге до старта
-    TickType_t new_period = pdMS_TO_TICKS(g_app_config.poll_interval_ms > 0 ? g_app_config.poll_interval_ms : DALI_DEFAULT_POLL_INTERVAL_MS);
+    TickType_t new_period = pdMS_TO_TICKS(g_app_config.poll_interval_ms > 0 ? g_app_config.poll_interval_ms : CONFIG_DALI2MQTT_DALI_DEFAULT_POLL_INTERVAL_MS);
     if (xTimerChangePeriod(s_dali_poll_timer, new_period, pdMS_TO_TICKS(100)) != pdPASS) {
          ESP_LOGE(TAG, "Failed to set poll timer period before starting.");
          // Продолжаем попытку запуска со старым периодом
@@ -231,7 +232,7 @@ esp_err_t dali_interface_send_raw_command(dali_addressType_t address_type, uint8
              address_type, address, is_cmd, command_or_data, send_twice);
 
     int dali_res = DALI_RESULT_NO_REPLY; // Значение по умолчанию для результата
-    esp_err_t err = dali_transaction(address_type, address, is_cmd, command_or_data, send_twice, DALI_TRANSACTION_TIMEOUT_MS, &dali_res);
+    esp_err_t err = dali_transaction(address_type, address, is_cmd, command_or_data, send_twice, CONFIG_DALI2MQTT_DALI_TRANSACTION_TIMEOUT_MS, &dali_res);
 
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "DALI transaction failed: %s", esp_err_to_name(err));
@@ -247,7 +248,7 @@ esp_err_t dali_interface_send_raw_command(dali_addressType_t address_type, uint8
     // Используем значение из project_defs.h
     // vTaskDelay(pdMS_TO_TICKS(DALI_INTER_FRAME_DELAY_MS));
     // dali_wait_between_frames(); // Используем inline функцию из dali.h, если она там есть и делает то же самое
-    vTaskDelay(pdMS_TO_TICKS(DALI_INTER_FRAME_DELAY_MS)); // Явная задержка
+    vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS)); // Явная задержка
 
     unlock_dali_bus();
     return err;
@@ -351,7 +352,7 @@ void dali_interface_query_and_publish_status(dali_addressType_t address_type, ui
 
         // Формируем топик и JSON payload для MQTT
         char topic[128];
-        snprintf(topic, sizeof(topic), "%s/light/%s/%d/state", MQTT_BASE_TOPIC, type_str, address);
+        snprintf(topic, sizeof(topic), "%s/light/%s/%d/state", CONFIG_DALI2MQTT_MQTT_BASE_TOPIC, type_str, address);
 
         cJSON *root = cJSON_CreateObject();
         if (!root) {
@@ -470,12 +471,12 @@ void dali_interface_publish_ha_discovery(void) {
                      "\"pl_not_avail\": \"%s\","
                      "\"device\": %s"             // Информация об устройстве (мосте)
                      "}",
-                     MQTT_BASE_TOPIC, i,              // ~
+                     CONFIG_DALI2MQTT_MQTT_BASE_TOPIC, i,              // ~
                      name_buffer,                     // name
                      unique_id_buffer,                // unique_id
-                     MQTT_AVAILABILITY_TOPIC,         // avty_t
-                     MQTT_PAYLOAD_ONLINE,             // pl_avail
-                     MQTT_PAYLOAD_OFFLINE,            // pl_not_avail
+                     CONFIG_DALI2MQTT_MQTT_AVAILABILITY_TOPIC,         // avty_t
+                     CONFIG_DALI2MQTT_MQTT_PAYLOAD_ONLINE,             // pl_avail
+                     CONFIG_DALI2MQTT_MQTT_PAYLOAD_OFFLINE,            // pl_not_avail
                      device_info_buffer               // device
                      );
 
@@ -510,12 +511,12 @@ void dali_interface_publish_ha_discovery(void) {
                      "\"pl_not_avail\": \"%s\","
                      "\"device\": %s"
                      "}",
-                     MQTT_BASE_TOPIC, i,              // ~
+                     CONFIG_DALI2MQTT_MQTT_BASE_TOPIC, i,              // ~
                      name_buffer,                     // name
                      unique_id_buffer,                // unique_id
-                     MQTT_AVAILABILITY_TOPIC,         // avty_t
-                     MQTT_PAYLOAD_ONLINE,             // pl_avail
-                     MQTT_PAYLOAD_OFFLINE,            // pl_not_avail
+                     CONFIG_DALI2MQTT_MQTT_AVAILABILITY_TOPIC,         // avty_t
+                     CONFIG_DALI2MQTT_MQTT_PAYLOAD_ONLINE,             // pl_avail
+                     CONFIG_DALI2MQTT_MQTT_PAYLOAD_OFFLINE,            // pl_not_avail
                      device_info_buffer               // device
                      );
 

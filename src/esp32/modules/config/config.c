@@ -3,7 +3,6 @@
 //
 
 #include "config.h"
-#include "nvs_flash.h"
 #include "nvs.h"
 #include "esp_log.h"
 #include "string.h"
@@ -11,10 +10,11 @@
 
 static const char *TAG = "CONFIG_MGR";
 
-// Глобальная структура определена в main.c, объявлена как extern в project_defs.h
-// app_config_t g_app_config;
 
 // --- Внутренние вспомогательные функции ---
+static uint64_t combine_u32_to_u64(uint32_t high, uint32_t low) {
+    return ((uint64_t)high << 32) | low;
+}
 
 // Загрузка строки из NVS с значением по умолчанию
 static esp_err_t load_string_from_nvs(nvs_handle_t handle, const char* key, char* buffer, size_t max_len, const char* default_val) {
@@ -123,15 +123,15 @@ esp_err_t config_manager_init(void) {
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to open NVS namespace '%s': %s", NVS_NAMESPACE, esp_err_to_name(err));
         // Устанавливаем значения по умолчанию в g_app_config в случае ошибки
-        strncpy(g_app_config.wifi_ssid, WIFI_DEFAULT_SSID, sizeof(g_app_config.wifi_ssid) - 1);
+        strncpy(g_app_config.wifi_ssid, CONFIG_DALI2MQTT_WIFI_DEFAULT_SSID, sizeof(g_app_config.wifi_ssid) - 1);
         g_app_config.wifi_ssid[sizeof(g_app_config.wifi_ssid) - 1] = '\0';
-        strncpy(g_app_config.wifi_pass, WIFI_DEFAULT_PASS, sizeof(g_app_config.wifi_pass) - 1);
+        strncpy(g_app_config.wifi_pass, CONFIG_DALI2MQTT_WIFI_DEFAULT_PASS, sizeof(g_app_config.wifi_pass) - 1);
         g_app_config.wifi_pass[sizeof(g_app_config.wifi_pass) - 1] = '\0';
-        strncpy(g_app_config.mqtt_uri, MQTT_DEFAULT_URI, sizeof(g_app_config.mqtt_uri) - 1);
+        strncpy(g_app_config.mqtt_uri, CONFIG_DALI2MQTT_MQTT_DEFAULT_URI, sizeof(g_app_config.mqtt_uri) - 1);
         g_app_config.mqtt_uri[sizeof(g_app_config.mqtt_uri) - 1] = '\0';
-        g_app_config.poll_interval_ms = DALI_DEFAULT_POLL_INTERVAL_MS;
-        g_app_config.poll_groups_mask = 0x0001; // По умолчанию опрашиваем группу 0
-        g_app_config.poll_devices_mask = 0;    // По умолчанию не опрашиваем устройства
+        g_app_config.poll_interval_ms = CONFIG_DALI2MQTT_DALI_DEFAULT_POLL_INTERVAL_MS;
+        g_app_config.poll_groups_mask = CONFIG_DALI2MQTT_DALI_DEFAULT_POLL_GROUPS_MASK; // По умолчанию опрашиваем группу 0
+        g_app_config.poll_devices_mask = combine_u32_to_u64(CONFIG_DALI2MQTT_DALI_DEFAULT_POLL_DEVICES_MASK, CONFIG_DALI2MQTT_DALI_DEFAULT_POLL_DEVICES_MASK_LO);;    // По умолчанию не опрашиваем устройства
         return err;
     }
 
@@ -139,22 +139,23 @@ esp_err_t config_manager_init(void) {
     esp_err_t load_err; // Отслеживаем ошибки загрузки
     err = ESP_OK;       // Общий результат инициализации
 
-    load_err = load_string_from_nvs(nvs_handle, NVS_KEY_WIFI_SSID, g_app_config.wifi_ssid, sizeof(g_app_config.wifi_ssid), WIFI_DEFAULT_SSID);
+    load_err = load_string_from_nvs(nvs_handle, NVS_KEY_WIFI_SSID, g_app_config.wifi_ssid, sizeof(g_app_config.wifi_ssid), CONFIG_DALI2MQTT_WIFI_DEFAULT_SSID);
     if (load_err != ESP_OK && err == ESP_OK) err = load_err; // Запоминаем первую ошибку
 
-    load_err = load_string_from_nvs(nvs_handle, NVS_KEY_WIFI_PASS, g_app_config.wifi_pass, sizeof(g_app_config.wifi_pass), WIFI_DEFAULT_PASS);
+    load_err = load_string_from_nvs(nvs_handle, NVS_KEY_WIFI_PASS, g_app_config.wifi_pass, sizeof(g_app_config.wifi_pass), CONFIG_DALI2MQTT_WIFI_DEFAULT_PASS);
     if (load_err != ESP_OK && err == ESP_OK) err = load_err;
 
-    load_err = load_string_from_nvs(nvs_handle, NVS_KEY_MQTT_URI, g_app_config.mqtt_uri, sizeof(g_app_config.mqtt_uri), MQTT_DEFAULT_URI);
+    load_err = load_string_from_nvs(nvs_handle, NVS_KEY_MQTT_URI, g_app_config.mqtt_uri, sizeof(g_app_config.mqtt_uri), CONFIG_DALI2MQTT_MQTT_DEFAULT_URI);
     if (load_err != ESP_OK && err == ESP_OK) err = load_err;
 
-    load_err = load_u32_from_nvs(nvs_handle, NVS_KEY_POLL_INTERVAL, &g_app_config.poll_interval_ms, DALI_DEFAULT_POLL_INTERVAL_MS);
+    load_err = load_u32_from_nvs(nvs_handle, NVS_KEY_POLL_INTERVAL, &g_app_config.poll_interval_ms, CONFIG_DALI2MQTT_DALI_DEFAULT_POLL_INTERVAL_MS);
     if (load_err != ESP_OK && err == ESP_OK) err = load_err;
 
-    load_err = load_u16_from_nvs(nvs_handle, NVS_KEY_POLL_GROUPS, &g_app_config.poll_groups_mask, (uint16_t)0x0001);
+    load_err = load_u16_from_nvs(nvs_handle, NVS_KEY_POLL_GROUPS, &g_app_config.poll_groups_mask, CONFIG_DALI2MQTT_DALI_DEFAULT_POLL_GROUPS_MASK);
     if (load_err != ESP_OK && err == ESP_OK) err = load_err;
 
-    load_err = load_u64_from_nvs(nvs_handle, NVS_KEY_POLL_DEVICES, &g_app_config.poll_devices_mask, (uint64_t)0);
+    uint64_t default_devices_mask = combine_u32_to_u64(CONFIG_DALI2MQTT_DALI_DEFAULT_POLL_DEVICES_MASK, CONFIG_DALI2MQTT_DALI_DEFAULT_POLL_DEVICES_MASK_LO);
+    load_err = load_u64_from_nvs(nvs_handle, NVS_KEY_POLL_DEVICES, &g_app_config.poll_devices_mask, default_devices_mask);
     if (load_err != ESP_OK && err == ESP_OK) err = load_err;
 
     ESP_LOGI(TAG, "Loaded Config: SSID='%s', MQTT URI='%s', Poll Interval=%lums, Poll Groups=0x%04X, Poll Devices=0x%016llX",
