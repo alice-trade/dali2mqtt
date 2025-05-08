@@ -17,12 +17,16 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(app ${CMAKE_PROJECT_NAME})
 
 
-add_subdirectory(../src/esp32/dalic dalic)
+
+add_subdirectory(../src/esp32/driver/dalic dalic)
 add_subdirectory(../src/esp32/modules daliMQTTModules)
 
 add_executable(${app} ../src/esp32/main.c)
 
+
+
 target_link_libraries(${app} idf::freertos idf::newlib idf::log idf::nvs_flash libDaliMQTT idf::esp_event)
 idf_build_executable(${app})
 
+#include(ESPTest.cmake)
 

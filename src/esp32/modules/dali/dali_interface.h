@@ -1,7 +1,7 @@
 #ifndef DALI_INTERFACE_H
 #define DALI_INTERFACE_H
 
-#include "../../dalic/include/dali.h"
+#include "dalic/include/dali.h"
 #include "esp_err.h"
 
 /**

@@ -2,7 +2,7 @@
 
 #include "dali_interface.h"
 #include "definitions.h"
-#include "dali_commands.h" // Включаем команды DALI
+#include "dalic/include/dali_commands.h" // Включаем команды DALI
 #include "freertos/task.h"
 #include "freertos/timers.h" // Для TimerHandle_t
 #include "esp_log.h"

@@ -2,7 +2,7 @@
 #include "mqtt.h"
 #include "definitions.h"
 #include "esp_log.h"
-#include "dali_commands.h"
+#include "dalic/include/dali_commands.h"
 #include "mqtt_client.h"
 #include "string.h" // Для strncmp, strchr, atoi, strncpy, strcmp, strlen, strerror
 #include "stdlib.h" // Для strtol, strtoull

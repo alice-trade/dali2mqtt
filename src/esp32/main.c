@@ -17,8 +17,6 @@ static const char *TAG = "MAIN";
 // --- Глобальные переменные (определения) ---
 app_config_t g_app_config;
 
-
-
 void app_main(void)
 {
     ESP_LOGI(TAG, "===================================");

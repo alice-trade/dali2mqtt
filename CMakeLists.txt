@@ -16,3 +16,5 @@ if("${TARGET}" IN_LIST targets)
 else ()
     message(FATAL_ERROR "Unsupported platform")
 endif ()
+
+set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY CMAKE_DEFAULT_TARGET daliMQTT)

@@ -1,5 +1,6 @@
 project(libDaliMQTT LANGUAGES C)
 
+
 set(SOURCES
         ${CMAKE_CURRENT_LIST_DIR}/config/config.c
         ${CMAKE_CURRENT_LIST_DIR}/mqtt/mqtt.c
@@ -9,7 +10,7 @@ set(SOURCES
 
 add_library(libDaliMQTT STATIC ${SOURCES})
 
-target_include_directories(libDaliMQTT PUBLIC ./config ./mqtt ./dali ./wifi)
+target_include_directories(libDaliMQTT PUBLIC ./config ./mqtt ./dali ./wifi INTERFACE ${CMAKE_SOURCE_DIR}/src/esp32/driver)
 target_link_libraries(libDaliMQTT PRIVATE
         daliC
         idf::mqtt
