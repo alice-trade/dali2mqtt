@@ -17,43 +17,6 @@ static uint64_t combine_u32_to_u64(uint32_t high, uint32_t low) {
 }
 
 // Загрузка строки из NVS с значением по умолчанию
-static esp_err_t load_string_from_nvs(nvs_handle_t handle, const char* key, char* buffer, size_t max_len, const char* default_val) {
-    esp_err_t err;
-    size_t required_size = 0;
-    err = nvs_get_str(handle, key, NULL, &required_size);
-    if (err == ESP_OK) {
-        if (required_size > max_len) {
-            ESP_LOGE(TAG, "NVS: Buffer too small for key '%s'. Required: %d, Available: %d", key, required_size, max_len);
-            strncpy(buffer, default_val, max_len - 1);
-            buffer[max_len - 1] = '\0';
-            // Попытка сохранить дефолтное значение, чтобы избежать повторной ошибки
-            nvs_set_str(handle, key, default_val);
-            return ESP_ERR_NVS_INVALID_LENGTH;
-        }
-        err = nvs_get_str(handle, key, buffer, &required_size);
-        if (err != ESP_OK) {
-            ESP_LOGE(TAG, "NVS: Failed to get string for key '%s' (%s)", key, esp_err_to_name(err));
-            strncpy(buffer, default_val, max_len - 1);
-            buffer[max_len - 1] = '\0';
-        }
-    } else if (err == ESP_ERR_NVS_NOT_FOUND) {
-        ESP_LOGW(TAG, "NVS: Key '%s' not found, using default: '%s'", key, default_val);
-        strncpy(buffer, default_val, max_len - 1);
-        buffer[max_len - 1] = '\0';
-        esp_err_t set_err = nvs_set_str(handle, key, default_val);
-        if (set_err != ESP_OK) {
-             ESP_LOGE(TAG, "NVS: Failed to set default string for key '%s' (%s)", key, esp_err_to_name(set_err));
-             err = set_err; // Возвращаем ошибку записи
-        } else {
-             err = ESP_OK; // Успешно установили дефолт
-        }
-    } else {
-        ESP_LOGE(TAG, "NVS: Error getting size for key '%s' (%s)", key, esp_err_to_name(err));
-        strncpy(buffer, default_val, max_len - 1);
-        buffer[max_len - 1] = '\0';
-    }
-    return err;
-}
 
 // Загрузка uint32_t из NVS с значением по умолчанию
 static esp_err_t load_u32_from_nvs(nvs_handle_t handle, const char* key, uint32_t* value, uint32_t default_val) {
@@ -118,10 +81,6 @@ static esp_err_t load_u64_from_nvs(nvs_handle_t handle, const char* key, uint64_
 // --- Публичные функции ---
 
 esp_err_t config_manager_init(void) {
-    nvs_handle_t nvs_handle;
-    esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to open NVS namespace '%s': %s", NVS_NAMESPACE, esp_err_to_name(err));
         // Устанавливаем значения по умолчанию в g_app_config в случае ошибки
         strncpy(g_app_config.wifi_ssid, CONFIG_DALI2MQTT_WIFI_DEFAULT_SSID, sizeof(g_app_config.wifi_ssid) - 1);
         g_app_config.wifi_ssid[sizeof(g_app_config.wifi_ssid) - 1] = '\0';
@@ -129,24 +88,20 @@ esp_err_t config_manager_init(void) {
         g_app_config.wifi_pass[sizeof(g_app_config.wifi_pass) - 1] = '\0';
         strncpy(g_app_config.mqtt_uri, CONFIG_DALI2MQTT_MQTT_DEFAULT_URI, sizeof(g_app_config.mqtt_uri) - 1);
         g_app_config.mqtt_uri[sizeof(g_app_config.mqtt_uri) - 1] = '\0';
-        g_app_config.poll_interval_ms = CONFIG_DALI2MQTT_DALI_DEFAULT_POLL_INTERVAL_MS;
-        g_app_config.poll_groups_mask = CONFIG_DALI2MQTT_DALI_DEFAULT_POLL_GROUPS_MASK; // По умолчанию опрашиваем группу 0
-        g_app_config.poll_devices_mask = combine_u32_to_u64(CONFIG_DALI2MQTT_DALI_DEFAULT_POLL_DEVICES_MASK, CONFIG_DALI2MQTT_DALI_DEFAULT_POLL_DEVICES_MASK_LO);;    // По умолчанию не опрашиваем устройства
-        return err;
+    nvs_handle_t nvs_handle;
+    esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to open NVS namespace '%s': %s. Using DALI defaults.", NVS_NAMESPACE, esp_err_to_name(err));
+        // Устанавливаем значения по умолчанию для DALI параметров
+        g_app_config.poll_interval_ms = CONFIG_DALI2MQTT_DALI_DEFAULT_POLL_INTERVAL_MS; // или CONFIG_MYPROJ_DALI_DEFAULT_POLL_INTERVAL_MS
+        g_app_config.poll_groups_mask = 0x0001;
+        g_app_config.poll_devices_mask = 0;
+        return err; // Возвращаем ошибку открытия NVS
     }
 
     ESP_LOGI(TAG, "Loading configuration from NVS...");
     esp_err_t load_err; // Отслеживаем ошибки загрузки
-    err = ESP_OK;       // Общий результат инициализации
-
-    load_err = load_string_from_nvs(nvs_handle, NVS_KEY_WIFI_SSID, g_app_config.wifi_ssid, sizeof(g_app_config.wifi_ssid), CONFIG_DALI2MQTT_WIFI_DEFAULT_SSID);
-    if (load_err != ESP_OK && err == ESP_OK) err = load_err; // Запоминаем первую ошибку
-
-    load_err = load_string_from_nvs(nvs_handle, NVS_KEY_WIFI_PASS, g_app_config.wifi_pass, sizeof(g_app_config.wifi_pass), CONFIG_DALI2MQTT_WIFI_DEFAULT_PASS);
-    if (load_err != ESP_OK && err == ESP_OK) err = load_err;
-
-    load_err = load_string_from_nvs(nvs_handle, NVS_KEY_MQTT_URI, g_app_config.mqtt_uri, sizeof(g_app_config.mqtt_uri), CONFIG_DALI2MQTT_MQTT_DEFAULT_URI);
-    if (load_err != ESP_OK && err == ESP_OK) err = load_err;
+    err = ESP_OK;       // Общий результат инициализаци
 
     load_err = load_u32_from_nvs(nvs_handle, NVS_KEY_POLL_INTERVAL, &g_app_config.poll_interval_ms, CONFIG_DALI2MQTT_DALI_DEFAULT_POLL_INTERVAL_MS);
     if (load_err != ESP_OK && err == ESP_OK) err = load_err;
@@ -183,15 +138,6 @@ esp_err_t config_manager_save(void) {
     ESP_LOGI(TAG, "Saving configuration to NVS...");
     esp_err_t save_err; // Локальная переменная для ошибок сохранения
     err = ESP_OK;       // Инициализируем общую ошибку как OK
-
-    save_err = nvs_set_str(nvs_handle, NVS_KEY_WIFI_SSID, g_app_config.wifi_ssid);
-    if (save_err != ESP_OK) { ESP_LOGE(TAG, "Failed to save %s: %s", NVS_KEY_WIFI_SSID, esp_err_to_name(save_err)); if (err == ESP_OK) err = save_err; }
-
-    save_err = nvs_set_str(nvs_handle, NVS_KEY_WIFI_PASS, g_app_config.wifi_pass);
-    if (save_err != ESP_OK) { ESP_LOGE(TAG, "Failed to save %s: %s", NVS_KEY_WIFI_PASS, esp_err_to_name(save_err)); if (err == ESP_OK) err = save_err; }
-
-    save_err = nvs_set_str(nvs_handle, NVS_KEY_MQTT_URI, g_app_config.mqtt_uri);
-    if (save_err != ESP_OK) { ESP_LOGE(TAG, "Failed to save %s: %s", NVS_KEY_MQTT_URI, esp_err_to_name(save_err)); if (err == ESP_OK) err = save_err; }
 
     save_err = nvs_set_u32(nvs_handle, NVS_KEY_POLL_INTERVAL, g_app_config.poll_interval_ms);
     if (save_err != ESP_OK) { ESP_LOGE(TAG, "Failed to save %s: %s", NVS_KEY_POLL_INTERVAL, esp_err_to_name(save_err)); if (err == ESP_OK) err = save_err; }

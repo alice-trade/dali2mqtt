@@ -16,9 +16,6 @@
 
 // --- NVS (Non-Volatile Storage) ---
 #define NVS_NAMESPACE         CONFIG_DALI2MQTT_NVS_NAMESPACE
-#define NVS_KEY_WIFI_SSID     "wifi_ssid"
-#define NVS_KEY_WIFI_PASS     "wifi_pass"
-#define NVS_KEY_MQTT_URI      "mqtt_uri"
 #define NVS_KEY_POLL_INTERVAL "poll_int"
 #define NVS_KEY_POLL_GROUPS   "poll_groups"
 #define NVS_KEY_POLL_DEVICES  "poll_devices"
