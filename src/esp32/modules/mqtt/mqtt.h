@@ -1,7 +1,3 @@
-//
-// Created by danil on 01.05.2025.
-//
-
 #ifndef MQTT_H
 #define MQTT_H
 #include "esp_err.h"

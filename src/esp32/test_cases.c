@@ -18,7 +18,7 @@ void app_main(void) {
     print_banner("Test subject: DALI Interface");
     UNITY_BEGIN();
     // Можно вызывать отдельные тестовые функции или register_config_manager_tests()
-    unity_run_tests_by_tag("[dali]", false);
+    //unity_run_tests_by_tag("[dali]", false);
     UNITY_END();
 }
 

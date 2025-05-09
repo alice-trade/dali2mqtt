@@ -1,7 +1,3 @@
-//
-// Created by danil on 01.05.2025.
-//
-
 #include "config.h"
 #include "nvs.h"
 #include "esp_log.h"

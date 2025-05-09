@@ -1,7 +1,3 @@
-//
-// Created by danil on 01.05.2025.
-//
-
 #ifndef CONFIG_H
 #define CONFIG_H
 #include "esp_err.h"
@@ -51,8 +47,4 @@ esp_err_t config_manager_set_poll_groups_mask(uint16_t groups_mask);
  */
 esp_err_t config_manager_set_poll_devices_mask(uint64_t devices_mask);
 
-// Функции для установки WiFi и MQTT параметров (если нужна настройка через MQTT)
-// esp_err_t config_manager_set_wifi_ssid(const char* ssid);
-// esp_err_t config_manager_set_wifi_pass(const char* pass);
-// esp_err_t config_manager_set_mqtt_uri(const char* uri);
 #endif //CONFIG_H

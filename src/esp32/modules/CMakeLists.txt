@@ -19,14 +19,16 @@ set(TEST_SOURCES
 
 target_sources(libDaliMQTT PRIVATE ${MODULES_SOURCES})
 target_include_directories(libDaliMQTT PUBLIC ./config ./mqtt ./dali ./wifi)
+
 target_link_libraries(libDaliMQTT PUBLIC
         daliC
+        idf::nvs_flash
         idf::mqtt
-        idf::esp_event
         idf::log
+        idf::esp_event
         idf::json
         idf::driver
         idf::esp_netif
-        idf::nvs_flash
+        idf::freertos
         idf::esp_wifi
 )
