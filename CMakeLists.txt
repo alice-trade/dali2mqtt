@@ -13,7 +13,7 @@ if("${TARGET}" IN_LIST targets)
     message(STATUS "Performing configuration stage")
     add_subdirectory(${TARGET})
 else ()
-    message(FATAL_ERROR "Unsupported platform. Call cmake with -DTARGET <target>.")
+    message(FATAL_ERROR "Unsupported platform. Call cmake with -DTARGET <target> and -DCMAKE_TOOLCHAIN_FILE <toolchain>.")
 endif ()
 
 set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY CMAKE_DEFAULT_TARGET daliMQTT)

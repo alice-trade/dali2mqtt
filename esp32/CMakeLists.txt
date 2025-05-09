@@ -1,19 +1,13 @@
 # ESP32 Configuration CMAKE Lists
 if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
-    message(STATUS "CMAKE_TOOLCHAIN_FILE is not set. Attempting to use default ESP-IDF toolchain.")
-
     # Проверяем, установлена ли переменная окружения IDF_PATH
-    if(NOT DEFINED ENV{IDF_PATH})
-        message(FATAL_ERROR "IDF_PATH environment variable is not set. "
-                "Please set it or specify CMAKE_TOOLCHAIN_FILE explicitly. "
+    message(FATAL_ERROR "CMAKE_TOOLCHAIN_FILE environment variable is not set. "
+                "Please specify CMAKE_TOOLCHAIN_FILE explicitly. "
                 "e.g., run 'get_idf' or '. $HOME/esp/esp-idf/export.sh'")
-    else()
-        set(CMAKE_TOOLCHAIN_FILE  "$ENV{IDF_PATH}/tools/cmake/toolchain-$ENV{IDF_TARGET}.cmake")
     endif ()
-endif ()
 
 message(NOTICE "Using C compiler: " ${CMAKE_C_COMPILER})
-message(NOTICE " with IDF framework at: " $ENV{IDF_PATH})
+message(NOTICE "IDF framework at: " $ENV{IDF_PATH})
 
 
 
@@ -29,4 +23,4 @@ include(etc/build_firmware.cmake)
 include(etc/make_esp_test_target.cmake)
 include(etc/size_components.cmake)
 
-message(STATUS "Configuration done. Run ninja <target>.")
+message(STATUS "Configuration done. Run ninja/make daliMQTT and ninja/make app-flash.")
