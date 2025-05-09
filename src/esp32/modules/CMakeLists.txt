@@ -1,17 +1,25 @@
 project(libDaliMQTT LANGUAGES C)
 
+add_library(libDaliMQTT STATIC)
 
-set(SOURCES
-        ${CMAKE_CURRENT_LIST_DIR}/config/config.c
-        ${CMAKE_CURRENT_LIST_DIR}/mqtt/mqtt.c
-        ${CMAKE_CURRENT_LIST_DIR}/wifi/wifi_manager.c
-        ${CMAKE_CURRENT_LIST_DIR}/dali/dali_interface.c
+set(TEST_BASEDIR ${CMAKE_SOURCE_DIR}/src/esp32/tests)
+set(MODULES_BASEDIR ${CMAKE_SOURCE_DIR}/src/esp32/modules)
+
+set(MODULES_SOURCES
+        ${MODULES_BASEDIR}/config/config.c
+        ${MODULES_BASEDIR}/mqtt/mqtt.c
+        ${MODULES_BASEDIR}/wifi/wifi_manager.c
+        ${MODULES_BASEDIR}/dali/dali_interface.c
 )
 
-add_library(libDaliMQTT STATIC ${SOURCES})
+set(TEST_SOURCES
+        ${TEST_BASEDIR}/config/config.test.c
+        #${TEST_BASEDIR}/dali/dali_interface.test.c
+)
 
-target_include_directories(libDaliMQTT PUBLIC ./config ./mqtt ./dali ./wifi INTERFACE ${CMAKE_SOURCE_DIR}/src/esp32/driver)
-target_link_libraries(libDaliMQTT PRIVATE
+target_sources(libDaliMQTT PRIVATE ${MODULES_SOURCES})
+target_include_directories(libDaliMQTT PUBLIC ./config ./mqtt ./dali ./wifi)
+target_link_libraries(libDaliMQTT PUBLIC
         daliC
         idf::mqtt
         idf::esp_event
