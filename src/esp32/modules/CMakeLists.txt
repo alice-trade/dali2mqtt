@@ -2,7 +2,6 @@ project(libDaliMQTT LANGUAGES C)
 
 add_library(libDaliMQTT STATIC)
 
-set(TEST_BASEDIR ${CMAKE_SOURCE_DIR}/src/esp32/tests)
 set(MODULES_BASEDIR ${CMAKE_SOURCE_DIR}/src/esp32/modules)
 
 set(MODULES_SOURCES
@@ -12,10 +11,7 @@ set(MODULES_SOURCES
         ${MODULES_BASEDIR}/dali/dali_interface.c
 )
 
-set(TEST_SOURCES
-        ${TEST_BASEDIR}/config/config.test.c
-        #${TEST_BASEDIR}/dali/dali_interface.test.c
-)
+
 
 target_sources(libDaliMQTT PRIVATE ${MODULES_SOURCES})
 target_include_directories(libDaliMQTT PUBLIC ./config ./mqtt ./dali ./wifi)

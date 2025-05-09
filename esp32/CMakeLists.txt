@@ -18,9 +18,9 @@ set(app ${CMAKE_PROJECT_NAME})
 
 add_subdirectory(../src/esp32/driver/dalic dalic)
 add_subdirectory(../src/esp32/modules daliMQTTModules)
+add_subdirectory(../src/esp32/tests tests)
 
 include(etc/build_firmware.cmake)
-include(etc/make_esp_test_target.cmake)
 include(etc/size_components.cmake)
 
 message(STATUS "Configuration done. Run ninja/make daliMQTT and ninja/make app-flash.")
