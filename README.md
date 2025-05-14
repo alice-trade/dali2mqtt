@@ -51,9 +51,9 @@
 
 ## Конфигурация во время выполнения
 
-*   **Начальные значения:** Задаются через `src/esp32/config/app_config.h` перед сборкой.
+*   **Начальные значения:** Задаются через menuconfig перед сборкой.
 *   **Через MQTT:** Мост подписывается на топики для изменения конфигурации:
-    *   `dali_bridge/config/set` (JSON): Изменение интервала опроса (`poll_interval_ms`), масок опроса (`poll_groups_mask`, `poll_devices_mask` в виде числа или hex-строки "0x...").
+    *   `dali_bridge/config/set` (JSON): Изменение интервала опроса (`poll_interval_ms`).
     *   `dali_bridge/config/group/set` (JSON): Управление членством устройств в группах (`{"action": "add/remove", "device_short_address": X, "group_number": Y}`).
 *   **Запрос конфигурации:** Отправьте пустое сообщение в `dali_bridge/config/get`, ответ придет в `dali_bridge/config/get/response`.
 *   **Хранение:** Конфигурация сохраняется в NVS и восстанавливается после перезагрузки.
