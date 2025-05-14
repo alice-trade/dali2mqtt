@@ -1,24 +1,24 @@
 #include "freertos/FreeRTOS.h"
-
+#include "combine_u32_to_u64.h"
 #include "dali_interface.h"
-#include "definitions.h"
-#include "dalic/include/dali_commands.h" // Включаем команды DALI
+#include "app_config.h"
+#include "dalic/include/dali_commands.h"
 #include "freertos/task.h"
-#include "freertos/timers.h" // Для TimerHandle_t
+#include "freertos/timers.h"
 #include "esp_log.h"
-#include "mqtt.h" // Для публикации статусов
+#include "mqtt.h"
 #include "esp_mac.h"
 #include "cJSON.h"
-#include <stdio.h> // для snprintf
+#include <stdio.h>
 #include <freertos/semphr.h>
 
 static const char *TAG = "DALI_IF";
-static SemaphoreHandle_t dali_mutex = NULL; // Мьютекс для защиты доступа к шине DALI
+static SemaphoreHandle_t dali_mutex = nullptr; // Мьютекс для защиты доступа к шине DALI
 
 
 // --- Статические переменные для задачи и таймера ---
-static TimerHandle_t s_dali_poll_timer = NULL;
-static TaskHandle_t s_dali_poll_task_handle = NULL;
+static TimerHandle_t s_dali_poll_timer = nullptr;
+static TaskHandle_t s_dali_poll_task_handle = nullptr;
 
 // Структура для хранения последнего известного состояния (для уменьшения публикаций MQTT)
 typedef struct {
@@ -60,10 +60,7 @@ static bool lock_dali_bus() {
 void dali_poll_task(void *pvParameters) {
     ESP_LOGI(TAG, "DALI Poll Task started.");
 
-    // Инициализация состояний при первом запуске задачи (на всякий случай)
-    // initialize_states(); // Уже вызвано в dali_interface_init
-
-    while (1) {
+    for (;;) {
         // Ждем уведомления от таймера или от MQTT_EVENT_CONNECTED
         uint32_t notification_value = ulTaskNotifyTake(pdTRUE, portMAX_DELAY); // Очистить бит уведомления при выходе, ждать вечно
 
@@ -131,7 +128,7 @@ esp_err_t dali_interface_init(void) {
                                           &s_dali_poll_task_handle);
         if (task_ret != pdPASS) {
             ESP_LOGE(TAG, "Failed to create DALI poll task!");
-            s_dali_poll_task_handle = NULL; // Сбросить хэндл
+            s_dali_poll_task_handle = nullptr; // Сбросить хэндл
             return ESP_FAIL;
         }
         ESP_LOGI(TAG, "DALI Poll Task created.");
@@ -148,7 +145,6 @@ esp_err_t dali_interface_init(void) {
 
         if (s_dali_poll_timer == NULL) {
             ESP_LOGE(TAG, "Failed to create DALI poll timer!");
-            // Удаляем задачу, если таймер не создался? Или оставляем? Пока оставим.
             return ESP_FAIL;
         }
          ESP_LOGI(TAG, "DALI Poll Timer created. Interval: %lums", (unsigned long)g_app_config.poll_interval_ms);
@@ -169,13 +165,15 @@ esp_err_t dali_interface_start_polling(void) {
     }
 
     // Обновляем период таймера на случай, если он изменился в конфиге до старта
-    TickType_t new_period = pdMS_TO_TICKS(g_app_config.poll_interval_ms > 0 ? g_app_config.poll_interval_ms : CONFIG_DALI2MQTT_DALI_DEFAULT_POLL_INTERVAL_MS);
-    if (xTimerChangePeriod(s_dali_poll_timer, new_period, pdMS_TO_TICKS(100)) != pdPASS) {
-         ESP_LOGE(TAG, "Failed to set poll timer period before starting.");
-         // Продолжаем попытку запуска со старым периодом
+    TickType_t current_interval_ticks = pdMS_TO_TICKS(g_app_config.poll_interval_ms > 0 ? g_app_config.poll_interval_ms : CONFIG_DALI2MQTT_DALI_DEFAULT_POLL_INTERVAL_MS);
+    if (xTimerGetPeriod(s_dali_poll_timer) != current_interval_ticks) {
+        ESP_LOGI(TAG, "Updating DALI poll timer period to %lu ms before starting.", pdTICKS_TO_MS(current_interval_ticks));
+        if (xTimerChangePeriod(s_dali_poll_timer, current_interval_ticks, pdMS_TO_TICKS(100)) != pdPASS) {
+            ESP_LOGE(TAG, "Failed to update poll timer period.");
+            // Можно вернуть ошибку или продолжить со старым периодом
+        }
     }
-
-    ESP_LOGI(TAG, "Starting DALI polling timer (Interval: %lu ms)...", (unsigned long)pdTICKS_TO_MS(new_period));
+    ESP_LOGI(TAG, "Starting DALI polling timer (Interval: %lu ms)...", pdTICKS_TO_MS(current_interval_ticks));
     if (xTimerStart(s_dali_poll_timer, pdMS_TO_TICKS(100)) != pdPASS) {
         ESP_LOGE(TAG, "Failed to start DALI poll timer!");
         return ESP_FAIL;
@@ -200,7 +198,7 @@ esp_err_t dali_interface_stop_polling(void) {
               ESP_LOGE(TAG, "Failed to delete DALI poll timer.");
               err = ESP_FAIL;
          } else {
-             s_dali_poll_timer = NULL; // Сбрасываем хэндл
+             s_dali_poll_timer = nullptr; // Сбрасываем хэндл
              ESP_LOGI(TAG, "DALI poll timer deleted.");
          }
      } else {
@@ -210,7 +208,7 @@ esp_err_t dali_interface_stop_polling(void) {
      // Удаляем задачу опроса
      if (s_dali_poll_task_handle != NULL) {
          vTaskDelete(s_dali_poll_task_handle);
-         s_dali_poll_task_handle = NULL; // Сбрасываем хэндл
+         s_dali_poll_task_handle = nullptr; // Сбрасываем хэндл
          ESP_LOGI(TAG, "DALI poll task deleted.");
      } else {
           ESP_LOGW(TAG, "DALI poll task handle was already NULL.");
@@ -324,8 +322,8 @@ void dali_interface_query_and_publish_status(dali_addressType_t address_type, ui
     esp_err_t err = dali_interface_query_actual_level(address_type, address, &current_level);
 
     // Определяем тип и индекс для хранения и топика MQTT
-    const char* type_str = NULL;
-    dali_device_state_t* last_state_ptr = NULL;
+    const char* type_str = nullptr;
+    dali_device_state_t* last_state_ptr = nullptr;
 
     if (address_type == DALI_ADDRESS_TYPE_GROUP && address < DALI_MAX_GROUPS) {
         type_str = "group";
@@ -402,8 +400,6 @@ void dali_interface_query_and_publish_status(dali_addressType_t address_type, ui
     }
 }
 
-// Callback для таймера опроса
-
 
 
 void dali_interface_poll_all(bool force_publish) {
@@ -412,15 +408,22 @@ void dali_interface_poll_all(bool force_publish) {
         ESP_LOGI(TAG,"Force publishing requested, resetting known states.");
         initialize_states();
     }
+
+    // Используем маски напрямую из sdkconfig
+    const uint16_t group_mask = CONFIG_DALI2MQTT_DALI_DEFAULT_POLL_GROUPS_MASK;
+    const uint64_t devices_mask = combine_u32_to_u64(CONFIG_DALI2MQTT_DALI_DEFAULT_POLL_DEVICES_MASK, CONFIG_DALI2MQTT_DALI_DEFAULT_POLL_DEVICES_MASK_LO);
+
+    ESP_LOGD(TAG, "Using compile-time masks: Groups=0x%04X, Devices=0x%016llX", group_mask, (unsigned long long)devices_mask);
+
     // Опрос групп
     for (int i = 0; i < DALI_MAX_GROUPS; ++i) {
-        if ((g_app_config.poll_groups_mask >> i) & 1) {
+        if ((group_mask >> i) & 1) {
             dali_interface_query_and_publish_status(DALI_ADDRESS_TYPE_GROUP, i);
         }
     }
     // Опрос устройств
     for (int i = 0; i < DALI_MAX_DEVICES; ++i) {
-        if ((g_app_config.poll_devices_mask >> i) & 1) {
+        if ((devices_mask >> i) & 1) {
             dali_interface_query_and_publish_status(DALI_ADDRESS_TYPE_SHORT, i);
         }
     }
@@ -429,7 +432,7 @@ void dali_interface_poll_all(bool force_publish) {
 void dali_interface_publish_ha_discovery(void) {
     ESP_LOGI(TAG, "Publishing Home Assistant MQTT Discovery config...");
     char topic_buffer[128];
-    char payload_buffer[600]; // Увеличим буфер для device info
+    char payload_buffer[600];
     char unique_id_buffer[64];
     char name_buffer[64];
     char device_info_buffer[256];
@@ -437,7 +440,7 @@ void dali_interface_publish_ha_discovery(void) {
     // --- Информация об устройстве (мосте) ---
     uint8_t mac[6];
     esp_efuse_mac_get_default(mac);
-    // Создаем уникальный идентификатор на основе MAC
+
     char bridge_id[30];
      snprintf(bridge_id, sizeof(bridge_id), "dali_bridge_%02x%02x%02x", mac[3], mac[4], mac[5]); // Используем последние 3 байта MAC
 
@@ -563,21 +566,9 @@ esp_err_t dali_interface_manage_group_membership(uint8_t device_short_address,
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to send group management command to device %d: %s", device_short_address, esp_err_to_name(err));
     } else {
-        // Небольшая задержка после команды конфигурации может быть полезна
-        // Задержка уже есть в send_command
-        // vTaskDelay(pdMS_TO_TICKS(DALI_INTER_FRAME_DELAY_MS));
+
         ESP_LOGI(TAG, "Group management command sent successfully to device %d. DALI Result: %d", device_short_address, dali_result);
     }
-
-    // Команда применена самим балластом. Нам не нужно хранить состояние групп на ESP32.
-    // Опционально: можно запросить QUERY_GROUPS_0_7 / QUERY_GROUPS_8_15 у устройства, чтобы проверить.
-    // Пример:
-    // vTaskDelay(pdMS_TO_TICKS(100)); // Дать время балласту сохранить
-    // uint8_t query_cmd = (group_number < 8) ? DALI_COMMAND_QUERY_GROUPS_0_7 : DALI_COMMAND_QUERY_GROUPS_8_15;
-    // int query_result = -1;
-    // dali_interface_send_command(DALI_ADDRESS_TYPE_SHORT, device_short_address, query_cmd, false, &query_result);
-    // ESP_LOGI(TAG, "Verification query result for groups of device %d: %d", device_short_address, query_result);
-    // // Дальше можно анализировать биты в query_result
 
     return err; // Возвращаем результат RMT транзакции
 }

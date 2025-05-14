@@ -6,7 +6,7 @@
 
 // Включаем заголовочные файлы тестируемого модуля и project_defs
 #include "config.h"
-#include "definitions.h" // Здесь определена app_config_t и дефолты
+#include "app_config.h" // Здесь определена app_config_t и дефолты
 
 // Включаем sdkconfig, чтобы иметь доступ к CONFIG_MYPROJ_... дефолтам
 #include "sdkconfig.h"
@@ -56,11 +56,11 @@ void setUp(void) {
 
     // Очистим реальный NVS для чистоты эксперимента между тестами
     nvs_handle_t nvs_handle;
-    TEST_ESP_OK(nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle));
+    TEST_ESP_OK(nvs_open(CONFIG_DALI2MQTT_NVS_NAMESPACE, NVS_READWRITE, &nvs_handle));
     TEST_ESP_OK(nvs_erase_all(nvs_handle)); // Очищаем все в нашем namespace
     TEST_ESP_OK(nvs_commit(nvs_handle));
     nvs_close(nvs_handle);
-    ESP_LOGI(TAG, "NVS erased for namespace %s", NVS_NAMESPACE);
+    ESP_LOGI(TAG, "NVS erased for namespace %s", CONFIG_DALI2MQTT_NVS_NAMESPACE);
 }
 
 void tearDown(void) {
@@ -91,31 +91,21 @@ TEST_CASE("Config Manager init nvs empty test", "[config]") {
 
     // Проверяем, что дефолтные DALI параметры были записаны в NVS
     nvs_handle_t nvs_handle;
-    TEST_ESP_OK(nvs_open(NVS_NAMESPACE, NVS_READONLY, &nvs_handle));
+    TEST_ESP_OK(nvs_open(CONFIG_DALI2MQTT_NVS_NAMESPACE, NVS_READONLY, &nvs_handle));
     uint32_t nvs_interval;
-    uint16_t nvs_groups;
-    uint64_t nvs_devices;
     TEST_ESP_OK(nvs_get_u32(nvs_handle, NVS_KEY_POLL_INTERVAL, &nvs_interval));
-    TEST_ESP_OK(nvs_get_u16(nvs_handle, NVS_KEY_POLL_GROUPS, &nvs_groups));
-    TEST_ESP_OK(nvs_get_u64(nvs_handle, NVS_KEY_POLL_DEVICES, &nvs_devices));
     nvs_close(nvs_handle);
 
     TEST_ASSERT_EQUAL_UINT32(expected_poll_interval, nvs_interval);
-    TEST_ASSERT_EQUAL_UINT16(0x0001, nvs_groups);
-    TEST_ASSERT_EQUAL_UINT64(0, nvs_devices);
 }
 TEST_CASE("Config Manager init with nvs values", "[config]") {
 // Тест инициализации, когда в NVS есть DALI параметры
     ESP_LOGI(TAG, "Running test_config_manager_init_with_nvs_values...");
     // Предварительно запишем значения DALI в NVS
     nvs_handle_t nvs_handle;
-    TEST_ESP_OK(nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle));
+    TEST_ESP_OK(nvs_open(CONFIG_DALI2MQTT_NVS_NAMESPACE, NVS_READWRITE, &nvs_handle));
     uint32_t test_interval = 12345;
-    uint16_t test_groups = 0xAAAA;
-    uint64_t test_devices = 0x1122334455667788ULL;
     TEST_ESP_OK(nvs_set_u32(nvs_handle, NVS_KEY_POLL_INTERVAL, test_interval));
-    TEST_ESP_OK(nvs_set_u16(nvs_handle, NVS_KEY_POLL_GROUPS, test_groups));
-    TEST_ESP_OK(nvs_set_u64(nvs_handle, NVS_KEY_POLL_DEVICES, test_devices));
     TEST_ESP_OK(nvs_commit(nvs_handle));
     nvs_close(nvs_handle);
 
@@ -127,16 +117,12 @@ TEST_CASE("Config Manager init with nvs values", "[config]") {
 
     // DALI параметры должны быть из NVS
     TEST_ASSERT_EQUAL_UINT32(test_interval, g_app_config.poll_interval_ms);
-    TEST_ASSERT_EQUAL_UINT16(test_groups, g_app_config.poll_groups_mask);
-    TEST_ASSERT_EQUAL_UINT64(test_devices, g_app_config.poll_devices_mask);
 }
 TEST_CASE("Config manager save dali params test", "[config]") {
 // Тест сохранения DALI параметров
     ESP_LOGI(TAG, "Running test_config_manager_save_dali_params...");
     // Заполняем g_app_config тестовыми значениями (WiFi/MQTT не важны для этого теста, т.к. не сохраняются)
     g_app_config.poll_interval_ms = 9876;
-    g_app_config.poll_groups_mask = 0x5555;
-    g_app_config.poll_devices_mask = 0xAABBCCDDEEFF0011ULL;
 
     // Мокаем функцию mqtt_publish_config, так как она будет вызвана
     // В реальном юнит-тесте ее нужно было бы мокать через CMock или FFF.
@@ -147,16 +133,10 @@ TEST_CASE("Config manager save dali params test", "[config]") {
 
     // Проверяем, что значения были записаны в NVS
     nvs_handle_t nvs_handle;
-    TEST_ESP_OK(nvs_open(NVS_NAMESPACE, NVS_READONLY, &nvs_handle));
+    TEST_ESP_OK(nvs_open(CONFIG_DALI2MQTT_NVS_NAMESPACE, NVS_READONLY, &nvs_handle));
     uint32_t nvs_interval;
-    uint16_t nvs_groups;
-    uint64_t nvs_devices;
     TEST_ESP_OK(nvs_get_u32(nvs_handle, NVS_KEY_POLL_INTERVAL, &nvs_interval));
-    TEST_ESP_OK(nvs_get_u16(nvs_handle, NVS_KEY_POLL_GROUPS, &nvs_groups));
-    TEST_ESP_OK(nvs_get_u64(nvs_handle, NVS_KEY_POLL_DEVICES, &nvs_devices));
     nvs_close(nvs_handle);
 
     TEST_ASSERT_EQUAL_UINT32(g_app_config.poll_interval_ms, nvs_interval);
-    TEST_ASSERT_EQUAL_UINT16(g_app_config.poll_groups_mask, nvs_groups);
-    TEST_ASSERT_EQUAL_UINT64(g_app_config.poll_devices_mask, nvs_devices);
 }

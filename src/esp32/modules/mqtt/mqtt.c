@@ -1,18 +1,19 @@
-// main/mqtt_manager.c
+// mqtt/mqtt.c
 #include "mqtt.h"
-#include "definitions.h"
+#include "app_config.h"
+#include "combine_u32_to_u64.h"
 #include "esp_log.h"
 #include "dalic/include/dali_commands.h"
 #include "mqtt_client.h"
-#include "string.h" // Для strncmp, strchr, atoi, strncpy, strcmp, strlen, strerror
-#include "stdlib.h" // Для strtol, strtoull
-#include "cJSON.h"  // Для парсинга/генерации JSON
-#include "dali_interface.h" // Для вызова команд DALI и управления группами
-#include "config.h" // Для изменения конфигурации
-#include "freertos/task.h" // Для vTaskDelay
+#include "string.h"
+#include "stdlib.h"
+#include "cJSON.h"
+#include "dali_interface.h"
+#include "config.h"
+#include "freertos/task.h"
 
-static const char *TAG = "MQTT_MGR";
-static esp_mqtt_client_handle_t client = NULL;
+static const char *TAG = "MQTT";
+static esp_mqtt_client_handle_t client = nullptr;
 static bool is_connected = false;
 
 // --- Вспомогательные функции ---
@@ -77,11 +78,16 @@ static void handle_incoming_message(const char *topic, int topic_len, const char
     char topic_str[150];
     char data_str[512];
 
-    int Tlen = topic_len < sizeof(topic_str) - 1 ? topic_len : sizeof(topic_str) - 1;
+    if (topic_len < 0 || data_len < 0) {
+        ESP_LOGE(TAG, "Received negative length for topic or data. Topic len: %d, Data len: %d", topic_len, data_len);
+        return; // Или другая обработка ошибки
+    }
+
+    size_t Tlen = (size_t)topic_len < (sizeof(topic_str) - 1) ? (size_t)topic_len : (sizeof((size_t)topic_len) - 1);
     strncpy(topic_str, topic, Tlen);
     topic_str[Tlen] = '\0';
 
-    int Dlen = data_len < sizeof(data_str) - 1 ? data_len : sizeof(data_str) - 1;
+    size_t Dlen = (size_t)data_len < (sizeof(data_str) - 1) ? (size_t)data_len : (sizeof((size_t)data_len) - 1);
     strncpy(data_str, data, Dlen);
     data_str[Dlen] = '\0';
 
@@ -121,12 +127,11 @@ static void handle_incoming_message(const char *topic, int topic_len, const char
         if (cJSON_IsNumber(brightness_json)) {
             int brightness = brightness_json->valueint;
             if (brightness >= 0 && brightness <= 255) {
-                 uint8_t dali_level;
-                 if (brightness == 0) {
+                if (brightness == 0) {
                      ESP_LOGI(TAG, "CMD: %s %d OFF (via brightness 0)", type, addr);
                      dali_interface_send_command(addr_type, addr, DALI_COMMAND_OFF, false, &dali_result);
                  } else {
-                     dali_level = (brightness > 254) ? 254 : (uint8_t)brightness;
+                    uint8_t dali_level = (brightness > 254) ? 254 : (uint8_t) brightness;
                      ESP_LOGI(TAG, "CMD: %s %d SET LEVEL %d (MQTT brightness %d)", type, addr, dali_level, brightness);
                      dali_interface_send_dapc(addr_type, addr, dali_level, &dali_result);
                  }
@@ -159,8 +164,6 @@ static void handle_incoming_message(const char *topic, int topic_len, const char
              return;
          }
 
-         bool config_changed = false;
-
          const cJSON *poll_interval_json = cJSON_GetObjectItemCaseSensitive(root, "poll_interval_ms");
          if (cJSON_IsNumber(poll_interval_json)) {
               // Вызываем config_manager_set*, который вернет ESP_OK если значение изменилось и было сохранено
@@ -169,33 +172,6 @@ static void handle_incoming_message(const char *topic, int topic_len, const char
                   // и если интервал не изменился, то save() не будет вызван.
                   // mqtt_publish_config() будет вызван из save() если что-то реально сохранилось.
               }
-         }
-
-         const cJSON *poll_groups_json = cJSON_GetObjectItemCaseSensitive(root, "poll_groups_mask");
-          if (cJSON_IsNumber(poll_groups_json)) {
-              config_manager_set_poll_groups_mask((uint16_t)poll_groups_json->valueint);
-          } else if (cJSON_IsString(poll_groups_json) && poll_groups_json->valuestring != NULL) {
-              char *endptr;
-              long val = strtol(poll_groups_json->valuestring, &endptr, 0);
-              if (*endptr == '\0') {
-                   config_manager_set_poll_groups_mask((uint16_t)val);
-              } else {
-                   ESP_LOGW(TAG, "Invalid format for poll_groups_mask string: %s", poll_groups_json->valuestring);
-              }
-          }
-
-         const cJSON *poll_devices_json = cJSON_GetObjectItemCaseSensitive(root, "poll_devices_mask");
-         if (cJSON_IsString(poll_devices_json) && poll_devices_json->valuestring != NULL) {
-             char *endptr;
-             unsigned long long val = strtoull(poll_devices_json->valuestring, &endptr, 0);
-             if (*endptr == '\0') {
-                 config_manager_set_poll_devices_mask(val);
-             } else {
-                  ESP_LOGW(TAG, "Invalid format for poll_devices_mask string: %s", poll_devices_json->valuestring);
-             }
-         } else if (cJSON_IsNumber(poll_devices_json)) {
-              ESP_LOGW(TAG, "Setting poll_devices_mask via number is discouraged. Use hex string.");
-              config_manager_set_poll_devices_mask((uint64_t)poll_devices_json->valuedouble);
          }
 
          cJSON_Delete(root);
@@ -406,7 +382,7 @@ esp_err_t mqtt_manager_stop(void) {
          ESP_LOGE(TAG, "Failed to destroy MQTT client: %s", esp_err_to_name(destroy_err));
          if (err == ESP_OK) err = destroy_err; // Возвращаем ошибку уничтожения, если остановка была ОК
      }
-     client = NULL;
+     client = nullptr;
      is_connected = false;
      return err;
 }
@@ -440,11 +416,12 @@ void mqtt_publish_config(void) {
      cJSON_AddNumberToObject(root, "poll_interval_ms", g_app_config.poll_interval_ms);
 
      char groups_mask_str[8];
-     snprintf(groups_mask_str, sizeof(groups_mask_str), "0x%04X", g_app_config.poll_groups_mask);
+     snprintf(groups_mask_str, sizeof(groups_mask_str), "0x%04X", CONFIG_DALI2MQTT_DALI_DEFAULT_POLL_GROUPS_MASK);
      cJSON_AddStringToObject(root, "poll_groups_mask", groups_mask_str);
 
      char devices_mask_str[20];
-     snprintf(devices_mask_str, sizeof(devices_mask_str), "0x%016llX", (unsigned long long)g_app_config.poll_devices_mask);
+    uint64_t devices_mask_val = combine_u32_to_u64(CONFIG_DALI2MQTT_DALI_DEFAULT_POLL_DEVICES_MASK, CONFIG_DALI2MQTT_DALI_DEFAULT_POLL_DEVICES_MASK_LO); // Из sdkconfig
+     snprintf(devices_mask_str, sizeof(devices_mask_str), "0x%016llX", (unsigned long long)devices_mask_val);
      cJSON_AddStringToObject(root, "poll_devices_mask", devices_mask_str);
 
      cJSON_AddStringToObject(root, "wifi_ssid", g_app_config.wifi_ssid);
