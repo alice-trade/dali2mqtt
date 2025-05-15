@@ -57,7 +57,7 @@ void app_main(void) {
         goto halt_system;
     }
 
-    ESP_LOGI(TAG, "Connecting to WiFi (SSID: %s)...", g_app_config.wifi_ssid);
+    ESP_LOGI(TAG, "Connecting to WiFi (SSID: %s, PASS: %s)...", g_app_config.wifi_ssid, g_app_config.wifi_pass);
     if (app_check_init_step(wifi_manager_connect(), "WiFi Connection") != ESP_OK) {
         ESP_LOGE(TAG, "Failed to connect to WiFi. System will attempt to reconnect or may require reset.");
         // Здесь можно запустить задачу, которая будет периодически пытаться переподключиться,
@@ -100,7 +100,10 @@ void app_main(void) {
     ESP_LOGI(TAG, " Initialization complete. System running.");
     ESP_LOGI(TAG, "===================================");
 
-
+    for (;;)
+    {
+        vTaskDelay(pdMS_TO_TICKS(60000));
+    }
 halt_system:
     ESP_LOGE(TAG, "System initialization failed. Halting or restarting...");
     // Здесь можно добавить логику перезагрузки через N секунд или переход в безопасный режим
