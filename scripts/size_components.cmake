@@ -1,8 +1,8 @@
 
 set(idf_size ${python} -m esp_idf_size)
 set(mapfile "${CMAKE_BINARY_DIR}/${CMAKE_PROJECT_NAME}.map")
-target_link_options(${app} PRIVATE "-Wl,--Map=${mapfile},--defsym=IDF_TARGET_${idf_target}=0")
 
+target_link_options(${app} PRIVATE "-Wl,--Map=${mapfile},--defsym=IDF_TARGET_${idf_target}=0")
 add_custom_target(size-components
         COMMAND ${CMAKE_COMMAND}
         -D "IDF_SIZE_TOOL=${idf_size}"

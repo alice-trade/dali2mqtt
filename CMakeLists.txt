@@ -1,8 +1,12 @@
 cmake_minimum_required(VERSION 3.30)
-project(daliMQTT VERSION 0.2.0 LANGUAGES C)
+project(
+        daliMQTT
+        VERSION 0.2.0
+        DESCRIPTION "DALI-to-MQTT bridge for ESP platform"
+        LANGUAGES C CXX)
 
-set(CMAKE_C_STANDARD 23)
-set(CMAKE_C_STANDARD_REQUIRED TRUE)
+include(scripts/common.cmake)
+
 
 message("daliMQTT version " ${CMAKE_PROJECT_VERSION})
 set(targets "esp32")

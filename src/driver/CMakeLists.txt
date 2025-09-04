@@ -1,12 +1,12 @@
 project(daliC LANGUAGES C)
 add_library(daliC STATIC
-        "dali.c")
+        "dalic/dali.c")
 
 target_include_directories(daliC
         PRIVATE
-        include
+        dalic/include
         INTERFACE
-        $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/src/esp32/driver>
+        $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/src/driver>
 )
 
 target_link_libraries(daliC PRIVATE
