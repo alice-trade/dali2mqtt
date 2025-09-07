@@ -18,7 +18,7 @@
 
 namespace daliMQTT
 {
-    static const char* TAG = "BridgeLogic";
+    static const char* TAG = "LifeCycleBase";
 
     LifecycleBase& LifecycleBase::getInstance() {
         static LifecycleBase instance;
