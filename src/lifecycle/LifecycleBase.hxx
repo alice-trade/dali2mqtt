@@ -26,7 +26,7 @@ namespace daliMQTT
         void onMqttConnected();
         void onMqttData(const std::string& topic, const std::string& data);
 
-        static void daliPollTask(void* pvParameters);
+        [[noreturn]] static void daliPollTask(void* pvParameters);
         TaskHandle_t dali_poll_task_handle{nullptr};
     };
 } // daliMQTT

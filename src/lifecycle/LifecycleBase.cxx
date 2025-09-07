@@ -149,7 +149,7 @@ namespace daliMQTT
         cJSON_Delete(root);
     }
 
-    void LifecycleBase::daliPollTask(void* pvParameters) {
+     void LifecycleBase::daliPollTask(void* pvParameters) {
         auto config = ConfigManager::getInstance().getConfig();
         auto& dali = DaliAPI::getInstance();
         auto& mqtt = MQTTClient::getInstance();

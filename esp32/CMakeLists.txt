@@ -20,6 +20,7 @@ add_subdirectory(../src daliMQTTModules)
 
 include(../scripts/build_firmware.cmake)
 include(../scripts/size_components.cmake)
+include(../scripts/make_webui.cmake)
 
 option(BUILD_TESTS "Build the unit test executable" OFF)
 

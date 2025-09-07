@@ -18,6 +18,7 @@ set(PLATFORM_MODULES
         driver
         esp_netif
         nvs_flash
+        partition_table
         Kconfig
 )
 
@@ -34,5 +35,6 @@ idf_build_process(esp32
             ${ESP_BUILD_UTILS_PATH}/sdkconfig
         PROJECT_VER ${CMAKE_PROJECT_VERSION}
         #SDKCONFIG_DEFAULTS ${ESP_BUILD_UTILS_PATH}/sdkconfig.default
+        PARTITION_TABLE_FILENAME "${CMAKE_SOURCE_DIR}/esp32/partitions.csv"
         BUILD_DIR ${CMAKE_BINARY_DIR}
 )
