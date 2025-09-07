@@ -158,8 +158,7 @@ namespace daliMQTT
 
         while (true) {
             for (uint8_t i = 0; i < 64; ++i) {
-                auto level = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, i, DALI_COMMAND_QUERY_ACTUAL_LEVEL);
-                if (level.has_value() && level.value() != 255) {
+                if (auto level = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, i, DALI_COMMAND_QUERY_ACTUAL_LEVEL); level.has_value() && level.value() != 255) {
                      std::string state_topic = config.mqtt_base_topic + "/light/short/" + std::to_string(i) + "/state";
                     std::string payload = R"({"state":")" +
                                                               std::string(level.value() > 0 ? "ON" : "OFF") +

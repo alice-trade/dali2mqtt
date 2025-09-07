@@ -12,8 +12,8 @@
     "noUncheckedSideEffectImports": true
   },
   "include": [
-    "../src/webui/src/**/*.ts",
-    "../src/webui/src/**/*.tsx",
-    "../src/webui/src/**/*.vue"
+    "**/*.ts",
+    "**/*.tsx",
+    "**/*.vue"
   ]
 }

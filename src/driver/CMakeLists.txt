@@ -6,7 +6,7 @@ target_include_directories(daliC
         PRIVATE
         dalic/include
         INTERFACE
-        $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/src/driver>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
 )
 
 target_link_libraries(daliC PRIVATE

@@ -9,7 +9,7 @@ const loggedIn = ref(false);
 const username = ref('admin');
 const password = ref('');
 const error = ref('');
-const currentView = ref('settings'); // 'settings' или 'info'
+const currentView = ref('settings');
 
 const handleLogin = async () => {
   error.value = '';

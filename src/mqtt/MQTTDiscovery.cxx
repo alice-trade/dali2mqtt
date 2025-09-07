@@ -8,7 +8,7 @@
 namespace daliMQTT
 {
       MQTTDiscovery::MQTTDiscovery() {
-        auto config = ConfigManager::getInstance().getConfig();
+        const auto config = ConfigManager::getInstance().getConfig();
         base_topic = config.mqtt_base_topic;
         availability_topic = base_topic + CONFIG_DALI2MQTT_MQTT_AVAILABILITY_TOPIC;
         device_name = "DALI Bridge";
@@ -24,11 +24,11 @@ namespace daliMQTT
     }
 
     void MQTTDiscovery::publishLight(const std::string& type, uint8_t id) {
-        auto& mqtt = MQTTClient::getInstance();
+        const auto& mqtt = MQTTClient::getInstance();
 
-          std::string id_str = std::to_string(id);
-          std::string object_id = "dali_" + type + "_" + id_str;
-          std::string discovery_topic = "homeassistant/light/" + object_id + "/config";
+          const std::string id_str = std::to_string(id);
+          const std::string object_id = "dali_" + type + "_" + id_str;
+          const std::string discovery_topic = "homeassistant/light/" + object_id + "/config";
           std::string name = "DALI " + type + " " + id_str;
           std::string cmd_topic = base_topic + "/light/" + type + "/" + id_str + "/set";
           std::string state_topic = base_topic + "/light/" + type + "/" + id_str + "/state";

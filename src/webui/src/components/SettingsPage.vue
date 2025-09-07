@@ -2,14 +2,22 @@
 import { ref, onMounted } from 'vue';
 import { api } from '../api';
 
-const config = ref({
+interface ConfigData {
+  wifi_ssid: string;
+  wifi_password?: string;
+  mqtt_uri: string;
+  mqtt_client_id: string;
+  mqtt_base_topic: string;
+  http_user: string;
+  http_pass?: string;
+}
+
+const config = ref<ConfigData>({
   wifi_ssid: '',
-  wifi_password: '',
   mqtt_uri: '',
   mqtt_client_id: '',
   mqtt_base_topic: '',
   http_user: '',
-  http_pass: '',
 });
 
 const loading = ref(true);
@@ -21,7 +29,7 @@ const loadConfig = async () => {
   message.value = '';
   try {
     const response = await api.getConfig();
-    config.value = { ...config.value, ...response.data };
+    config.value = response.data;
   } catch (e) {
     message.value = 'Failed to load configuration.';
     isError.value = true;
@@ -33,10 +41,16 @@ const loadConfig = async () => {
 const saveConfig = async () => {
   loading.value = true;
   message.value = '';
-  const payload = { ...config.value };
-  // Не отправляем пустые пароли, если они не были изменены
-  if (!payload.wifi_password) delete payload.wifi_password;
-  if (!payload.http_pass) delete payload.http_pass;
+
+  const payload: ConfigData = { ...config.value };
+
+
+  if (!payload.wifi_password) {
+    delete payload.wifi_password;
+  }
+  if (!payload.http_pass) {
+    delete payload.http_pass;
+  }
 
   try {
     const response = await api.saveConfig(payload);

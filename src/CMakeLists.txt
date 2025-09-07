@@ -1,6 +1,6 @@
-project(DaliMQTT LANGUAGES CXX)
+project(DaliMQTT-Core LANGUAGES CXX)
 
-add_library(DaliMQTT STATIC)
+add_library(DaliMQTT-Core STATIC)
 
 set(MODULE_DIRS
         config
@@ -20,10 +20,10 @@ endforeach()
 
 message(STATUS "Found DaliMQTT source files: ${MODULE_SOURCES}")
 
-target_sources(DaliMQTT PRIVATE ${MODULE_SOURCES})
+target_sources(DaliMQTT-Core PRIVATE ${MODULE_SOURCES})
 
-target_include_directories(DaliMQTT PUBLIC ${MODULE_DIRS})
-target_link_libraries(DaliMQTT PUBLIC
+target_include_directories(DaliMQTT-Core PUBLIC ${MODULE_DIRS})
+target_link_libraries(DaliMQTT-Core PUBLIC
         daliC
         idf::nvs_flash
         idf::mqtt

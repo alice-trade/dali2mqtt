@@ -4,9 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "../../node_modules/.bin/vite",
-    "build": "../../node_modules/.bin/vue-tsc -b && vite build",
-    "preview": "../../node_modules/.bin/vite preview"
+    "dev": "vite",
+    "build": "vue-tsc -b && vite build",
+    "preview": "vite preview"
   },
   "dependencies": {
     "@picocss/pico": "^2.1.1",

@@ -82,9 +82,8 @@ namespace daliMQTT
 
     esp_err_t WebUI::staticFileGetHandler(httpd_req_t *req) {
         std::string filepath = std::string(WEB_MOUNT_POINT.data()) + (strcmp(req->uri, "/") == 0 ? "/index.html" : req->uri);
-        struct stat file_stat;
 
-        if (stat(filepath.c_str(), &file_stat) == -1) {
+        if (struct stat file_stat{}; stat(filepath.c_str(), &file_stat) == -1) {
             ESP_LOGE(TAG, "File not found: %s", filepath.c_str());
             filepath = std::string(WEB_MOUNT_POINT.data()) + "/index.html";
             if(stat(filepath.c_str(), &file_stat) == -1) {
