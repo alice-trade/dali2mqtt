@@ -24,11 +24,43 @@ namespace daliMQTT
             ESP_ERROR_CHECK(nvs_flash_erase());
             ret = nvs_flash_init();
         }
+        ESP_ERROR_CHECK(ret);
+
+        ret = initSpiffs();
+        ESP_ERROR_CHECK(ret);
+
         if (ret == ESP_OK) {
             initialized = true;
+            ESP_LOGI(TAG, "NVS and SPIFFS initialized successfully.");
         }
         return ret;
     }
+
+    esp_err_t ConfigManager::initSpiffs() {
+        ESP_LOGI(TAG, "Initializing SPIFFS");
+        esp_vfs_spiffs_conf_t conf = {
+          .base_path = "/spiffs",
+          .partition_label = CONFIG_DALI2MQTT_WEBUI_SPIFFS_PARTITION_LABEL,
+          .max_files = 5,
+          .format_if_mount_failed = true
+        };
+
+        esp_err_t ret = esp_vfs_spiffs_register(&conf);
+
+        if (ret != ESP_OK) {
+            if (ret == ESP_FAIL) {
+                ESP_LOGE(TAG, "Failed to mount or format filesystem");
+            } else if (ret == ESP_ERR_NOT_FOUND) {
+                ESP_LOGE(TAG, "Failed to find SPIFFS partition");
+            } else {
+                ESP_LOGE(TAG, "Failed to initialize SPIFFS (%s)", esp_err_to_name(ret));
+            }
+            return ret;
+        }
+
+        return 0;
+    }
+
 
     esp_err_t ConfigManager::load() {
         std::lock_guard<std::mutex> lock(config_mutex);
@@ -45,6 +77,8 @@ namespace daliMQTT
         getString(nvs_handle, "mqtt_uri", config_cache.mqtt_uri, CONFIG_DALI2MQTT_MQTT_DEFAULT_URI);
         getString(nvs_handle, "mqtt_cid", config_cache.mqtt_client_id, CONFIG_DALI2MQTT_MQTT_DEFAULT_CLIENT_ID);
         getString(nvs_handle, "mqtt_base", config_cache.mqtt_base_topic, CONFIG_DALI2MQTT_MQTT_BASE_TOPIC);
+        getString(nvs_handle, "http_user", config_cache.http_user, CONFIG_DALI2MQTT_WEBUI_DEFAULT_USER);
+        getString(nvs_handle, "http_pass", config_cache.http_pass, CONFIG_DALI2MQTT_WEBUI_DEFAULT_PASS);
 
         getU32(nvs_handle, "dali_poll", config_cache.dali_poll_interval_ms, CONFIG_DALI2MQTT_DALI_DEFAULT_POLL_INTERVAL_MS);
 
@@ -67,12 +101,14 @@ namespace daliMQTT
             return err;
         }
 
-        err = setString(nvs_handle, "wifi_ssid", config_cache.wifi_ssid);
-        if(err != ESP_OK) goto cleanup;
-        err = setString(nvs_handle, "wifi_pass", config_cache.wifi_password);
-        if(err != ESP_OK) goto cleanup;
-        err = setString(nvs_handle, "mqtt_uri", config_cache.mqtt_uri);
-        if(err != ESP_OK) goto cleanup;
+        err = setString(nvs_handle, "wifi_ssid", config_cache.wifi_ssid); if(err != ESP_OK) goto cleanup;
+        err = setString(nvs_handle, "wifi_pass", config_cache.wifi_password); if(err != ESP_OK) goto cleanup;
+        err = setString(nvs_handle, "mqtt_uri", config_cache.mqtt_uri); if(err != ESP_OK) goto cleanup;
+        err = setString(nvs_handle, "mqtt_cid", config_cache.mqtt_client_id); if(err != ESP_OK) goto cleanup;
+        err = setString(nvs_handle, "mqtt_base", config_cache.mqtt_base_topic); if(err != ESP_OK) goto cleanup;
+        err = setString(nvs_handle, "http_user", config_cache.http_user); if(err != ESP_OK) goto cleanup;
+        err = setString(nvs_handle, "http_pass", config_cache.http_pass); if(err != ESP_OK) goto cleanup;
+
 
         config_cache.configured = true;
         err = nvs_set_u8(nvs_handle, "configured", 1);
@@ -121,7 +157,7 @@ namespace daliMQTT
 
         out_value.resize(required_size);
         err = nvs_get_str(handle, key, &out_value[0], &required_size);
-        out_value.pop_back();
+        if(required_size > 0) out_value.pop_back();
         return err;
     }
 

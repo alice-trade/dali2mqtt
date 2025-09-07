@@ -196,4 +196,25 @@ menu "DALI MQTT Bridge Settings"
         help
             Namespace used for storing configuration in NVS.
     endmenu
+
+     menu "Web UI Configuration"
+
+        config DALI2MQTT_WEBUI_SPIFFS_PARTITION_LABEL
+            string "SPIFFS Partition Label"
+            default "web_storage"
+            help
+                Label of the SPIFFS partition where the Web UI files are stored.
+
+        config DALI2MQTT_WEBUI_DEFAULT_USER
+            string "Default Web UI Username"
+            default "admin"
+            help
+                Default username for Web UI HTTP Basic Authentication. Used if not in NVS.
+
+        config DALI2MQTT_WEBUI_DEFAULT_PASS
+            string "Default Web UI Password"
+            default "admin"
+            help
+                Default password for Web UI HTTP Basic Authentication. Used if not in NVS.
+        endmenu
 endmenu

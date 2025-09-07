@@ -33,6 +33,7 @@ target_link_libraries(DaliMQTT PUBLIC
         idf::driver
         idf::esp_netif
         idf::freertos
+        idf::spiffs
         idf::esp_wifi
         idf::cxx
         idf::esp_http_server

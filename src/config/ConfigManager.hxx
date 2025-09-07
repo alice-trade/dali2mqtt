@@ -1,12 +1,11 @@
 #ifndef DALIMQTT_CONFIGMANAGER_HXX
 #define DALIMQTT_CONFIGMANAGER_HXX
 
-
 #include <string>
 #include <cstdint>
 #include <optional>
 #include <mutex>
-
+#include "esp_spiffs.h"
 #include "nvs_flash.h"
 #include "nvs.h"
 namespace daliMQTT
@@ -20,6 +19,10 @@ namespace daliMQTT
         std::string mqtt_uri;
         std::string mqtt_client_id;
         std::string mqtt_base_topic;
+
+        // WebUI
+        std::string http_user;
+        std::string http_pass;
 
         // DALI
         uint32_t dali_poll_interval_ms;
@@ -35,7 +38,7 @@ namespace daliMQTT
             // Получение единственного экземпляра класса
             [[nodiscard]] static ConfigManager& getInstance();
 
-            // Инициализация NVS
+            // Инициализация NVS и SPIFFS
             esp_err_t init();
 
             // Загрузка конфигурации из NVS
@@ -55,6 +58,7 @@ namespace daliMQTT
 
         private:
             ConfigManager() = default;
+            esp_err_t initSpiffs();
             static esp_err_t getString(nvs_handle_t handle, const char* key, std::string& out_value, const char* default_value);
             static esp_err_t getU32(nvs_handle_t handle, const char* key, uint32_t& out_value, uint32_t default_value);
             static esp_err_t setString(nvs_handle_t handle, const char* key, const std::string& value);
@@ -62,7 +66,7 @@ namespace daliMQTT
             AppConfig config_cache;
             mutable std::mutex config_mutex;
             bool initialized{false};
-        };
+    };
 }
 
 

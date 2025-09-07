@@ -1,6 +1,8 @@
 #ifndef DALIMQTT_LIFECYCLEBASE_HXX
 #define DALIMQTT_LIFECYCLEBASE_HXX
 #include <string>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 namespace daliMQTT
 {
@@ -25,6 +27,7 @@ namespace daliMQTT
         void onMqttData(const std::string& topic, const std::string& data);
 
         static void daliPollTask(void* pvParameters);
+        TaskHandle_t dali_poll_task_handle{nullptr};
     };
 } // daliMQTT
 
