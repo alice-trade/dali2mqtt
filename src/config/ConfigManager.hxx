@@ -2,8 +2,6 @@
 #define DALIMQTT_CONFIGMANAGER_HXX
 
 #include <string>
-#include <cstdint>
-#include <optional>
 #include <mutex>
 #include "esp_spiffs.h"
 #include "nvs_flash.h"

@@ -72,10 +72,10 @@ namespace daliMQTT
             return err;
         }
 
-        getString(nvs_handle, "wifi_ssid", config_cache.wifi_ssid, CONFIG_DALI2MQTT_WIFI_DEFAULT_SSID);
-        getString(nvs_handle, "wifi_pass", config_cache.wifi_password, CONFIG_DALI2MQTT_WIFI_DEFAULT_PASS);
-        getString(nvs_handle, "mqtt_uri", config_cache.mqtt_uri, CONFIG_DALI2MQTT_MQTT_DEFAULT_URI);
-        getString(nvs_handle, "mqtt_cid", config_cache.mqtt_client_id, CONFIG_DALI2MQTT_MQTT_DEFAULT_CLIENT_ID);
+        getString(nvs_handle, "wifi_ssid", config_cache.wifi_ssid, nullptr);
+        getString(nvs_handle, "wifi_pass", config_cache.wifi_password, nullptr);
+        getString(nvs_handle, "mqtt_uri", config_cache.mqtt_uri, nullptr);
+        getString(nvs_handle, "mqtt_cid", config_cache.mqtt_client_id, nullptr);
         getString(nvs_handle, "mqtt_base", config_cache.mqtt_base_topic, CONFIG_DALI2MQTT_MQTT_BASE_TOPIC);
         getString(nvs_handle, "http_user", config_cache.http_user, CONFIG_DALI2MQTT_WEBUI_DEFAULT_USER);
         getString(nvs_handle, "http_pass", config_cache.http_pass, CONFIG_DALI2MQTT_WEBUI_DEFAULT_PASS);
@@ -128,18 +128,18 @@ namespace daliMQTT
 
 
     AppConfig ConfigManager::getConfig() const {
-        std::lock_guard<std::mutex> lock(config_mutex);
+        std::lock_guard lock(config_mutex);
         return config_cache;
     }
 
     void ConfigManager::setConfig(const AppConfig& new_config) {
-        std::lock_guard<std::mutex> lock(config_mutex);
+        std::lock_guard lock(config_mutex);
         config_cache = new_config;
     }
 
 
     bool ConfigManager::isConfigured() const {
-        std::lock_guard<std::mutex> lock(config_mutex);
+        std::lock_guard lock(config_mutex);
         return config_cache.configured;
     }
 

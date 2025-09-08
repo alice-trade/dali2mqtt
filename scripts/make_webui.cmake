@@ -9,6 +9,7 @@ add_custom_command(
         COMMAND npm install
         WORKING_DIRECTORY ${WEBUI_SOURCE_DIR}
         COMMENT "Installing Web UI dependencies..."
+
 )
 
 add_custom_target(webui ALL

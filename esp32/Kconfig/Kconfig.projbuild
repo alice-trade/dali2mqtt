@@ -1,7 +1,7 @@
 menu "DALI MQTT Bridge Settings"
 
     # --- Настройки DALI ---
-    menu "DALI Interface Configuration" # Используем comment для заголовка раздела
+    menu "DALI Interface Configuration"
 
     config DALI2MQTT_DALI_RX_PIN
         int "DALI RX GPIO Pin"
@@ -23,24 +23,6 @@ menu "DALI MQTT Bridge Settings"
         range 100 3600000
         help
             Default interval for polling DALI status if not found in NVS.
-
-    config DALI2MQTT_DALI_DEFAULT_POLL_GROUPS_MASK
-        hex "Default DALI Poll Groups Mask (Hex)"
-        default 0x0001
-        help
-            Default bitmask (e.g., 0xFFFF) for polling DALI groups if not found in NVS.
-
-    config DALI2MQTT_DALI_DEFAULT_POLL_DEVICES_MASK
-        hex "Default DALI Poll Devices Mask (Hex, Upper 32bit)"
-        default 0x00000000
-        help
-            Upper 32 bits of the default 64-bit bitmask for polling DALI devices.
-
-    config DALI2MQTT_DALI_DEFAULT_POLL_DEVICES_MASK_LO
-        hex "Default DALI Poll Devices Mask (Hex, Lower 32bit)"
-        default 0x00000000
-        help
-            Lower 32 bits of the default 64-bit bitmask for polling DALI devices.
 
     config DALI2MQTT_DALI_TRANSACTION_TIMEOUT_MS
         int "DALI Transaction Timeout (ms)"
@@ -65,19 +47,7 @@ menu "DALI MQTT Bridge Settings"
     endmenu
 
     # --- Настройки MQTT ---
-    menu "MQTT Client Configuration" # Используем comment для заголовка раздела
-
-    config DALI2MQTT_MQTT_DEFAULT_URI
-        string "Default MQTT Broker URI"
-        default "mqtt://192.168.1.100"
-        help
-            Default URI for the MQTT broker (mqtt[s]://[user[:pass]@]host[:port]). Used if not found in NVS.
-
-    config DALI2MQTT_MQTT_DEFAULT_CLIENT_ID
-        string "Default MQTT Client ID"
-        default "esp32_dali_bridge"
-        help
-            Default Client ID for the MQTT connection.
+    menu "MQTT Client Configuration"
 
     config DALI2MQTT_MQTT_BASE_TOPIC
         string "MQTT Base Topic"
@@ -147,19 +117,19 @@ menu "DALI MQTT Bridge Settings"
     endmenu
 
     # --- Настройки WiFi по умолчанию ---
-    menu "Default WiFi Credentials"
+    menu "WiFi AP Credentials"
 
-    config DALI2MQTT_WIFI_DEFAULT_SSID
-        string "Default WiFi SSID"
-        default "YourSSID"
+    config DALI2MQTT_WIFI_AP_SSID
+        string "WiFi AP SSID"
+        default "DALI-MQTT-Bridge"
         help
-            Default WiFi network name (SSID). Used if not found in NVS.
+            Default WiFi AP network name (SSID).
 
-    config DALI2MQTT_WIFI_DEFAULT_PASS
-        string "Default WiFi Password"
-        default "YourPassword"
+    config DALI2MQTT_WIFI_AP_PASS
+        string "WiFi AP Password"
+        default "bridge123"
         help
-            Default WiFi network password. Used if not found in NVS.
+            Default WiFi AP network password.
 
     config DALI2MQTT_WIFI_MAX_RETRY
         int "WiFi Maximum Connection Retries"
@@ -170,12 +140,12 @@ menu "DALI MQTT Bridge Settings"
 
 
     # --- Настройки Задач ---
-    comment "Task Configuration" # Используем comment для заголовка раздела
+    comment "Task Configuration"
 
     config DALI2MQTT_DALI_POLL_TASK_STACK_SIZE
         int "DALI Poll Task Stack Size"
         default 4096
-        range 2048 16384
+        range 4096 16384
         help
             Stack size for the DALI polling task.
 

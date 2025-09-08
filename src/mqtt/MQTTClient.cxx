@@ -50,9 +50,9 @@ namespace daliMQTT
         esp_mqtt_client_subscribe(client_handle, topic.c_str(), qos);
     }
 
-    void MQTTClient::mqttEventHandler(void* handler_args, esp_event_base_t base, int32_t event_id, void* event_data) {
-        auto* client = static_cast<MQTTClient*>(handler_args);
-        auto* event = static_cast<esp_mqtt_event_handle_t>(event_data);
+    void MQTTClient::mqttEventHandler(void* handler_args, [[maybe_unused]] esp_event_base_t base, int32_t event_id, void* event_data) {
+        auto const* client = static_cast<MQTTClient*>(handler_args);
+        auto const* event = static_cast<esp_mqtt_event_handle_t>(event_data);
 
         switch (static_cast<esp_mqtt_event_id_t>(event_id)) {
             case MQTT_EVENT_CONNECTED:
@@ -68,9 +68,6 @@ namespace daliMQTT
                 break;
             case MQTT_EVENT_UNSUBSCRIBED:
                 ESP_LOGI(TAG, "MQTT_EVENT_UNSUBSCRIBED, msg_id=%d", event->msg_id);
-                break;
-            case MQTT_EVENT_PUBLISHED:
-                // ESP_LOGI(TAG, "MQTT_EVENT_PUBLISHED, msg_id=%d", event->msg_id);
                 break;
             case MQTT_EVENT_DATA:
                 ESP_LOGI(TAG, "MQTT_EVENT_DATA");

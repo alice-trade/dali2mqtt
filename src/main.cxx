@@ -1,6 +1,6 @@
 #include "esp_log.h"
 #include "ConfigManager.hxx"
-#include "LifecycleBase.hxx"
+#include "Lifecycle.hxx"
 
 static const char* TAG = "MAIN";
 
@@ -11,7 +11,7 @@ extern "C" void app_main(void) {
     ESP_ERROR_CHECK(config.init());
     ESP_ERROR_CHECK(config.load());
 
-    auto& logic = daliMQTT::LifecycleBase::getInstance();
+    auto& logic = daliMQTT::Lifecycle::getInstance();
 
     if (config.isConfigured()) {
         ESP_LOGI(TAG, "Device is configured. Starting normal mode.");
