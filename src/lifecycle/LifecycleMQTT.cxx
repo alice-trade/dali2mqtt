@@ -33,7 +33,7 @@ namespace daliMQTT {
     void Lifecycle::onMqttConnected() {
         ESP_LOGI(TAG, "MQTT connected successfully.");
         auto config = ConfigManager::getInstance().getConfig();
-        auto& mqtt = MQTTClient::getInstance();
+        auto const& mqtt = MQTTClient::getInstance();
 
         std::string availability_topic = config.mqtt_base_topic + CONFIG_DALI2MQTT_MQTT_AVAILABILITY_TOPIC;
         mqtt.publish(availability_topic, CONFIG_DALI2MQTT_MQTT_PAYLOAD_ONLINE, 1, true);
@@ -105,10 +105,10 @@ namespace daliMQTT {
         cJSON_Delete(root);
     }
 
-     void Lifecycle::daliPollTask(void* pvParameters) {
+     void Lifecycle::daliPollTask([[maybe_unused]] void* pvParameters) {
         auto config = ConfigManager::getInstance().getConfig();
         auto& dali = DaliAPI::getInstance();
-        auto& mqtt = MQTTClient::getInstance();
+        auto const& mqtt = MQTTClient::getInstance();
 
         ESP_LOGI(TAG, "DALI polling task started.");
 

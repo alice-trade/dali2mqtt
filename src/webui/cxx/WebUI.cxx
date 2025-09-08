@@ -202,7 +202,7 @@ namespace daliMQTT
         #define JSON_STR_TO_CFG(NAME) if (cJSON* item = cJSON_GetObjectItem(root, #NAME); cJSON_IsString(item) && (item->valuestring != nullptr)) { current_cfg.NAME = item->valuestring; }
 
         JSON_STR_TO_CFG(wifi_ssid);
-        JSON_STR_TO_CFG(wifi_password); // пароль может быть пустым, если не менялся
+        JSON_STR_TO_CFG(wifi_password);
         JSON_STR_TO_CFG(mqtt_uri);
         JSON_STR_TO_CFG(mqtt_client_id);
         JSON_STR_TO_CFG(mqtt_base_topic);
