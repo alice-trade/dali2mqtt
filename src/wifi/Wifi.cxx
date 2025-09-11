@@ -2,6 +2,7 @@
 #include "esp_log.h"
 #include "esp_netif.h"
 #include "lwip/ip4_addr.h"
+#include "mdns.h"
 
 namespace daliMQTT
 {
@@ -98,6 +99,29 @@ namespace daliMQTT
         return ip4addr_ntoa(reinterpret_cast<const ip4_addr_t*>(&ip_info.ip));
     }
 
+    void Wifi::startMdns() {
+        if (mdns_started) {
+            return;
+        }
+        ESP_LOGI(TAG, "Starting mDNS service...");
+        esp_err_t err = mdns_init();
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "mDNS Init failed: %s", esp_err_to_name(err));
+            return;
+        }
+
+        ESP_ERROR_CHECK(mdns_hostname_set("dalimqtt"));
+        ESP_ERROR_CHECK(mdns_instance_name_set("DALI to MQTT Bridge"));
+
+        mdns_txt_item_t serviceTxtData[] = {
+            {"path", "/"}
+        };
+
+        ESP_ERROR_CHECK(mdns_service_add("Web UI", "_http", "_tcp", 80, serviceTxtData,
+                                         sizeof(serviceTxtData) / sizeof(serviceTxtData[0])));
+        ESP_LOGI(TAG, "mDNS service started, advertising http://dalimqtt.local");
+        mdns_started = true;
+    }
 
     void Wifi::wifiEventHandler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
         auto* manager = static_cast<Wifi*>(arg);
@@ -114,11 +138,15 @@ namespace daliMQTT
             ip_event_got_ip_t const* event = static_cast<ip_event_got_ip_t*>(event_data);
             ESP_LOGI(TAG, "GOT_IP: " IPSTR, IP2STR(&event->ip_info.ip));
             manager->status = Status::CONNECTED;
+            manager->startMdns();
             if(manager->onConnected) manager->onConnected();
-        } else if (event_id == WIFI_EVENT_AP_STACONNECTED) {
+        } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_AP_START) {
+            ESP_LOGI(TAG, "AP Mode started. Starting mDNS.");
+            manager->startMdns();
+        } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_AP_STACONNECTED) {
             auto const* event = static_cast<wifi_event_ap_staconnected_t*>(event_data);
             //ESP_LOGI(TAG, "station " MACSTR " join, AID=%d", MAC2STR(event->mac), event->aid);
-        } else if (event_id == WIFI_EVENT_AP_STADISCONNECTED) {
+        } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_AP_STADISCONNECTED) {
             auto const* event = static_cast<wifi_event_ap_stadisconnected_t*>(event_data);
             //ESP_LOGI(TAG, "station " MACSTR " leave, AID=%d", MAC2STR(event->mac), event->aid);
         }

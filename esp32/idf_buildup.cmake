@@ -2,6 +2,19 @@
 
 include($ENV{IDF_PATH}/tools/cmake/idf.cmake)
 string(TOUPPER "${CMAKE_BUILD_TYPE}" CMAKE_BUILD_TYPEU)
+option(OFFLINE "Build dependencies with GIT, or prefer offline discover" OFF)
+
+if(NOT OFFLINE)
+    FetchContent_Declare(
+            esp-protocols
+            GIT_REPOSITORY https://github.com/espressif/esp-protocols.git
+    )
+    FetchContent_MakeAvailable(esp-protocols)
+    set(ESP_PROTO_BASEDIR "${esp-protocols_SOURCE_DIR}/components")
+else ()
+    set(ESP_PROTO_BASEDIR $ENV{IDF_PATH}/../protocols/components)
+endif ()
+
 
 message("Build for" ${CMAKE_BUILD_TYPEU})
 
@@ -14,6 +27,7 @@ set(PLATFORM_MODULES
         log
         esp_event
         esp_wifi
+        mdns
         esp_http_server
         driver
         esp_netif
@@ -27,6 +41,9 @@ if(BUILD_UNITY)
 endif()
 
 idf_build_component(${ESP_BUILD_UTILS_PATH}/Kconfig)
+
+idf_build_component(${ESP_PROTO_BASEDIR}/mdns)
+
 
 idf_build_process(esp32
         COMPONENTS

@@ -34,6 +34,7 @@ target_link_libraries(DaliMQTT-Core PUBLIC
         idf::esp_netif
         idf::freertos
         idf::spiffs
+        idf::mdns
         idf::esp_wifi
         idf::cxx
         idf::esp_http_server

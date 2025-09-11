@@ -45,9 +45,10 @@ namespace daliMQTT
         Wifi() = default;
 
         static void wifiEventHandler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data);
-
+        void startMdns();
         std::atomic<Status> status{Status::DISCONNECTED};
         bool initialized{false};
+        bool mdns_started{false};
     };
 } // daliMQTT
 

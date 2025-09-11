@@ -1,9 +1,9 @@
 # ESP32 Configuration CMAKE Lists
-if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
-    message(FATAL_ERROR "CMAKE_TOOLCHAIN_FILE environment variable is not set. "
-                "Please specify CMAKE_TOOLCHAIN_FILE explicitly. "
-                "e.g., run 'get_idf' or '. $HOME/esp/esp-idf/export.sh'")
-    endif ()
+#if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
+#    message(FATAL_ERROR "CMAKE_TOOLCHAIN_FILE environment variable is not set. "
+#                "Please specify CMAKE_TOOLCHAIN_FILE explicitly. "
+#                "e.g., run 'get_idf' or '. $HOME/esp/esp-idf/export.sh'")
+#    endif ()
 
 message(NOTICE "Using C compiler: " ${CMAKE_C_COMPILER})
 message(NOTICE "IDF framework at: " $ENV{IDF_PATH})
