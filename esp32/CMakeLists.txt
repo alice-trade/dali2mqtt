@@ -25,7 +25,7 @@ include(../scripts/make_webui.cmake)
 option(BUILD_TESTS "Build the unit test executable" OFF)
 
 if(BUILD_TESTS)
-    message(STATUS "Test targets enabled. Use 'ninja test' or 'ninja test-build', 'test-flash', 'test-monitor'.")
+    message(STATUS "Test targets enabled. Use 'ninja test', 'test-flash', 'test-monitor'.")
 
     set(TESTS_BINARY_DIR ${CMAKE_BINARY_DIR}/tests_build)
 
