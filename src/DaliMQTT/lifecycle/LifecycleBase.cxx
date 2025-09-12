@@ -1,15 +1,16 @@
 #include <esp_log.h>
-
 #include "ConfigManager.hxx"
-#include "sdkconfig.h"
 #include "DaliAPI.hxx"
 #include "Lifecycle.hxx"
 #include "MQTTClient.hxx"
+#include "DaliDeviceController.hxx"
 #include "WebUI.hxx"
 #include "Wifi.hxx"
 
-namespace daliMQTT {
-    static constexpr char  TAG[] = "LifecycleRuntime";
+
+namespace daliMQTT
+{
+    static constexpr  char TAG[] = "LifecycleBase";
 
     void Lifecycle::startProvisioningMode() {
         ESP_LOGI(TAG, "Starting in provisioning mode...");
@@ -25,8 +26,11 @@ namespace daliMQTT {
 
     void Lifecycle::startNormalMode() {
         ESP_LOGI(TAG, "Starting in normal mode...");
-        auto& dali = DaliAPI::getInstance();
-        dali.init(static_cast<gpio_num_t>(CONFIG_DALI2MQTT_DALI_RX_PIN), static_cast<gpio_num_t>(CONFIG_DALI2MQTT_DALI_TX_PIN));
+        auto& dali_api = DaliAPI::getInstance();
+        dali_api.init(static_cast<gpio_num_t>(CONFIG_DALI2MQTT_DALI_RX_PIN), static_cast<gpio_num_t>(CONFIG_DALI2MQTT_DALI_TX_PIN));
+
+        auto& dali_manager = DaliDeviceController::getInstance();
+        dali_manager.init();
 
         auto& web = WebUI::getInstance();
         web.start();
@@ -45,4 +49,4 @@ namespace daliMQTT {
         auto config = ConfigManager::getInstance().getConfig();
         wifi.connectToAP(config.wifi_ssid, config.wifi_password);
     }
-}
+} // daliMQTT

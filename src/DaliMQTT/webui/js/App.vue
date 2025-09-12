@@ -2,6 +2,7 @@
 import { ref } from 'vue';
 import { api, setAuth } from './api';
 import SettingsPage from './components/SettingsPage.vue';
+import DaliSetup from './components/DaliSetup.vue';
 import InfoPage from './components/InfoPage.vue';
 
 // Состояния
@@ -57,12 +58,14 @@ const handleLogin = async () => {
           </ul>
           <ul>
             <li><a href="#" :class="{ 'secondary': currentView !== 'settings' }" @click="currentView = 'settings'">Settings</a></li>
+            <li><a href="#" :class="{ 'secondary': currentView !== 'dali' }" @click="currentView = 'dali'">DALI Control</a></li>
             <li><a href="#" :class="{ 'secondary': currentView !== 'info' }" @click="currentView = 'info'">Info</a></li>
           </ul>
         </nav>
       </header>
 
       <SettingsPage v-if="currentView === 'settings'" />
+      <DaliSetup v-if="currentView === 'dali'" />
       <InfoPage v-if="currentView === 'info'" />
     </div>
   </main>

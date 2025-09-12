@@ -1,6 +1,6 @@
 #ifndef DALIMQTT_WEBUI_HXX
 #define DALIMQTT_WEBUI_HXX
-#include "esp_http_server.h"
+#include <esp_http_server.h>
 
 namespace daliMQTT
 {
@@ -20,10 +20,21 @@ namespace daliMQTT
     private:
         WebUI() = default;
 
-        static esp_err_t apiGetConfigHandler(httpd_req_t *req);
-        static esp_err_t apiSetConfigHandler(httpd_req_t *req);
-        static esp_err_t apiGetInfoHandler(httpd_req_t *req);
+        // API handlers
+        struct api
+        {
+            static esp_err_t GetConfigHandler(httpd_req_t *req);
+            static esp_err_t SetConfigHandler(httpd_req_t *req);
+            static esp_err_t GetInfoHandler(httpd_req_t *req);
+            static esp_err_t DaliGetDevicesHandler(httpd_req_t *req);
+            static esp_err_t DaliScanHandler(httpd_req_t *req);
+            static esp_err_t DaliInitializeHandler(httpd_req_t *req);
+        };
+
+        // File handler
         static esp_err_t staticFileGetHandler(httpd_req_t *req);
+
+        // Helpers
 
         static esp_err_t checkAuth(httpd_req_t *req);
         static void set_content_type_from_file(httpd_req_t *req, const char *filepath);

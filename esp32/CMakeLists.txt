@@ -14,8 +14,8 @@ include(idf_buildup.cmake)
 
 set(app ${CMAKE_PROJECT_NAME})
 
-add_subdirectory(../src/driver dalic)
-add_subdirectory(../src daliMQTTModules)
+add_subdirectory(../src/DaliMQTT/driver dalic)
+add_subdirectory(../src/DaliMQTT daliMQTTModules)
 
 include(../scripts/build_firmware.cmake)
 include(../scripts/size_components.cmake)

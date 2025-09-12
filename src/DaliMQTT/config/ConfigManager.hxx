@@ -3,8 +3,8 @@
 
 #include <string>
 #include <mutex>
+#include <nvs.h>
 
-#include "nvs.h"
 namespace daliMQTT
 {
     struct AppConfig {
@@ -23,6 +23,7 @@ namespace daliMQTT
 
         // DALI
         uint32_t dali_poll_interval_ms;
+        uint64_t dali_devices_mask{0};
 
         bool configured{false};
     };
@@ -61,6 +62,7 @@ namespace daliMQTT
             esp_err_t initSpiffs();
             static esp_err_t getString(nvs_handle_t handle, const char* key, std::string& out_value, const char* default_value);
             static esp_err_t getU32(nvs_handle_t handle, const char* key, uint32_t& out_value, uint32_t default_value);
+            static esp_err_t getU64(nvs_handle_t handle, const char* key, uint64_t& out_value, uint64_t default_value);
             static esp_err_t setString(nvs_handle_t handle, const char* key, const std::string& value);
 
             AppConfig config_cache;

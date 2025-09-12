@@ -1,4 +1,4 @@
-add_executable(${app} ${CMAKE_SOURCE_DIR}/src/main.cxx)
+add_executable(${app} ${CMAKE_SOURCE_DIR}/src/DaliMQTT/main.cxx)
 
 target_link_libraries(${app} PRIVATE DaliMQTT-Core)
 

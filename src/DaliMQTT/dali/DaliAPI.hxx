@@ -2,9 +2,10 @@
 #define DALIMQTT_DALIAPI_HXX
 #include <optional>
 #include <mutex>
+#include <bitset>
 
-#include "driver/gpio.h"
-#include "freertos/FreeRTOS.h"
+#include <driver/gpio.h>
+#include <freertos/FreeRTOS.h>
 #include "dalic/include/dali.h"
 #include "dalic/include/dali_commands.h"
 
@@ -28,11 +29,19 @@ namespace daliMQTT
         // Отправка запроса с ожиданием ответа
         [[nodiscard]] std::optional<uint8_t> sendQuery(dali_addressType_t addr_type, uint8_t addr, uint8_t command);
 
+        // Сканирование шины на наличие уже адресованных устройств
+        [[nodiscard]] std::bitset<64> scanBus();
+
+        // Процесс инициализации и адресации новых устройств на шине
+        [[nodiscard]] std::bitset<64> initializeBus();
+
+
     private:
         DaliAPI() = default;
 
         std::mutex bus_mutex;
     };
 } // daliMQTT
+
 
 #endif //DALIMQTT_DALIAPI_HXX

@@ -22,7 +22,7 @@ message(STATUS "Found DaliMQTT source files: ${MODULE_SOURCES}")
 
 target_sources(DaliMQTT-Core PRIVATE ${MODULE_SOURCES})
 
-target_include_directories(DaliMQTT-Core PUBLIC ${MODULE_DIRS} include-add)
+target_include_directories(DaliMQTT-Core PRIVATE ${MODULE_DIRS} include-add INTERFACE ..)
 target_link_libraries(DaliMQTT-Core PUBLIC
         daliC
         idf::nvs_flash

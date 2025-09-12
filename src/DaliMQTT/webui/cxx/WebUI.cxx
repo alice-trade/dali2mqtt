@@ -1,21 +1,23 @@
-#include "WebUI.hxx"
-#include "esp_log.h"
-#include "cJSON.h"
-#include "ConfigManager.hxx"
+#include <esp_log.h>
+#include <cJSON.h>
 #include <string_view>
 #include <vector>
 #include <sys/stat.h>
 #include <format>
-#include "esp_system.h"
-#include "esp_chip_info.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
+#include <array>
+#include <esp_system.h>
+#include <esp_chip_info.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <mbedtls/base64.h>
+#include "WebUI.hxx"
+#include "ConfigManager.hxx"
+#include "DaliDeviceController.hxx"
 #include "utils/FileHandle.hxx"
-#include "mbedtls/base64.h"
 
 namespace daliMQTT
 {
-    static constexpr char  TAG[] = "WebServer";
+    static constexpr char  TAG[] = "WebUI Service";
     constexpr std::string_view WEB_MOUNT_POINT = "/spiffs";
     constexpr size_t SCRATCH_BUFSIZE = 8192;
 
@@ -31,10 +33,13 @@ namespace daliMQTT
         }
 
         // Register handlers
-        const std::array<httpd_uri_t, 4> handlers = {{
-            { .uri = "/api/config", .method = HTTP_GET,  .handler = apiGetConfigHandler, .user_ctx = this },
-            { .uri = "/api/config", .method = HTTP_POST, .handler = apiSetConfigHandler, .user_ctx = this },
-            { .uri = "/api/info",   .method = HTTP_GET,  .handler = apiGetInfoHandler,   .user_ctx = this },
+        const std::array<httpd_uri_t, 7> handlers = {{
+            { .uri = "/api/config", .method = HTTP_GET,  .handler = api::GetConfigHandler, .user_ctx = this },
+            { .uri = "/api/config", .method = HTTP_POST, .handler = api::SetConfigHandler, .user_ctx = this },
+            { .uri = "/api/info",   .method = HTTP_GET,  .handler = api::GetInfoHandler,   .user_ctx = this },
+            { .uri = "/api/dali/devices",    .method = HTTP_GET,  .handler = api::DaliGetDevicesHandler, .user_ctx = this },
+            { .uri = "/api/dali/scan",       .method = HTTP_POST, .handler = api::DaliScanHandler,       .user_ctx = this },
+            { .uri = "/api/dali/initialize", .method = HTTP_POST, .handler = api::DaliInitializeHandler, .user_ctx = this },
             { .uri = "/*",          .method = HTTP_GET,  .handler = staticFileGetHandler, .user_ctx = nullptr }
         }};
 
@@ -52,6 +57,7 @@ namespace daliMQTT
         return ESP_OK;
     }
 
+    // --- Static File and Auth ---
     void WebUI::set_content_type_from_file(httpd_req_t *req, const char *filepath) {
         std::string_view fp(filepath);
         if (fp.ends_with(".html")) httpd_resp_set_type(req, "text/html");
@@ -134,12 +140,12 @@ namespace daliMQTT
         decoded[decoded_len] = '\0';
         std::string_view decoded_sv(reinterpret_cast<char*>(decoded.data()));
 
-        auto colon_pos = decoded_sv.find(':');
+        const auto colon_pos = decoded_sv.find(':');
         if (colon_pos == std::string_view::npos) {
             return send_unauthorized();
         }
 
-        auto cfg = ConfigManager::getInstance().getConfig();
+        const auto cfg = ConfigManager::getInstance().getConfig();
         if (decoded_sv.substr(0, colon_pos) == cfg.http_user && decoded_sv.substr(colon_pos + 1) == cfg.http_pass) {
             return ESP_OK; // Авторизация успешна
         }
@@ -147,7 +153,9 @@ namespace daliMQTT
         return send_unauthorized();
     }
 
-    esp_err_t WebUI::apiGetConfigHandler(httpd_req_t *req) {
+    // --- API Handlers ---
+
+    esp_err_t WebUI::api::GetConfigHandler(httpd_req_t *req) {
         if (checkAuth(req) != ESP_OK) return ESP_FAIL;
 
         const AppConfig cfg = ConfigManager::getInstance().getConfig();
@@ -166,7 +174,7 @@ namespace daliMQTT
         return ESP_OK;
     }
 
-    esp_err_t WebUI::apiSetConfigHandler(httpd_req_t *req) {
+    esp_err_t WebUI::api::SetConfigHandler(httpd_req_t *req) {
         if (checkAuth(req) != ESP_OK) return ESP_FAIL;
 
         if (req->content_len >= 512) {
@@ -215,7 +223,7 @@ namespace daliMQTT
         return ESP_OK;
     }
 
-    esp_err_t WebUI::apiGetInfoHandler(httpd_req_t *req) {
+    esp_err_t WebUI::api::GetInfoHandler(httpd_req_t *req) {
         if (checkAuth(req) != ESP_OK) return ESP_FAIL;
 
         esp_chip_info_t chip_info;
@@ -232,6 +240,47 @@ namespace daliMQTT
         httpd_resp_send(req, json_string, strlen(json_string));
         cJSON_Delete(root);
         delete json_string;
+        return ESP_OK;
+    }
+
+    esp_err_t WebUI::api::DaliGetDevicesHandler(httpd_req_t *req) {
+        if (checkAuth(req) != ESP_OK) return ESP_FAIL;
+
+        auto devices = DaliDeviceController::getInstance().getDiscoveredDevices();
+        cJSON *root = cJSON_CreateArray();
+
+        for (int i = 0; i < 64; ++i) {
+            if (devices.test(i)) {
+                cJSON_AddItemToArray(root, cJSON_CreateNumber(i));
+            }
+        }
+
+        const char *json_string = cJSON_Print(root);
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_send(req, json_string, strlen(json_string));
+        cJSON_Delete(root);
+        delete json_string;
+
+        return ESP_OK;
+    }
+
+    esp_err_t WebUI::api::DaliScanHandler(httpd_req_t *req) {
+        if (checkAuth(req) != ESP_OK) return ESP_FAIL;
+
+        ESP_LOGI(TAG, "Triggering DALI scan from WebUI.");
+        DaliDeviceController::getInstance().performScan();
+
+        httpd_resp_send(req, R"({"status":"ok", "message":"Scan completed."})", -1);
+        return ESP_OK;
+    }
+
+    esp_err_t WebUI::api::DaliInitializeHandler(httpd_req_t *req) {
+        if (checkAuth(req) != ESP_OK) return ESP_FAIL;
+
+        ESP_LOGI(TAG, "Triggering DALI initialization from WebUI.");
+        DaliDeviceController::getInstance().performFullInitialization();
+
+        httpd_resp_send(req, R"({"status":"ok", "message":"Initialization completed."})", -1);
         return ESP_OK;
     }
 

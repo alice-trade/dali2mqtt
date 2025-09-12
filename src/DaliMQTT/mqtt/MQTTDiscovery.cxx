@@ -1,9 +1,9 @@
+#include <cJSON.h>
+#include <format>
+#include "sdkconfig.h"
 #include "MQTTDiscovery.hxx"
 #include "MQTTClient.hxx"
 #include "ConfigManager.hxx"
-#include "cJSON.h"
-#include <format>
-#include "sdkconfig.h"
 
 namespace daliMQTT
 {

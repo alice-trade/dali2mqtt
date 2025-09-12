@@ -1,5 +1,5 @@
 #include "unity.h"
-#include "DaliAPI.hxx"
+#include "DaliMQTT/dali/DaliAPI.hxx"
 #include "sdkconfig.h"
 
 using namespace daliMQTT;

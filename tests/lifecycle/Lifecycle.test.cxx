@@ -1,7 +1,7 @@
 #include "unity.h"
-#include "Lifecycle.hxx"
-#include "ConfigManager.hxx"
-#include "Wifi.hxx"
+#include "DaliMQTT/lifecycle/Lifecycle.hxx"
+#include "DaliMQTT/config/ConfigManager.hxx"
+#include "DaliMQTT/wifi/Wifi.hxx"
 #include "nvs_flash.h"
 
 using namespace daliMQTT;

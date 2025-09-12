@@ -1,7 +1,7 @@
 #include "unity.h"
-#include "WebUI.hxx"
-#include "Wifi.hxx"
-#include "ConfigManager.hxx"
+#include "DaliMQTT/webui/cxx/WebUI.hxx"
+#include "DaliMQTT/wifi/Wifi.hxx"
+#include "DaliMQTT/config/ConfigManager.hxx"
 #include "esp_http_client.h"
 #include "mbedtls/base64.h"
 

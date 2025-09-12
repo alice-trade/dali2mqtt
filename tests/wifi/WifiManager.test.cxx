@@ -1,5 +1,5 @@
 #include "unity.h"
-#include "Wifi.hxx"
+#include "DaliMQTT/wifi/Wifi.hxx"
 
 using namespace daliMQTT;
 

@@ -19,9 +19,10 @@
 
 ## Программные требования
 
-1.  **ESP-IDF v5.x: [Инструкция по установке](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/index.html).
-2.  **Git**: Для клонирования репозитория.
-3.  **Node.js и npm**: Для сборки фронтенда Web-интерфейса.
+1.  **ESP-IDF v5.x**: [Инструкция по установке](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/index.html).
+2.  **GCC** (xtensa-esp-elf-g++): Компилятор C/C++ поставляемый ESP-IDF
+4. **Git**: Для клонирования репозитория.
+4.  **Node.js и npm**: Для сборки фронтенда Web-интерфейса.
 
 ## Сборка и прошивка проекта
 
@@ -46,7 +47,7 @@ cmake --build build --target menuconfig
 ```
 Основные настройки находятся в разделе `DALI MQTT Bridge Settings`.
 
-### 4. Сборка и прошивка
+### 3. Сборка и прошивка
 
 Процесс состоит из трех шагов: сборка, прошивка основного приложения и прошивка файловой системы для Web UI.
 

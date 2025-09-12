@@ -1,5 +1,5 @@
+#include <esp_log.h>
 #include "MQTTClient.hxx"
-#include "esp_log.h"
 #include "sdkconfig.h"
 
 namespace daliMQTT

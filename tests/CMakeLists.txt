@@ -4,8 +4,8 @@ project(DaliMQTTTestsESP C CXX)
 include(../scripts/common.cmake)
 include(../esp32/idf_buildup.cmake)
 
-add_subdirectory(../src/driver daliC)
-add_subdirectory(../src daliMQTTModules)
+add_subdirectory(../src/DaliMQTT/driver daliC)
+add_subdirectory(../src/DaliMQTT daliMQTTModules)
 
 set(TEST_APP_NAME "daliMQTTTestESP")
 file(GLOB_RECURSE TEST_CASE_FILES "**/*.test.cxx")

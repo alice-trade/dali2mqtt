@@ -1,9 +1,9 @@
 #ifndef DALIMQTT_MQTTCLIENT_HXX
 #define DALIMQTT_MQTTCLIENT_HXX
 
-#include "mqtt_client.h"
 #include <string>
 #include <functional>
+#include "mqtt_client.h"
 
 namespace daliMQTT
 {

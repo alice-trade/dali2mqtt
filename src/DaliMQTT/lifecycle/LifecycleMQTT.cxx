@@ -1,18 +1,19 @@
-#include "ConfigManager.hxx"
-#include "MQTTClient.hxx"
-#include "DaliAPI.hxx"
-#include "WebUI.hxx"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "sdkconfig.h"
+#include <cJSON.h>
 #include <string_view>
 #include <vector>
 #include <format>
 #include <charconv>
 #include <algorithm>
 #include <esp_log.h>
-#include <MQTTDiscovery.hxx>
-#include "cJSON.h"
+#include <ranges>
+
+#include "sdkconfig.h"
+#include "ConfigManager.hxx"
+#include "MQTTClient.hxx"
+#include "DaliAPI.hxx"
+#include "DaliDeviceController.hxx"
+#include "WebUI.hxx"
+#include "MQTTDiscovery.hxx"
 #include "Lifecycle.hxx"
 
 namespace daliMQTT {
@@ -47,9 +48,7 @@ namespace daliMQTT {
         mqtt_discovery.publishAllDevices();
         ESP_LOGI(TAG, "MQTT discovery messages published.");
 
-        if(!dali_poll_task_handle) {
-            xTaskCreate(daliPollTask, "dali_poll", CONFIG_DALI2MQTT_DALI_POLL_TASK_STACK_SIZE, this, CONFIG_DALI2MQTT_DALI_POLL_TASK_PRIORITY, &dali_poll_task_handle);
-        }
+        DaliDeviceController::getInstance().startPolling();
     }
 
     void Lifecycle::onMqttData(const std::string& topic, const std::string& data) {
@@ -61,16 +60,13 @@ namespace daliMQTT {
         if (!topic_sv.starts_with(config.mqtt_base_topic)) return;
         topic_sv.remove_prefix(config.mqtt_base_topic.length());
 
+        if (topic_sv.starts_with('/')) {
+            topic_sv.remove_prefix(1);
+        }
+
         std::vector<std::string_view> parts;
-        size_t start = 0;
-        while(start < topic_sv.length()) {
-            size_t end = topic_sv.find('/', start + 1);
-            if (end == std::string_view::npos) {
-                parts.push_back(topic_sv.substr(start + 1));
-                break;
-            }
-            parts.push_back(topic_sv.substr(start + 1, end - start - 1));
-            start = end;
+        for (const auto part : std::views::split(topic_sv, '/')) {
+            parts.emplace_back(part.begin(), part.end());
         }
 
         if (parts.size() != 4 || parts[0] != "light" || parts[3] != "set") return;
@@ -101,31 +97,5 @@ namespace daliMQTT {
         }
 
         cJSON_Delete(root);
-    }
-
-    [[noreturn]] void Lifecycle::daliPollTask(void* pvParameters) {
-        auto* self = static_cast<Lifecycle*>(pvParameters);
-        if (!self) { vTaskDelete(nullptr); }
-
-        auto config = ConfigManager::getInstance().getConfig();
-        auto& dali = DaliAPI::getInstance();
-        auto const& mqtt = MQTTClient::getInstance();
-
-        ESP_LOGI(TAG, "DALI polling task started.");
-
-        while (true) {
-            for (uint8_t i = 0; i < 64; ++i) {
-                if (auto level_opt = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, i, DALI_COMMAND_QUERY_ACTUAL_LEVEL); level_opt && level_opt.value() != 255) {
-                    uint8_t level = level_opt.value();
-                    std::string state_topic = std::format("{}/light/short/{}/state", config.mqtt_base_topic, i);
-                    std::string payload = std::format(R"({{"state":"{}","brightness":{}}})", (level > 0 ? "ON" : "OFF"), level);
-                    mqtt.publish(state_topic, payload);
-                } else if (!level_opt.has_value()) {
-                     ESP_LOGD(TAG, "No reply from DALI device %d", i);
-                 }
-                 vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_POLL_DELAY_MS));
-            }
-            vTaskDelay(pdMS_TO_TICKS(config.dali_poll_interval_ms));
-        }
     }
 }

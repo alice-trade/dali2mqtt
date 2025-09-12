@@ -1,8 +1,8 @@
-#include "esp_log.h"
-#include "ConfigManager.hxx"
-#include "Lifecycle.hxx"
+#include <esp_log.h>
+#include <DaliMQTT/config/ConfigManager.hxx>
+#include <DaliMQTT/lifecycle/Lifecycle.hxx>
 
-static constexpr char  TAG[] = "MAIN";
+static constexpr char  TAG[] = "daliMQTT";
 
 extern "C" void app_main(void) {
     ESP_LOGI(TAG, "DALI-to-MQTT Bridge starting...");

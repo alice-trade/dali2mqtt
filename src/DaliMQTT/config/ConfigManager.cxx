@@ -1,11 +1,11 @@
 #include "ConfigManager.hxx"
-#include "esp_log.h"
+#include <esp_log.h>
 #include <cstring>
 #include <format>
 #include "utils/NvsHandle.hxx"
 #include "sdkconfig.h"
-#include "esp_spiffs.h"
-#include "nvs_flash.h"
+#include <esp_spiffs.h>
+#include <nvs_flash.h>
 
 namespace daliMQTT
 {
@@ -78,6 +78,7 @@ namespace daliMQTT
         getString(nvs_handle.get(), "http_pass", config_cache.http_pass, CONFIG_DALI2MQTT_WEBUI_DEFAULT_PASS);
 
         getU32(nvs_handle.get(), "dali_poll", config_cache.dali_poll_interval_ms, CONFIG_DALI2MQTT_DALI_DEFAULT_POLL_INTERVAL_MS);
+        getU64(nvs_handle.get(), "dali_mask", config_cache.dali_devices_mask, 0);
 
         uint8_t configured_flag = 0;
         nvs_get_u8(nvs_handle.get(), "configured", &configured_flag);
@@ -97,8 +98,8 @@ namespace daliMQTT
 
         esp_err_t err;
 
-        #define SetNVS(func, key, value) \
-            err = func(nvs_handle.get(), key, value); \
+        #define SetNVS(func, key, value, ...) \
+            err = func(nvs_handle.get(), key, value, ##__VA_ARGS__); \
             if (err != ESP_OK) return err;
 
         SetNVS(setString, "wifi_ssid", config_cache.wifi_ssid);
@@ -108,6 +109,8 @@ namespace daliMQTT
         SetNVS(setString, "mqtt_base", config_cache.mqtt_base_topic);
         SetNVS(setString, "http_user", config_cache.http_user);
         SetNVS(setString, "http_pass", config_cache.http_pass);
+        SetNVS(nvs_set_u32, "dali_poll", config_cache.dali_poll_interval_ms);
+        SetNVS(nvs_set_u64, "dali_mask", config_cache.dali_devices_mask);
 
         #undef SetNVS
 
@@ -165,7 +168,7 @@ namespace daliMQTT
 
         out_value.resize(required_size);
         err = nvs_get_str(handle, key, out_value.data(), &required_size);
-        out_value.pop_back();
+        if(required_size > 0 && out_value.back() == '\0') out_value.pop_back();
         return err;
     }
 
@@ -176,6 +179,16 @@ namespace daliMQTT
 
     esp_err_t ConfigManager::getU32(nvs_handle_t handle, const char* key, uint32_t& out_value, uint32_t default_value) {
         esp_err_t err = nvs_get_u32(handle, key, &out_value);
+        if (err == ESP_ERR_NVS_NOT_FOUND) {
+            out_value = default_value;
+            ESP_LOGW(TAG, "%s", std::format("Key '{}' not found in NVS, using default value: {}", key, default_value).c_str());
+            return ESP_OK;
+        }
+        return err;
+    }
+
+    esp_err_t ConfigManager::getU64(nvs_handle_t handle, const char* key, uint64_t& out_value, uint64_t default_value) {
+        esp_err_t err = nvs_get_u64(handle, key, &out_value);
         if (err == ESP_ERR_NVS_NOT_FOUND) {
             out_value = default_value;
             ESP_LOGW(TAG, "%s", std::format("Key '{}' not found in NVS, using default value: {}", key, default_value).c_str());
