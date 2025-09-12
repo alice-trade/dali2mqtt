@@ -69,10 +69,9 @@ if(BUILD_TESTS)
             COMMENT "Starting serial monitor for tests..."
             USES_TERMINAL
     )
-    add_dependencies(daliMQTT test)
 
 else()
     message(STATUS "Test targets are disabled.")
 endif()
-
+message(STATUS "--------------------------------------------")
 message(STATUS "Configuration done. Run ninja/make daliMQTT and ninja/make app-flash.")

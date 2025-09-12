@@ -77,6 +77,12 @@
 *.idb
 *.pdb
 
+
+# cmake
+./cmake-build-debug-esp32
+./cmake-build-release-esp32
+
+
 # Kernel Module Compile Results
 *.mod*
 *.cmd

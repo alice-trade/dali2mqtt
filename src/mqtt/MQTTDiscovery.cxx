@@ -11,7 +11,7 @@ namespace daliMQTT
         const auto config = ConfigManager::getInstance().getConfig();
         base_topic = config.mqtt_base_topic;
         availability_topic = std::format("{}{}", base_topic, CONFIG_DALI2MQTT_MQTT_AVAILABILITY_TOPIC);
-        device_name = CONFIG_MDNS_INSTANCE;
+        device_name = "DALI-MQTT Bridge";
     }
 
     void MQTTDiscovery::publishAllDevices() {

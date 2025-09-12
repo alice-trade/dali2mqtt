@@ -110,7 +110,7 @@ namespace daliMQTT
         static std::array<mdns_txt_item_t, 1> serviceTxtData = {{
             {"path", "/"}
         }};
-        ESP_ERROR_CHECK(mdns_service_add("Web UI", "_http", "_tcp", 80, serviceTxtData.data(), serviceTxtData.size()));
+        ESP_ERROR_CHECK(mdns_service_add("DALI-to-MQTT Bridge Web UI", "_http", "_tcp", 80, serviceTxtData.data(), serviceTxtData.size()));
         ESP_LOGI(TAG, "mDNS service started, advertising http://dalimqtt.local");
         mdns_started = true;
     }
