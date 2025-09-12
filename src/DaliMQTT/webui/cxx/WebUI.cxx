@@ -230,7 +230,7 @@ namespace daliMQTT
         esp_chip_info(&chip_info);
 
         cJSON *root = cJSON_CreateObject();
-        cJSON_AddStringToObject(root, "version", "0.3.0");
+        cJSON_AddStringToObject(root, "version", "0.4.0"); // todo add dynamic version
         cJSON_AddStringToObject(root, "idf_version", esp_get_idf_version());
         cJSON_AddNumberToObject(root, "cores", chip_info.cores);
         cJSON_AddNumberToObject(root, "free_heap", esp_get_free_heap_size());

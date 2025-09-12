@@ -19,19 +19,19 @@ menu "DALI MQTT Bridge Settings"
 
     config DALI2MQTT_DALI_DEFAULT_POLL_INTERVAL_MS
         int "Default DALI Poll Interval (ms)"
-        default 5000
+        default 1500
         range 100 3600000
         help
             Default interval for polling DALI status if not found in NVS.
 
-    config DALI2MQTT_DALI_TRANSACTION_TIMEOUT_MS
+    config DALI2MQTT_DALI_TRANSACTION_TIMEOUT_MS # unimplemented
         int "DALI Transaction Timeout (ms)"
         default 100
         range 50 1000
         help
             Timeout in milliseconds for waiting for a DALI backward frame.
 
-    config DALI2MQTT_DALI_INTER_FRAME_DELAY_MS
+    config DALI2MQTT_DALI_INTER_FRAME_DELAY_MS # unimplemented
         int "DALI Inter-Frame Delay (ms)"
         default 20
         range 10 100
@@ -40,7 +40,7 @@ menu "DALI MQTT Bridge Settings"
 
     config DALI2MQTT_DALI_POLL_DELAY_MS
         int "DALI Poll Delay (ms)"
-        default 50
+        default 15
         range 10 200
         help
             Delay between polling different DALI addresses within one poll cycle.
@@ -148,7 +148,7 @@ menu "DALI MQTT Bridge Settings"
         help
             Default WiFi AP network password.
 
-    config DALI2MQTT_WIFI_MAX_RETRY
+    config DALI2MQTT_WIFI_MAX_RETRY # unimplemented
         int "WiFi Maximum Connection Retries"
         default 5
         range 0 20
@@ -158,7 +158,7 @@ menu "DALI MQTT Bridge Settings"
     endmenu
 
     # --- Настройки NVS ---
-    menu "NVS Configuration" # Используем comment для заголовка раздела
+    menu "NVS Configuration"
 
     config DALI2MQTT_NVS_NAMESPACE
         string "NVS Namespace"
