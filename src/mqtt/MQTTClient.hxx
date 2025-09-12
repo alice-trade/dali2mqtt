@@ -12,8 +12,10 @@ namespace daliMQTT
             MQTTClient(const MQTTClient&) = delete;
             MQTTClient& operator=(const MQTTClient&) = delete;
 
-            static MQTTClient& getInstance();
-
+            static MQTTClient& getInstance() {
+                static MQTTClient instance;
+                return instance;
+            }
             void init(const std::string& uri, const std::string& client_id, const std::string& availability_topic);
             void connect() const;
             void disconnect() const;

@@ -2,7 +2,7 @@
 #include "ConfigManager.hxx"
 #include "Lifecycle.hxx"
 
-static const char* TAG = "MAIN";
+static constexpr char  TAG[] = "MAIN";
 
 extern "C" void app_main(void) {
     ESP_LOGI(TAG, "DALI-to-MQTT Bridge starting...");

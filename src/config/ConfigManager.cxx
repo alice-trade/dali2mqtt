@@ -4,19 +4,13 @@
 #include <format>
 #include "utils/NvsHandle.hxx"
 #include "sdkconfig.h"
+#include "esp_spiffs.h"
+#include "nvs_flash.h"
 
 namespace daliMQTT
 {
-    static const char* TAG = "ConfigManager";
-    static const char* NVS_NAMESPACE = CONFIG_DALI2MQTT_NVS_NAMESPACE;
-
-
-
-
-    ConfigManager& ConfigManager::getInstance() {
-        static ConfigManager instance;
-        return instance;
-    }
+    static constexpr char  TAG[] = "ConfigManager";
+    static constexpr char  NVS_NAMESPACE[] = CONFIG_DALI2MQTT_NVS_NAMESPACE;
 
     esp_err_t ConfigManager::init() {
         if (initialized) {

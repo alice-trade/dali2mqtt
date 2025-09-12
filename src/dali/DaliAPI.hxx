@@ -1,6 +1,5 @@
 #ifndef DALIMQTT_DALIAPI_HXX
 #define DALIMQTT_DALIAPI_HXX
-#include <cstdint>
 #include <optional>
 #include <mutex>
 
@@ -17,8 +16,10 @@ namespace daliMQTT
         DaliAPI(const DaliAPI&) = delete;
         DaliAPI& operator=(const DaliAPI&) = delete;
 
-        static DaliAPI& getInstance();
-
+        static DaliAPI& getInstance() {
+            static DaliAPI instance;
+            return instance;
+        }
         esp_err_t init(gpio_num_t rx_pin, gpio_num_t tx_pin);
 
         // Отправка команды без ожидания ответа

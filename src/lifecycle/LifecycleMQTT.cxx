@@ -17,7 +17,7 @@
 
 namespace daliMQTT {
 
-    static inline auto TAG = "LifecycleMQTT";
+    static constexpr char  TAG[] = "LifecycleMQTT";
 
     void Lifecycle::setupAndRunMqtt() {
         const auto config = ConfigManager::getInstance().getConfig();
@@ -89,7 +89,7 @@ namespace daliMQTT {
 
         auto& dali = DaliAPI::getInstance();
 
-        if (cJSON* state = cJSON_GetObjectItem(root, "state"); state && cJSON_IsString(state)) {
+        if (cJSON const* state = cJSON_GetObjectItem(root, "state"); state && cJSON_IsString(state)) {
             if (strcmp(state->valuestring, "OFF") == 0) {
                 dali.sendCommand(addr_type, id, DALI_COMMAND_OFF);
             }
@@ -103,7 +103,10 @@ namespace daliMQTT {
         cJSON_Delete(root);
     }
 
-     void Lifecycle::daliPollTask([[maybe_unused]] void* pvParameters) {
+    [[noreturn]] void Lifecycle::daliPollTask(void* pvParameters) {
+        auto* self = static_cast<Lifecycle*>(pvParameters);
+        if (!self) { vTaskDelete(nullptr); }
+
         auto config = ConfigManager::getInstance().getConfig();
         auto& dali = DaliAPI::getInstance();
         auto const& mqtt = MQTTClient::getInstance();
@@ -117,7 +120,7 @@ namespace daliMQTT {
                     std::string state_topic = std::format("{}/light/short/{}/state", config.mqtt_base_topic, i);
                     std::string payload = std::format(R"({{"state":"{}","brightness":{}}})", (level > 0 ? "ON" : "OFF"), level);
                     mqtt.publish(state_topic, payload);
-                 } else if (!level_opt) {
+                } else if (!level_opt.has_value()) {
                      ESP_LOGD(TAG, "No reply from DALI device %d", i);
                  }
                  vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_POLL_DELAY_MS));

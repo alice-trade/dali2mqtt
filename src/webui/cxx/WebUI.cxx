@@ -15,14 +15,9 @@
 
 namespace daliMQTT
 {
-    static const char* TAG = "WebServer";
+    static constexpr char  TAG[] = "WebServer";
     constexpr std::string_view WEB_MOUNT_POINT = "/spiffs";
     constexpr size_t SCRATCH_BUFSIZE = 8192;
-
-    WebUI& WebUI::getInstance() {
-        static WebUI instance;
-        return instance;
-    }
 
     esp_err_t WebUI::start() {
         httpd_config_t config = HTTPD_DEFAULT_CONFIG();
@@ -36,14 +31,14 @@ namespace daliMQTT
         }
 
         // Register handlers
-        httpd_uri_t handlers[] = {
+        const std::array<httpd_uri_t, 4> handlers = {{
             { .uri = "/api/config", .method = HTTP_GET,  .handler = apiGetConfigHandler, .user_ctx = this },
             { .uri = "/api/config", .method = HTTP_POST, .handler = apiSetConfigHandler, .user_ctx = this },
             { .uri = "/api/info",   .method = HTTP_GET,  .handler = apiGetInfoHandler,   .user_ctx = this },
             { .uri = "/*",          .method = HTTP_GET,  .handler = staticFileGetHandler, .user_ctx = nullptr }
-        };
+        }};
 
-        for(const auto& handler : handlers) {
+        for(auto const& handler : handlers) {
             httpd_register_uri_handler(server_handle, &handler);
         }
 
@@ -107,41 +102,49 @@ namespace daliMQTT
     }
 
     esp_err_t WebUI::checkAuth(httpd_req_t *req) {
-        auto* web_ui = static_cast<WebUI*>(req->user_ctx);
-        if (!web_ui) return ESP_FAIL;
+        auto send_unauthorized = [req]() {
+            httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"DALI Bridge\"");
+            httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, "Authentication failed");
+            return ESP_FAIL;
+        };
 
         size_t buf_len = httpd_req_get_hdr_value_len(req, "Authorization") + 1;
         if (buf_len <= 1) {
-            goto unauthorized;
+            return send_unauthorized();
         }
 
         std::vector<char> buf(buf_len);
-        if (httpd_req_get_hdr_value_str(req, "Authorization", buf.data(), buf_len) == ESP_OK) {
-            std::string_view auth_header(buf.data());
-            if (auth_header.starts_with("Basic ")) {
-                auth_header.remove_prefix(6); // "Basic "
-                std::vector<unsigned char> decoded(128);
-                size_t decoded_len = 0;
-
-                if (mbedtls_base64_decode(decoded.data(), decoded.size(), &decoded_len, reinterpret_cast<const unsigned char*>(auth_header.data()), auth_header.length()) == 0) {
-                    decoded[decoded_len] = '\0';
-                    std::string_view decoded_sv(reinterpret_cast<char*>(decoded.data()));
-                    auto colon_pos = decoded_sv.find(':');
-                    if (colon_pos != std::string_view::npos) {
-                        auto cfg = ConfigManager::getInstance().getConfig();
-                        if (decoded_sv.substr(0, colon_pos) == cfg.http_user &&
-                            decoded_sv.substr(colon_pos + 1) == cfg.http_pass) {
-                            return ESP_OK;
-                        }
-                    }
-                }
-            }
+        if (httpd_req_get_hdr_value_str(req, "Authorization", buf.data(), buf_len) != ESP_OK) {
+            return send_unauthorized();
         }
 
-    unauthorized:
-        httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"DALI Bridge\"");
-        httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, "Authentication failed");
-        return ESP_FAIL;
+        std::string_view auth_header(buf.data());
+        if (!auth_header.starts_with("Basic ")) {
+            return send_unauthorized();
+        }
+
+        auth_header.remove_prefix(6); // "Basic "
+        std::vector<unsigned char> decoded(128);
+        size_t decoded_len = 0;
+
+        if (mbedtls_base64_decode(decoded.data(), decoded.size(), &decoded_len, reinterpret_cast<const unsigned char*>(auth_header.data()), auth_header.length()) != 0) {
+            return send_unauthorized();
+        }
+
+        decoded[decoded_len] = '\0';
+        std::string_view decoded_sv(reinterpret_cast<char*>(decoded.data()));
+
+        auto colon_pos = decoded_sv.find(':');
+        if (colon_pos == std::string_view::npos) {
+            return send_unauthorized();
+        }
+
+        auto cfg = ConfigManager::getInstance().getConfig();
+        if (decoded_sv.substr(0, colon_pos) == cfg.http_user && decoded_sv.substr(colon_pos + 1) == cfg.http_pass) {
+            return ESP_OK; // Авторизация успешна
+        }
+
+        return send_unauthorized();
     }
 
     esp_err_t WebUI::apiGetConfigHandler(httpd_req_t *req) {
@@ -159,7 +162,7 @@ namespace daliMQTT
         httpd_resp_set_type(req, "application/json");
         httpd_resp_send(req, json_string, strlen(json_string));
         cJSON_Delete(root);
-        free(json_string);
+        delete json_string;
         return ESP_OK;
     }
 
@@ -228,7 +231,7 @@ namespace daliMQTT
         httpd_resp_set_type(req, "application/json");
         httpd_resp_send(req, json_string, strlen(json_string));
         cJSON_Delete(root);
-        free(json_string);
+        delete json_string;
         return ESP_OK;
     }
 

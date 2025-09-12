@@ -4,12 +4,8 @@
 
 namespace daliMQTT
 {
-    static const char* TAG = "MQTTClient";
+    static constexpr char  TAG[] = "MQTTClient";
 
-    MQTTClient& MQTTClient::getInstance() {
-        static MQTTClient instance;
-        return instance;
-    }
 
     void MQTTClient::init(const std::string& uri, const std::string& client_id, const std::string& availability_topic) {
         esp_mqtt_client_config_t mqtt_cfg = {};
@@ -53,6 +49,7 @@ namespace daliMQTT
     void MQTTClient::mqttEventHandler(void* handler_args, [[maybe_unused]] esp_event_base_t base, int32_t event_id, void* event_data) {
         auto const* client = static_cast<MQTTClient*>(handler_args);
         auto const* event = static_cast<esp_mqtt_event_handle_t>(event_data);
+        if (!client || !event) return;
 
         switch (static_cast<esp_mqtt_event_id_t>(event_id)) {
             case MQTT_EVENT_CONNECTED:

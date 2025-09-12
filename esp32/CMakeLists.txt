@@ -1,9 +1,9 @@
 # ESP32 Configuration CMAKE Lists
-#if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
-#    message(FATAL_ERROR "CMAKE_TOOLCHAIN_FILE environment variable is not set. "
-#                "Please specify CMAKE_TOOLCHAIN_FILE explicitly. "
-#                "e.g., run 'get_idf' or '. $HOME/esp/esp-idf/export.sh'")
-#    endif ()
+if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
+    message(FATAL_ERROR "CMAKE_TOOLCHAIN_FILE environment variable is not set. "
+                "Please specify CMAKE_TOOLCHAIN_FILE explicitly. "
+                "e.g., run 'get_idf' or '. $HOME/esp/esp-idf/export.sh'")
+    endif ()
 
 message(NOTICE "Using C compiler: " ${CMAKE_C_COMPILER})
 message(NOTICE "IDF framework at: " $ENV{IDF_PATH})
@@ -12,7 +12,6 @@ set(ESP_BUILD_UTILS_PATH ${CMAKE_CURRENT_SOURCE_DIR})
 
 include(idf_buildup.cmake)
 
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(app ${CMAKE_PROJECT_NAME})
 
 add_subdirectory(../src/driver dalic)
@@ -70,6 +69,7 @@ if(BUILD_TESTS)
             COMMENT "Starting serial monitor for tests..."
             USES_TERMINAL
     )
+    add_dependencies(daliMQTT test)
 
 else()
     message(STATUS "Test targets are disabled.")

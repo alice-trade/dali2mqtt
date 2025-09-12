@@ -4,7 +4,7 @@
 #include <format>
 #include <nvs.h>
 
-static inline const char* TAG = "NVS_Handler";
+static constexpr char  TAG[] = "NVS_Handler";
 
 
 // RAII wrapper for NVS handle

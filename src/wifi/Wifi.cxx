@@ -7,12 +7,7 @@
 namespace daliMQTT
 {
 
-    static const char* TAG = "WifiManager";
-
-    Wifi& Wifi::getInstance() {
-        static Wifi instance;
-        return instance;
-    }
+    static constexpr char  TAG[] = "WifiManager";
 
     esp_err_t Wifi::init() {
         if (initialized) {
@@ -64,7 +59,7 @@ namespace daliMQTT
         wifi_config_t wifi_config = {};
         strncpy(reinterpret_cast<char*>(wifi_config.ap.ssid), ssid.c_str(), sizeof(wifi_config.ap.ssid) -1);
         strncpy(reinterpret_cast<char*>(wifi_config.ap.password), password.c_str(), sizeof(wifi_config.ap.password) -1);
-        wifi_config.ap.ssid_len = ssid.length();
+        wifi_config.ap.ssid_len = static_cast<uint8_t>(std::min(ssid.length(), sizeof(wifi_config.ap.ssid)));
         wifi_config.ap.max_connection = 4;
         wifi_config.ap.authmode = WIFI_AUTH_WPA_WPA2_PSK;
 
@@ -112,12 +107,10 @@ namespace daliMQTT
         ESP_ERROR_CHECK(mdns_hostname_set("dalimqtt"));
         ESP_ERROR_CHECK(mdns_instance_name_set("DALI to MQTT Bridge"));
 
-        mdns_txt_item_t serviceTxtData[] = {
+        static std::array<mdns_txt_item_t, 1> serviceTxtData = {{
             {"path", "/"}
-        };
-
-        ESP_ERROR_CHECK(mdns_service_add("Web UI", "_http", "_tcp", 80, serviceTxtData,
-                                         std::size(serviceTxtData)));
+        }};
+        ESP_ERROR_CHECK(mdns_service_add("Web UI", "_http", "_tcp", 80, serviceTxtData.data(), serviceTxtData.size()));
         ESP_LOGI(TAG, "mDNS service started, advertising http://dalimqtt.local");
         mdns_started = true;
     }

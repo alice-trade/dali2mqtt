@@ -9,7 +9,10 @@ namespace daliMQTT
         WebUI(const WebUI&) = delete;
         WebUI& operator=(const WebUI&) = delete;
 
-        static WebUI& getInstance();
+        static WebUI& getInstance() {
+            static WebUI instance;
+            return instance;
+        }
 
         esp_err_t start();
         [[nodiscard]] esp_err_t stop() const;

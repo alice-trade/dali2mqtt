@@ -3,8 +3,7 @@
 
 #include <string>
 #include <mutex>
-#include "esp_spiffs.h"
-#include "nvs_flash.h"
+
 #include "nvs.h"
 namespace daliMQTT
 {
@@ -34,7 +33,10 @@ namespace daliMQTT
             ConfigManager& operator=(const ConfigManager&) = delete;
 
             // Получение единственного экземпляра класса
-            [[nodiscard]] static ConfigManager& getInstance();
+            [[nodiscard]] static ConfigManager& getInstance() {
+                static ConfigManager instance;
+                return instance;
+            }
 
             // Инициализация NVS и SPIFFS
             esp_err_t init();

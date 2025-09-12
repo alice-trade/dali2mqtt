@@ -20,7 +20,10 @@ namespace daliMQTT
         Wifi(const Wifi&) = delete;
         Wifi& operator=(const Wifi&) = delete;
 
-        static Wifi& getInstance();
+        static Wifi& getInstance() {
+            static Wifi instance;
+            return instance;
+        }
 
         // Инициализация сетевого стека
         esp_err_t init();

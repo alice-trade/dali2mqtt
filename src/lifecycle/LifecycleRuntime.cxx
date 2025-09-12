@@ -9,7 +9,7 @@
 #include "Wifi.hxx"
 
 namespace daliMQTT {
-    static inline auto TAG = "LifecycleRuntime";
+    static constexpr char  TAG[] = "LifecycleRuntime";
 
     void Lifecycle::startProvisioningMode() {
         ESP_LOGI(TAG, "Starting in provisioning mode...");

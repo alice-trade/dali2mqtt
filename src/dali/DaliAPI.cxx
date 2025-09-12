@@ -1,11 +1,6 @@
 #include "DaliAPI.hxx"
 namespace daliMQTT
 {
-    DaliAPI& DaliAPI::getInstance() {
-        static DaliAPI instance;
-        return instance;
-    }
-
     esp_err_t DaliAPI::init(gpio_num_t rx_pin, gpio_num_t tx_pin) {
         return dali_init(rx_pin, tx_pin);
     }
