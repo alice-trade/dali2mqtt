@@ -1,0 +1,107 @@
+#include <esp_log.h>
+#include <format>
+#include "DaliAPI.hxx"
+
+namespace daliMQTT
+{
+    static constexpr char TAG[] = "DaliAPI";
+
+    esp_err_t DaliAPI::init(gpio_num_t rx_pin, gpio_num_t tx_pin) {
+        return dali_init(rx_pin, tx_pin);
+    }
+
+    esp_err_t DaliAPI::sendCommand(dali_addressType_t addr_type, uint8_t addr, uint8_t command, bool send_twice) {
+        std::lock_guard lock(bus_mutex);
+        esp_err_t err = dali_transaction(addr_type, addr, true, command, send_twice, DALI_TX_TIMEOUT_DEFAULT_MS, nullptr);
+        dali_wait_between_frames();
+        return err;
+    }
+
+    std::optional<uint8_t> DaliAPI::sendQuery(dali_addressType_t addr_type, uint8_t addr, uint8_t command) {
+        std::lock_guard lock(bus_mutex);
+        int result = DALI_RESULT_NO_REPLY;
+        esp_err_t err = dali_transaction(addr_type, addr, true, command, false, DALI_TX_TIMEOUT_DEFAULT_MS, &result);
+        dali_wait_between_frames();
+
+        if (err == ESP_OK && result != DALI_RESULT_NO_REPLY) {
+            return static_cast<uint8_t>(result);
+        }
+        return std::nullopt;
+    }
+
+    std::bitset<64> DaliAPI::scanBus() {
+        std::bitset<64> found_devices;
+        ESP_LOGI(TAG, "Starting DALI bus scan...");
+        for (uint8_t i = 0; i < 64; ++i) {
+            if (auto response = sendQuery(DALI_ADDRESS_TYPE_SHORT, i, DALI_COMMAND_QUERY_CONTROL_GEAR); response.has_value() && response.value() == 255) {
+                ESP_LOGI(TAG, "Device found at short address %d", i);
+                found_devices.set(i);
+            }
+            vTaskDelay(pdMS_TO_TICKS(10));
+        }
+        ESP_LOGI(TAG, "Scan finished. Found %zu devices.", found_devices.count());
+        return found_devices;
+    }
+
+    std::bitset<64> DaliAPI::initializeBus() {
+        std::lock_guard lock(bus_mutex);
+        ESP_LOGI(TAG, "Starting DALI commissioning process...");
+
+        // Step 1: INITIALISE
+        sendCommand(DALI_ADDRESS_TYPE_SPECIAL_CMD, DALI_SPECIAL_COMMAND_INITIALISE, 0xFF, true);
+        vTaskDelay(pdMS_TO_TICKS(100)); // Wait for devices to react
+
+        // Step 2: RANDOMISE
+        sendCommand(DALI_ADDRESS_TYPE_SPECIAL_CMD, DALI_SPECIAL_COMMAND_RANDOMISE, 0, true);
+        vTaskDelay(pdMS_TO_TICKS(100));
+
+        uint8_t assigned_addresses = 0;
+        uint32_t highest_search_addr = 0xFFFFFF;
+
+        for (uint8_t short_addr = 0; short_addr < 64; ++short_addr) {
+            uint32_t search_addr = 0;
+            uint32_t current_search_space = highest_search_addr;
+
+            // Step 3: Binary search for the lowest random address
+            ESP_LOGD(TAG, "Searching for next device...");
+            sendCommand(DALI_ADDRESS_TYPE_SPECIAL_CMD, DALI_SPECIAL_COMMAND_SEARCHADDRH, (highest_search_addr >> 16) & 0xFF);
+            sendCommand(DALI_ADDRESS_TYPE_SPECIAL_CMD, DALI_SPECIAL_COMMAND_SEARCHADDRM, (highest_search_addr >> 8) & 0xFF);
+            sendCommand(DALI_ADDRESS_TYPE_SPECIAL_CMD, DALI_SPECIAL_COMMAND_SEARCHADDRL, highest_search_addr & 0xFF);
+
+            if (auto response = sendQuery(DALI_ADDRESS_TYPE_SPECIAL_CMD, DALI_SPECIAL_COMMAND_COMPARE, 0); !response || response.value() != 0xFF) {
+                ESP_LOGI(TAG, "No more devices found.");
+                break;
+            }
+
+            // Perform binary search
+            for (int i = 23; i >= 0; --i) {
+                uint32_t test_addr = search_addr | (1UL << i);
+                if (test_addr > current_search_space) continue;
+
+                sendCommand(DALI_ADDRESS_TYPE_SPECIAL_CMD, DALI_SPECIAL_COMMAND_SEARCHADDRH, (test_addr >> 16) & 0xFF);
+                sendCommand(DALI_ADDRESS_TYPE_SPECIAL_CMD, DALI_SPECIAL_COMMAND_SEARCHADDRM, (test_addr >> 8) & 0xFF);
+                sendCommand(DALI_ADDRESS_TYPE_SPECIAL_CMD, DALI_SPECIAL_COMMAND_SEARCHADDRL, test_addr & 0xFF);
+
+                if (auto response = sendQuery(DALI_ADDRESS_TYPE_SPECIAL_CMD, DALI_SPECIAL_COMMAND_COMPARE, 0); response && response.value() == 0xFF) {
+                    search_addr = test_addr;
+                }
+            }
+
+            ESP_LOGI(TAG, "Found device with random address 0x%06X. Assigning short address %d.", search_addr, short_addr);
+
+            // Step 4: PROGRAM SHORT ADDRESS
+            uint8_t addr_byte = (short_addr << 1) | 1;
+            sendCommand(DALI_ADDRESS_TYPE_SPECIAL_CMD, DALI_SPECIAL_COMMAND_PROGRAM_SHORT_ADDRESS, addr_byte);
+
+            // Step 5: WITHDRAW
+            sendCommand(DALI_ADDRESS_TYPE_SPECIAL_CMD, DALI_SPECIAL_COMMAND_WITHDRAW, 0);
+            assigned_addresses++;
+        }
+
+        // Step 6: TERMINATE
+        sendCommand(DALI_ADDRESS_TYPE_SPECIAL_CMD, DALI_SPECIAL_COMMAND_TERMINATE, 0);
+        ESP_LOGI(TAG, "Commissioning finished. Assigned addresses to %d devices.", assigned_addresses);
+
+        return scanBus();
+    }
+} // daliMQTT
