@@ -26,7 +26,7 @@ set(PLATFORM_MODULES
 
 if(BUILD_UNITY)
     message("----------UNITY BUILD-------")
-    list(APPEND PLATFORM_MODULES unity)
+    list(APPEND PLATFORM_MODULES unity esp_http_client)
 endif()
 idf_build_component(${ESP_BUILD_UTILS_PATH}/Kconfig)
 

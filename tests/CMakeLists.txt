@@ -20,6 +20,7 @@ add_executable(${TEST_APP_NAME}
 target_link_libraries(${TEST_APP_NAME} PRIVATE
         DaliMQTT-Core
         idf::unity
+        idf::esp_http_client
 )
 
 idf_build_executable(${TEST_APP_NAME})
