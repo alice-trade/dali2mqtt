@@ -38,8 +38,8 @@ namespace daliMQTT
         [[nodiscard]] std::string getIpAddress() const;
 
         // Callbacks
-        std::function<void(void)> onConnected;
-        std::function<void(void)> onDisconnected;
+        std::function<void()> onConnected;
+        std::function<void()> onDisconnected;
 
     private:
         Wifi() = default;

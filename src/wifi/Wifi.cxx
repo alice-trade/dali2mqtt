@@ -104,8 +104,7 @@ namespace daliMQTT
             return;
         }
         ESP_LOGI(TAG, "Starting mDNS service...");
-        esp_err_t err = mdns_init();
-        if (err != ESP_OK) {
+        if (esp_err_t err = mdns_init(); err != ESP_OK) {
             ESP_LOGE(TAG, "mDNS Init failed: %s", esp_err_to_name(err));
             return;
         }
@@ -118,7 +117,7 @@ namespace daliMQTT
         };
 
         ESP_ERROR_CHECK(mdns_service_add("Web UI", "_http", "_tcp", 80, serviceTxtData,
-                                         sizeof(serviceTxtData) / sizeof(serviceTxtData[0])));
+                                         std::size(serviceTxtData)));
         ESP_LOGI(TAG, "mDNS service started, advertising http://dalimqtt.local");
         mdns_started = true;
     }

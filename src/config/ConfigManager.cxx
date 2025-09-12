@@ -1,13 +1,17 @@
 #include "ConfigManager.hxx"
 #include "esp_log.h"
 #include <cstring>
-
+#include <format>
+#include "utils/NvsHandle.hxx"
 #include "sdkconfig.h"
 
 namespace daliMQTT
 {
     static const char* TAG = "ConfigManager";
     static const char* NVS_NAMESPACE = CONFIG_DALI2MQTT_NVS_NAMESPACE;
+
+
+
 
     ConfigManager& ConfigManager::getInstance() {
         static ConfigManager instance;
@@ -48,84 +52,84 @@ namespace daliMQTT
         esp_err_t ret = esp_vfs_spiffs_register(&conf);
 
         if (ret != ESP_OK) {
+            const char* error_msg = esp_err_to_name(ret);
             if (ret == ESP_FAIL) {
                 ESP_LOGE(TAG, "Failed to mount or format filesystem");
             } else if (ret == ESP_ERR_NOT_FOUND) {
                 ESP_LOGE(TAG, "Failed to find SPIFFS partition");
             } else {
-                ESP_LOGE(TAG, "Failed to initialize SPIFFS (%s)", esp_err_to_name(ret));
+                ESP_LOGE(TAG, "%s", std::format("Failed to initialize SPIFFS ({})", error_msg).c_str());
             }
             return ret;
         }
 
-        return 0;
+        return ESP_OK;
     }
 
 
     esp_err_t ConfigManager::load() {
-        std::lock_guard<std::mutex> lock(config_mutex);
+        std::lock_guard lock(config_mutex);
 
-        nvs_handle_t nvs_handle;
-        esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle);
-        if (err != ESP_OK) {
-            ESP_LOGE(TAG, "Error (%s) opening NVS handle!", esp_err_to_name(err));
-            return err;
+        const NvsHandle nvs_handle(NVS_NAMESPACE, NVS_READWRITE);
+        if (!nvs_handle) {
+            return ESP_FAIL;
         }
 
-        getString(nvs_handle, "wifi_ssid", config_cache.wifi_ssid, nullptr);
-        getString(nvs_handle, "wifi_pass", config_cache.wifi_password, nullptr);
-        getString(nvs_handle, "mqtt_uri", config_cache.mqtt_uri, nullptr);
-        getString(nvs_handle, "mqtt_cid", config_cache.mqtt_client_id, nullptr);
-        getString(nvs_handle, "mqtt_base", config_cache.mqtt_base_topic, CONFIG_DALI2MQTT_MQTT_BASE_TOPIC);
-        getString(nvs_handle, "http_user", config_cache.http_user, CONFIG_DALI2MQTT_WEBUI_DEFAULT_USER);
-        getString(nvs_handle, "http_pass", config_cache.http_pass, CONFIG_DALI2MQTT_WEBUI_DEFAULT_PASS);
+        getString(nvs_handle.get(), "wifi_ssid", config_cache.wifi_ssid, "");
+        getString(nvs_handle.get(), "wifi_pass", config_cache.wifi_password, "");
+        getString(nvs_handle.get(), "mqtt_uri", config_cache.mqtt_uri, "");
+        getString(nvs_handle.get(), "mqtt_cid", config_cache.mqtt_client_id, "");
+        getString(nvs_handle.get(), "mqtt_base", config_cache.mqtt_base_topic, CONFIG_DALI2MQTT_MQTT_BASE_TOPIC);
+        getString(nvs_handle.get(), "http_user", config_cache.http_user, CONFIG_DALI2MQTT_WEBUI_DEFAULT_USER);
+        getString(nvs_handle.get(), "http_pass", config_cache.http_pass, CONFIG_DALI2MQTT_WEBUI_DEFAULT_PASS);
 
-        getU32(nvs_handle, "dali_poll", config_cache.dali_poll_interval_ms, CONFIG_DALI2MQTT_DALI_DEFAULT_POLL_INTERVAL_MS);
+        getU32(nvs_handle.get(), "dali_poll", config_cache.dali_poll_interval_ms, CONFIG_DALI2MQTT_DALI_DEFAULT_POLL_INTERVAL_MS);
 
         uint8_t configured_flag = 0;
-        nvs_get_u8(nvs_handle, "configured", &configured_flag);
+        nvs_get_u8(nvs_handle.get(), "configured", &configured_flag);
         config_cache.configured = (configured_flag == 1);
 
-        nvs_close(nvs_handle);
         ESP_LOGI(TAG, "Configuration loaded successfully.");
         return ESP_OK;
     }
 
     esp_err_t ConfigManager::save() {
-        std::lock_guard<std::mutex> lock(config_mutex);
+        std::lock_guard lock(config_mutex);
 
-        nvs_handle_t nvs_handle;
-        esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle);
-        if (err != ESP_OK) {
-            ESP_LOGE(TAG, "Error (%s) opening NVS handle!", esp_err_to_name(err));
-            return err;
+        NvsHandle nvs_handle(NVS_NAMESPACE, NVS_READWRITE);
+        if (!nvs_handle) {
+            return ESP_FAIL;
         }
 
-        err = setString(nvs_handle, "wifi_ssid", config_cache.wifi_ssid); if(err != ESP_OK) goto cleanup;
-        err = setString(nvs_handle, "wifi_pass", config_cache.wifi_password); if(err != ESP_OK) goto cleanup;
-        err = setString(nvs_handle, "mqtt_uri", config_cache.mqtt_uri); if(err != ESP_OK) goto cleanup;
-        err = setString(nvs_handle, "mqtt_cid", config_cache.mqtt_client_id); if(err != ESP_OK) goto cleanup;
-        err = setString(nvs_handle, "mqtt_base", config_cache.mqtt_base_topic); if(err != ESP_OK) goto cleanup;
-        err = setString(nvs_handle, "http_user", config_cache.http_user); if(err != ESP_OK) goto cleanup;
-        err = setString(nvs_handle, "http_pass", config_cache.http_pass); if(err != ESP_OK) goto cleanup;
+        esp_err_t err;
 
+        #define SetNVS(func, key, value) \
+            err = func(nvs_handle.get(), key, value); \
+            if (err != ESP_OK) return err;
+
+        SetNVS(setString, "wifi_ssid", config_cache.wifi_ssid);
+        SetNVS(setString, "wifi_pass", config_cache.wifi_password);
+        SetNVS(setString, "mqtt_uri", config_cache.mqtt_uri);
+        SetNVS(setString, "mqtt_cid", config_cache.mqtt_client_id);
+        SetNVS(setString, "mqtt_base", config_cache.mqtt_base_topic);
+        SetNVS(setString, "http_user", config_cache.http_user);
+        SetNVS(setString, "http_pass", config_cache.http_pass);
+
+        #undef SetNVS
 
         config_cache.configured = true;
-        err = nvs_set_u8(nvs_handle, "configured", 1);
-        if(err != ESP_OK) goto cleanup;
+        err = nvs_set_u8(nvs_handle.get(), "configured", 1);
+        if (err != ESP_OK) return err;
 
-        err = nvs_commit(nvs_handle);
+        err = nvs_commit(nvs_handle.get());
         if (err == ESP_OK) {
             ESP_LOGI(TAG, "Configuration saved successfully.");
         } else {
-            ESP_LOGE(TAG, "Failed to commit NVS changes: %s", esp_err_to_name(err));
+            ESP_LOGE(TAG, "%s", std::format("Failed to commit NVS changes: {}", esp_err_to_name(err)).c_str());
         }
 
-    cleanup:
-        nvs_close(nvs_handle);
         return err;
     }
-
 
     AppConfig ConfigManager::getConfig() const {
         std::lock_guard lock(config_mutex);
@@ -146,18 +150,28 @@ namespace daliMQTT
     esp_err_t ConfigManager::getString(nvs_handle_t handle, const char* key, std::string& out_value, const char* default_value) {
         size_t required_size = 0;
         esp_err_t err = nvs_get_str(handle, key, nullptr, &required_size);
+
         if (err == ESP_ERR_NVS_NOT_FOUND) {
-            out_value = default_value;
-            ESP_LOGW(TAG, "Key '%s' not found in NVS, using default value: '%s'", key, default_value);
+            if (default_value) {
+                out_value = default_value;
+                 ESP_LOGW(TAG, "%s", std::format("Key '{}' not found in NVS, using default value: '{}'", key, default_value).c_str());
+            } else {
+                out_value.clear();
+            }
             return ESP_OK;
-        } else if (err != ESP_OK) {
-            ESP_LOGE(TAG, "Error reading key '%s': %s", key, esp_err_to_name(err));
+        }
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "%s", std::format("Error reading key '{}': {}", key, esp_err_to_name(err)).c_str());
             return err;
+        }
+        if (required_size == 0) {
+            out_value.clear();
+            return ESP_OK;
         }
 
         out_value.resize(required_size);
-        err = nvs_get_str(handle, key, &out_value[0], &required_size);
-        if(required_size > 0) out_value.pop_back();
+        err = nvs_get_str(handle, key, out_value.data(), &required_size);
+        out_value.pop_back();
         return err;
     }
 
@@ -170,7 +184,7 @@ namespace daliMQTT
         esp_err_t err = nvs_get_u32(handle, key, &out_value);
         if (err == ESP_ERR_NVS_NOT_FOUND) {
             out_value = default_value;
-            ESP_LOGW(TAG, "Key '%s' not found in NVS, using default value: %lu", key, (unsigned long)default_value);
+            ESP_LOGW(TAG, "%s", std::format("Key '{}' not found in NVS, using default value: {}", key, default_value).c_str());
             return ESP_OK;
         }
         return err;

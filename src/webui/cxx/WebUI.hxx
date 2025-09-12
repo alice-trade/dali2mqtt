@@ -25,7 +25,6 @@ namespace daliMQTT
         static esp_err_t checkAuth(httpd_req_t *req);
         static void set_content_type_from_file(httpd_req_t *req, const char *filepath);
 
-
         httpd_handle_t server_handle{nullptr};
     };
 } // daliMQTT

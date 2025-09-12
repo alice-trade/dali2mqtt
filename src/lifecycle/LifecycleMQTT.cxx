@@ -9,6 +9,7 @@
 #include <vector>
 #include <format>
 #include <charconv>
+#include <algorithm>
 #include <esp_log.h>
 #include <MQTTDiscovery.hxx>
 #include "cJSON.h"
@@ -22,7 +23,7 @@ namespace daliMQTT {
         const auto config = ConfigManager::getInstance().getConfig();
         auto& mqtt = MQTTClient::getInstance();
 
-        const std::string availability_topic = config.mqtt_base_topic + CONFIG_DALI2MQTT_MQTT_AVAILABILITY_TOPIC;
+        const std::string availability_topic = std::format("{}{}", config.mqtt_base_topic, CONFIG_DALI2MQTT_MQTT_AVAILABILITY_TOPIC);
         mqtt.init(config.mqtt_uri, config.mqtt_client_id, availability_topic);
         mqtt.onConnected = [this]() { this->onMqttConnected(); };
         mqtt.onData = [this](const std::string& t, const std::string& d) { this->onMqttData(t, d); };
@@ -35,15 +36,15 @@ namespace daliMQTT {
         auto config = ConfigManager::getInstance().getConfig();
         auto const& mqtt = MQTTClient::getInstance();
 
-        std::string availability_topic = config.mqtt_base_topic + CONFIG_DALI2MQTT_MQTT_AVAILABILITY_TOPIC;
+        std::string availability_topic = std::format("{}{}", config.mqtt_base_topic, CONFIG_DALI2MQTT_MQTT_AVAILABILITY_TOPIC);
         mqtt.publish(availability_topic, CONFIG_DALI2MQTT_MQTT_PAYLOAD_ONLINE, 1, true);
 
-        std::string cmd_topic = config.mqtt_base_topic + "/light/+/+/set";
+        std::string cmd_topic = std::format("{}/light/+/+/set", config.mqtt_base_topic);
         mqtt.subscribe(cmd_topic);
         ESP_LOGI(TAG, "Subscribed to: %s", cmd_topic.c_str());
 
-        MQTTDiscovery MQTTDiscovery;
-        MQTTDiscovery.publishAllDevices();
+        MQTTDiscovery mqtt_discovery;
+        mqtt_discovery.publishAllDevices();
         ESP_LOGI(TAG, "MQTT discovery messages published.");
 
         if(!dali_poll_task_handle) {
@@ -87,19 +88,16 @@ namespace daliMQTT {
         if (!root) return;
 
         auto& dali = DaliAPI::getInstance();
-        if (cJSON_HasObjectItem(root, "state")) {
-            cJSON const* state = cJSON_GetObjectItem(root, "state");
-            if (cJSON_IsString(state) && strcmp(state->valuestring, "OFF") == 0) {
+
+        if (cJSON* state = cJSON_GetObjectItem(root, "state"); state && cJSON_IsString(state)) {
+            if (strcmp(state->valuestring, "OFF") == 0) {
                 dali.sendCommand(addr_type, id, DALI_COMMAND_OFF);
             }
         }
 
-        if (cJSON_HasObjectItem(root, "brightness")) {
-             cJSON const* brightness = cJSON_GetObjectItem(root, "brightness");
-             if (cJSON_IsNumber(brightness)) {
-                uint8_t level = std::min(254, brightness->valueint);
-                dali.sendCommand(addr_type, id, level, false); // DACP command
-             }
+        if (cJSON* brightness = cJSON_GetObjectItem(root, "brightness"); brightness && cJSON_IsNumber(brightness)) {
+             uint8_t level = static_cast<uint8_t>(std::clamp(brightness->valueint, 0, 254));
+             dali.sendCommand(addr_type, id, level, false); // DACP command
         }
 
         cJSON_Delete(root);
@@ -114,18 +112,15 @@ namespace daliMQTT {
 
         while (true) {
             for (uint8_t i = 0; i < 64; ++i) {
-                if (auto level = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, i, DALI_COMMAND_QUERY_ACTUAL_LEVEL); level.has_value() && level.value() != 255) {
-                     std::string state_topic = config.mqtt_base_topic + "/light/short/" + std::to_string(i) + "/state";
-                    std::string payload = R"({"state":")" +
-                                                              std::string(level.value() > 0 ? "ON" : "OFF") +
-                                                              R"(","brightness":)" +
-                                                              std::to_string(level.value()) +
-                                                              "}";
+                if (auto level_opt = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, i, DALI_COMMAND_QUERY_ACTUAL_LEVEL); level_opt && level_opt.value() != 255) {
+                    uint8_t level = level_opt.value();
+                    std::string state_topic = std::format("{}/light/short/{}/state", config.mqtt_base_topic, i);
+                    std::string payload = std::format(R"({{"state":"{}","brightness":{}}})", (level > 0 ? "ON" : "OFF"), level);
                     mqtt.publish(state_topic, payload);
-                 } else if (!level.has_value()) {
+                 } else if (!level_opt) {
                      ESP_LOGD(TAG, "No reply from DALI device %d", i);
                  }
-                 vTaskDelay(pdMS_TO_TICKS(50));
+                 vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_POLL_DELAY_MS));
             }
             vTaskDelay(pdMS_TO_TICKS(config.dali_poll_interval_ms));
         }
