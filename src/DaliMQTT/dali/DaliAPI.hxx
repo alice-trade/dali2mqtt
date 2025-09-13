@@ -35,6 +35,14 @@ namespace daliMQTT
         // Процесс инициализации и адресации новых устройств на шине
         [[nodiscard]] std::bitset<64> initializeBus();
 
+        // Добавить в группу
+        esp_err_t assignToGroup(uint8_t shortAddress, uint8_t group);
+
+        // Удалить из группы
+        esp_err_t removeFromGroup(uint8_t shortAddress, uint8_t group);
+
+        // Получение маски группы
+        [[nodiscard]] std::optional<std::bitset<16>> getDeviceGroups(uint8_t shortAddress);
 
     private:
         DaliAPI() = default;

@@ -1,6 +1,6 @@
 # --- Web UI Build & SPIFFS Image Generation ---
 
-set(WEBUI_SOURCE_DIR ${CMAKE_SOURCE_DIR}/src/webui)
+set(WEBUI_SOURCE_DIR ${CMAKE_SOURCE_DIR}/src/DaliMQTT/webui)
 set(WEBUI_BUILD_DIR ${WEBUI_SOURCE_DIR}/dist)
 set(SPIFFS_PARTITION_NAME "web_storage")
 

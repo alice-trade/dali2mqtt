@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref } from 'vue';
-import { api, setAuth } from './api';
+import { ref, onMounted } from 'vue';
+import { api, setAuth, setAuthToken, clearAuth } from './api';
 import SettingsPage from './components/SettingsPage.vue';
 import DaliSetup from './components/DaliSetup.vue';
 import InfoPage from './components/InfoPage.vue';
@@ -19,10 +19,12 @@ const handleLogin = async () => {
     return;
   }
   try {
-    setAuth(username.value, password.value);
+    const token = setAuth(username.value, password.value);
     await api.getInfo();
+    localStorage.setItem('auth', token);
     loggedIn.value = true;
   } catch (e: any) {
+    localStorage.removeItem('auth');
     if (e.response && e.response.status === 401) {
       error.value = 'Invalid credentials. Please try again.';
     } else {
@@ -30,6 +32,31 @@ const handleLogin = async () => {
     }
   }
 };
+
+const handleLogout = () => {
+  clearAuth();
+  localStorage.removeItem('auth');
+  loggedIn.value = false;
+  password.value = '';
+};
+
+
+const checkLogin = async () => {
+  const token = localStorage.getItem('auth');
+  if (token) {
+    try {
+      setAuthToken(token);
+      await api.getInfo();
+      loggedIn.value = true;
+    } catch (e) {
+      console.log("Session token expired or invalid");
+      handleLogout();
+    }
+  }
+};
+
+onMounted(checkLogin);
+
 </script>
 
 <template>
@@ -57,9 +84,10 @@ const handleLogin = async () => {
             <li><strong>DALI-MQTT Bridge</strong></li>
           </ul>
           <ul>
-            <li><a href="#" :class="{ 'secondary': currentView !== 'settings' }" @click="currentView = 'settings'">Settings</a></li>
-            <li><a href="#" :class="{ 'secondary': currentView !== 'dali' }" @click="currentView = 'dali'">DALI Control</a></li>
-            <li><a href="#" :class="{ 'secondary': currentView !== 'info' }" @click="currentView = 'info'">Info</a></li>
+            <li><a href="#" :class="{ 'secondary': currentView !== 'settings' }" @click.prevent="currentView = 'settings'">Settings</a></li>
+            <li><a href="#" :class="{ 'secondary': currentView !== 'dali' }" @click.prevent="currentView = 'dali'">DALI Control</a></li>
+            <li><a href="#" :class="{ 'secondary': currentView !== 'info' }" @click.prevent="currentView = 'info'">Info</a></li>
+            <li><a href="#" role="button" class="contrast outline" @click.prevent="handleLogout">Logout</a></li>
           </ul>
         </nav>
       </header>

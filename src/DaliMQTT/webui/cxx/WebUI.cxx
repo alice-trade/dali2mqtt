@@ -11,6 +11,7 @@
 #include <freertos/task.h>
 #include <mbedtls/base64.h>
 #include "WebUI.hxx"
+#include <DaliGroupManagement.hxx>
 #include "ConfigManager.hxx"
 #include "DaliDeviceController.hxx"
 #include "utils/FileHandle.hxx"
@@ -33,13 +34,17 @@ namespace daliMQTT
         }
 
         // Register handlers
-        const std::array<httpd_uri_t, 7> handlers = {{
+        const std::array<httpd_uri_t, 11> handlers = {{ // Размер увеличен до 11
             { .uri = "/api/config", .method = HTTP_GET,  .handler = api::GetConfigHandler, .user_ctx = this },
             { .uri = "/api/config", .method = HTTP_POST, .handler = api::SetConfigHandler, .user_ctx = this },
             { .uri = "/api/info",   .method = HTTP_GET,  .handler = api::GetInfoHandler,   .user_ctx = this },
             { .uri = "/api/dali/devices",    .method = HTTP_GET,  .handler = api::DaliGetDevicesHandler, .user_ctx = this },
             { .uri = "/api/dali/scan",       .method = HTTP_POST, .handler = api::DaliScanHandler,       .user_ctx = this },
             { .uri = "/api/dali/initialize", .method = HTTP_POST, .handler = api::DaliInitializeHandler, .user_ctx = this },
+            { .uri = "/api/dali/names",      .method = HTTP_GET,  .handler = api::DaliGetNamesHandler,   .user_ctx = this },
+            { .uri = "/api/dali/names",      .method = HTTP_POST, .handler = api::DaliSetNamesHandler,   .user_ctx = this },
+            { .uri = "/api/dali/groups",     .method = HTTP_GET,  .handler = api::DaliGetGroupsHandler,  .user_ctx = nullptr }, // Новый
+            { .uri = "/api/dali/groups",     .method = HTTP_POST, .handler = api::DaliSetGroupsHandler,  .user_ctx = nullptr }, // Новый
             { .uri = "/*",          .method = HTTP_GET,  .handler = staticFileGetHandler, .user_ctx = nullptr }
         }};
 
@@ -103,7 +108,7 @@ namespace daliMQTT
             }
         } while (read_bytes > 0);
 
-        httpd_resp_send_chunk(req, nullptr, 0); // End response
+        httpd_resp_send_chunk(req, nullptr, 0);
         return ESP_OK;
     }
 
@@ -147,7 +152,7 @@ namespace daliMQTT
 
         const auto cfg = ConfigManager::getInstance().getConfig();
         if (decoded_sv.substr(0, colon_pos) == cfg.http_user && decoded_sv.substr(colon_pos + 1) == cfg.http_pass) {
-            return ESP_OK; // Авторизация успешна
+            return ESP_OK;
         }
 
         return send_unauthorized();
@@ -230,7 +235,7 @@ namespace daliMQTT
         esp_chip_info(&chip_info);
 
         cJSON *root = cJSON_CreateObject();
-        cJSON_AddStringToObject(root, "version", "0.4.0"); // todo add dynamic version
+        cJSON_AddStringToObject(root, "version", "0.5.0"); // todo add dynamic version
         cJSON_AddStringToObject(root, "idf_version", esp_get_idf_version());
         cJSON_AddNumberToObject(root, "cores", chip_info.cores);
         cJSON_AddNumberToObject(root, "free_heap", esp_get_free_heap_size());
@@ -255,7 +260,7 @@ namespace daliMQTT
             }
         }
 
-        const char *json_string = cJSON_Print(root);
+        char *json_string = cJSON_PrintUnformatted(root);
         httpd_resp_set_type(req, "application/json");
         httpd_resp_send(req, json_string, strlen(json_string));
         cJSON_Delete(root);
@@ -281,6 +286,105 @@ namespace daliMQTT
         DaliDeviceController::getInstance().performFullInitialization();
 
         httpd_resp_send(req, R"({"status":"ok", "message":"Initialization completed."})", -1);
+        return ESP_OK;
+    }
+
+    esp_err_t WebUI::api::DaliGetNamesHandler(httpd_req_t *req) {
+        if (checkAuth(req) != ESP_OK) return ESP_FAIL;
+        const auto cfg = ConfigManager::getInstance().getConfig();
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_send(req, cfg.dali_device_identificators.c_str(), HTTPD_RESP_USE_STRLEN);
+        return ESP_OK;
+    }
+
+    esp_err_t WebUI::api::DaliSetNamesHandler(httpd_req_t *req) {
+        if (checkAuth(req) != ESP_OK) return ESP_FAIL;
+
+        if (req->content_len >= 1024) {
+            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Request too long");
+            return ESP_FAIL;
+        }
+        std::vector<char> buf(req->content_len + 1);
+        const int ret = httpd_req_recv(req, buf.data(), req->content_len);
+        if (ret <= 0) return ESP_FAIL;
+        buf[ret] = '\0';
+
+        cJSON *root = cJSON_Parse(buf.data());
+        if (!cJSON_IsObject(root)) {
+            cJSON_Delete(root);
+            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON: root must be an object");
+            return ESP_FAIL;
+        }
+        cJSON_Delete(root);
+
+        auto& configManager = ConfigManager::getInstance();
+        auto current_cfg = configManager.getConfig();
+        current_cfg.dali_device_identificators = std::string(buf.data(), ret);
+        configManager.setConfig(current_cfg);
+        configManager.save();
+
+        httpd_resp_send(req, R"({"status":"ok", "message":"Device names saved."})", -1);
+        return ESP_OK;
+    }
+
+    // --- Новые обработчики для групп ---
+    esp_err_t WebUI::api::DaliGetGroupsHandler(httpd_req_t *req) {
+        if (checkAuth(req) != ESP_OK) return ESP_FAIL;
+
+        const auto assignments = DaliGroupManagement::getInstance().getAllAssignments();
+        cJSON *root = cJSON_CreateObject();
+
+        for (const auto& [addr, groups] : assignments) {
+            cJSON* group_array = cJSON_CreateArray();
+            for (int i = 0; i < 16; ++i) {
+                if (groups.test(i)) {
+                    cJSON_AddItemToArray(group_array, cJSON_CreateNumber(i));
+                }
+            }
+            cJSON_AddItemToObject(root, std::to_string(addr).c_str(), group_array);
+        }
+
+        char *json_string = cJSON_PrintUnformatted(root);
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_send(req, json_string, strlen(json_string));
+        cJSON_Delete(root);
+        delete json_string;
+        return ESP_OK;
+    }
+
+    esp_err_t WebUI::api::DaliSetGroupsHandler(httpd_req_t *req) {
+        if (checkAuth(req) != ESP_OK) return ESP_FAIL;
+
+        std::vector<char> buf(req->content_len + 1, 0);
+        if (httpd_req_recv(req, buf.data(), req->content_len) <= 0) return ESP_FAIL;
+
+        cJSON *root = cJSON_Parse(buf.data());
+        if (!cJSON_IsObject(root)) {
+             httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON: root must be an object");
+             cJSON_Delete(root);
+             return ESP_FAIL;
+        }
+
+        GroupAssignments new_assignments;
+        cJSON* device_item = nullptr;
+        cJSON_ArrayForEach(device_item, root) {
+            uint8_t addr = std::stoi(device_item->string);
+            std::bitset<16> groups;
+            if (cJSON_IsArray(device_item)) {
+                cJSON* group_item = nullptr;
+                cJSON_ArrayForEach(group_item, device_item) {
+                    if (cJSON_IsNumber(group_item) && group_item->valueint < 16) {
+                        groups.set(group_item->valueint);
+                    }
+                }
+            }
+            new_assignments[addr] = groups;
+        }
+        cJSON_Delete(root);
+
+        DaliGroupManagement::getInstance().setAllAssignments(new_assignments);
+
+        httpd_resp_send(req, R"({"status":"ok", "message":"Group assignments saved."})", -1);
         return ESP_OK;
     }
 

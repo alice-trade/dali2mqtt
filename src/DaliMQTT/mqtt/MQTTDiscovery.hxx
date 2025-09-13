@@ -2,6 +2,7 @@
 #define DALIMQTT_MQTTDISCOVERY_HXX
 #include <cstdint>
 #include <string>
+#include <unordered_map>
 
 namespace daliMQTT
 {
@@ -16,7 +17,8 @@ namespace daliMQTT
 
             std::string base_topic;
             std::string availability_topic;
-            std::string device_name;
+            std::string bridge_public_name;
+            std::unordered_map<std::string, std::string> device_identification;
     };
 } // daliMQTT
 

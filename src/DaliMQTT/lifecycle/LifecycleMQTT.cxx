@@ -12,6 +12,7 @@
 #include "MQTTClient.hxx"
 #include "DaliAPI.hxx"
 #include "DaliDeviceController.hxx"
+#include "DaliGroupManagement.hxx" // Добавлено
 #include "WebUI.hxx"
 #include "MQTTDiscovery.hxx"
 #include "Lifecycle.hxx"
@@ -40,9 +41,15 @@ namespace daliMQTT {
         std::string availability_topic = std::format("{}{}", config.mqtt_base_topic, CONFIG_DALI2MQTT_MQTT_AVAILABILITY_TOPIC);
         mqtt.publish(availability_topic, CONFIG_DALI2MQTT_MQTT_PAYLOAD_ONLINE, 1, true);
 
-        std::string cmd_topic = std::format("{}/light/+/+/set", config.mqtt_base_topic);
-        mqtt.subscribe(cmd_topic);
-        ESP_LOGI(TAG, "Subscribed to: %s", cmd_topic.c_str());
+        // Подписка на команды для светильников
+        std::string light_cmd_topic = std::format("{}{}", config.mqtt_base_topic, "/light/+/+/set");
+        mqtt.subscribe(light_cmd_topic);
+        ESP_LOGI(TAG, "Subscribed to: %s", light_cmd_topic.c_str());
+
+        // Подписка на команды управления группами
+        std::string group_cmd_topic = std::format("{}{}", config.mqtt_base_topic, CONFIG_DALI2MQTT_MQTT_GROUP_SET_SUBTOPIC);
+        mqtt.subscribe(group_cmd_topic);
+        ESP_LOGI(TAG, "Subscribed to: %s", group_cmd_topic.c_str());
 
         MQTTDiscovery mqtt_discovery;
         mqtt_discovery.publishAllDevices();
@@ -51,24 +58,8 @@ namespace daliMQTT {
         DaliDeviceController::getInstance().startPolling();
     }
 
-    void Lifecycle::onMqttData(const std::string& topic, const std::string& data) {
-        ESP_LOGD(TAG, "MQTT Rx: %s -> %s", topic.c_str(), data.c_str());
-
-        std::string_view topic_sv(topic);
-        auto config = ConfigManager::getInstance().getConfig();
-
-        if (!topic_sv.starts_with(config.mqtt_base_topic)) return;
-        topic_sv.remove_prefix(config.mqtt_base_topic.length());
-
-        if (topic_sv.starts_with('/')) {
-            topic_sv.remove_prefix(1);
-        }
-
-        std::vector<std::string_view> parts;
-        for (const auto part : std::views::split(topic_sv, '/')) {
-            parts.emplace_back(part.begin(), part.end());
-        }
-
+    // Вспомогательная функция для обработки команд управления светом
+    static void handleLightCommand(const std::vector<std::string_view>& parts, const std::string& data) {
         if (parts.size() != 4 || parts[0] != "light" || parts[3] != "set") return;
 
         dali_addressType_t addr_type;
@@ -97,5 +88,61 @@ namespace daliMQTT {
         }
 
         cJSON_Delete(root);
+    }
+
+    // Вспомогательная функция для обработки команд управления группами
+    static void handleGroupCommand(const std::string& data) {
+        cJSON* root = cJSON_Parse(data.c_str());
+        if (!root) {
+            ESP_LOGE(TAG, "Failed to parse group command JSON");
+            return;
+        }
+
+        cJSON* addr_item = cJSON_GetObjectItem(root, "short_address");
+        cJSON* group_item = cJSON_GetObjectItem(root, "group");
+        cJSON* state_item = cJSON_GetObjectItem(root, "state");
+
+        if (!cJSON_IsNumber(addr_item) || !cJSON_IsNumber(group_item) || !cJSON_IsString(state_item)) {
+            ESP_LOGE(TAG, "Invalid group command JSON structure");
+            cJSON_Delete(root);
+            return;
+        }
+
+        uint8_t addr = addr_item->valueint;
+        uint8_t group = group_item->valueint;
+        bool assign = (strcmp(state_item->valuestring, "add") == 0);
+
+        DaliGroupManagement::getInstance().setGroupMembership(addr, group, assign);
+
+        auto config = ConfigManager::getInstance().getConfig();
+        auto const& mqtt = MQTTClient::getInstance();
+        std::string result_topic = std::format("{}{}", config.mqtt_base_topic, CONFIG_DALI2MQTT_MQTT_GROUP_RES_SUBTOPIC);
+        std::string payload = std::format(R"({{"status":"success","device":{},"group":{},"action":"{}"}})", addr, group, (assign ? "added" : "removed"));
+        mqtt.publish(result_topic, payload);
+
+        cJSON_Delete(root);
+    }
+
+    void Lifecycle::onMqttData(const std::string& topic, const std::string& data) {
+        ESP_LOGD(TAG, "MQTT Rx: %s -> %s", topic.c_str(), data.c_str());
+
+        const auto config = ConfigManager::getInstance().getConfig();
+        std::string_view topic_sv(topic);
+
+        if (!topic_sv.starts_with(config.mqtt_base_topic)) return;
+        topic_sv.remove_prefix(config.mqtt_base_topic.length());
+
+        std::vector<std::string_view> parts;
+        for (const auto part : std::views::split(topic_sv, '/')) {
+             if (!part.empty()) parts.emplace_back(part.begin(), part.end());
+        }
+
+        if (parts.empty()) return;
+
+        if (parts[0] == "light") {
+            handleLightCommand(parts, data);
+        } else if (parts[0] == "config" && parts.size() > 2 && parts[1] == "group" && parts[2] == "set") {
+            handleGroupCommand(data);
+        }
     }
 }

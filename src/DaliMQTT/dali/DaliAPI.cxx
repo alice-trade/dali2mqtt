@@ -104,4 +104,26 @@ namespace daliMQTT
 
         return scanBus();
     }
+
+    esp_err_t DaliAPI::assignToGroup(const uint8_t shortAddress, const uint8_t group) {
+        if (group >= 16) return ESP_ERR_INVALID_ARG;
+        return sendCommand(DALI_ADDRESS_TYPE_SHORT, shortAddress, DALI_COMMAND_ADD_TO_GROUP_0 + group);
+    }
+
+    esp_err_t DaliAPI::removeFromGroup(const uint8_t shortAddress, const uint8_t group) {
+        if (group >= 16) return ESP_ERR_INVALID_ARG;
+        return sendCommand(DALI_ADDRESS_TYPE_SHORT, shortAddress, DALI_COMMAND_REMOVE_FROM_GROUP_0 + group);
+    }
+
+    std::optional<std::bitset<16>> DaliAPI::getDeviceGroups(const uint8_t shortAddress) {
+        const auto groups_0_7 = sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddress, DALI_COMMAND_QUERY_GROUPS_0_7);
+        vTaskDelay(pdMS_TO_TICKS(5));
+
+        if (const auto groups_8_15 = sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddress, DALI_COMMAND_QUERY_GROUPS_8_15); groups_0_7.has_value() && groups_8_15.has_value()) {
+            uint16_t combined = (groups_8_15.value() << 8) | groups_0_7.value();
+            return std::bitset<16>(combined);
+        }
+
+        return std::nullopt;
+    }
 } // daliMQTT

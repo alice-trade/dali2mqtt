@@ -24,6 +24,8 @@ namespace daliMQTT
         // DALI
         uint32_t dali_poll_interval_ms;
         uint64_t dali_devices_mask{0};
+        std::string dali_device_identificators;
+        std::string dali_group_assignments;
 
         bool configured{false};
     };
