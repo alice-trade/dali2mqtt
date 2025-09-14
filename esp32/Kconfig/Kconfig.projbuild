@@ -19,7 +19,7 @@ menu "DALI MQTT Bridge Settings"
 
     config DALI2MQTT_DALI_DEFAULT_POLL_INTERVAL_MS
         int "Default DALI Poll Interval (ms)"
-        default 1200
+        default 1500
         range 500 3600
         help
             Default interval for polling DALI status if not found in NVS.
