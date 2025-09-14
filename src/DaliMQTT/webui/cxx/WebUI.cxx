@@ -12,6 +12,7 @@
 #include <mbedtls/base64.h>
 #include "WebUI.hxx"
 #include <DaliGroupManagement.hxx>
+#include <DaliSceneManagement.hxx>
 #include "ConfigManager.hxx"
 #include "DaliDeviceController.hxx"
 #include "utils/FileHandle.hxx"
@@ -34,7 +35,7 @@ namespace daliMQTT
         }
 
         // Register handlers
-        const std::array<httpd_uri_t, 11> handlers = {{ // Размер увеличен до 11
+        const std::array<httpd_uri_t, 12> handlers = {{ // Размер увеличен до 12
             { .uri = "/api/config", .method = HTTP_GET,  .handler = api::GetConfigHandler, .user_ctx = this },
             { .uri = "/api/config", .method = HTTP_POST, .handler = api::SetConfigHandler, .user_ctx = this },
             { .uri = "/api/info",   .method = HTTP_GET,  .handler = api::GetInfoHandler,   .user_ctx = this },
@@ -43,8 +44,9 @@ namespace daliMQTT
             { .uri = "/api/dali/initialize", .method = HTTP_POST, .handler = api::DaliInitializeHandler, .user_ctx = this },
             { .uri = "/api/dali/names",      .method = HTTP_GET,  .handler = api::DaliGetNamesHandler,   .user_ctx = this },
             { .uri = "/api/dali/names",      .method = HTTP_POST, .handler = api::DaliSetNamesHandler,   .user_ctx = this },
-            { .uri = "/api/dali/groups",     .method = HTTP_GET,  .handler = api::DaliGetGroupsHandler,  .user_ctx = nullptr }, // Новый
-            { .uri = "/api/dali/groups",     .method = HTTP_POST, .handler = api::DaliSetGroupsHandler,  .user_ctx = nullptr }, // Новый
+            { .uri = "/api/dali/groups",     .method = HTTP_GET,  .handler = api::DaliGetGroupsHandler,  .user_ctx = nullptr },
+            { .uri = "/api/dali/groups",     .method = HTTP_POST, .handler = api::DaliSetGroupsHandler,  .user_ctx = nullptr },
+            { .uri = "/api/dali/scenes",     .method = HTTP_POST, .handler = api::DaliSetSceneHandler,   .user_ctx = nullptr },
             { .uri = "/*",          .method = HTTP_GET,  .handler = staticFileGetHandler, .user_ctx = nullptr }
         }};
 
@@ -198,16 +200,17 @@ namespace daliMQTT
         }
 
         AppConfig current_cfg = ConfigManager::getInstance().getConfig();
-        #define JSON_STR_TO_CFG(NAME) if (cJSON* item = cJSON_GetObjectItem(root, #NAME); cJSON_IsString(item) && (item->valuestring != nullptr)) { current_cfg.NAME = item->valuestring; }
+        #define JsonSetStrConfig(NAME) if (cJSON* item = cJSON_GetObjectItem(root, #NAME); cJSON_IsString(item) && (item->valuestring != nullptr)) { current_cfg.NAME = item->valuestring; }
 
-        JSON_STR_TO_CFG(wifi_ssid);
-        JSON_STR_TO_CFG(wifi_password);
-        JSON_STR_TO_CFG(mqtt_uri);
-        JSON_STR_TO_CFG(mqtt_client_id);
-        JSON_STR_TO_CFG(mqtt_base_topic);
-        JSON_STR_TO_CFG(http_user);
-        JSON_STR_TO_CFG(http_pass);
-        #undef JSON_STR_TO_CFG
+        JsonSetStrConfig(wifi_ssid);
+        JsonSetStrConfig(wifi_password);
+        JsonSetStrConfig(mqtt_uri);
+        JsonSetStrConfig(mqtt_client_id);
+        JsonSetStrConfig(mqtt_base_topic);
+        JsonSetStrConfig(http_user);
+        JsonSetStrConfig(http_pass);
+
+        #undef JsonSetStrConfig
 
         cJSON_Delete(root);
 
@@ -388,4 +391,42 @@ namespace daliMQTT
         return ESP_OK;
     }
 
+    esp_err_t WebUI::api::DaliSetSceneHandler(httpd_req_t *req) {
+        if (checkAuth(req) != ESP_OK) return ESP_FAIL;
+
+        std::vector<char> buf(req->content_len + 1, 0);
+        if (httpd_req_recv(req, buf.data(), req->content_len) <= 0) return ESP_FAIL;
+
+        cJSON *root = cJSON_Parse(buf.data());
+        if (!cJSON_IsObject(root)) {
+             httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON: root must be an object");
+             cJSON_Delete(root);
+             return ESP_FAIL;
+        }
+
+        cJSON* scene_id_item = cJSON_GetObjectItem(root, "scene_id");
+        cJSON* levels_item = cJSON_GetObjectItem(root, "levels");
+
+        if (!cJSON_IsNumber(scene_id_item) || !cJSON_IsObject(levels_item)) {
+            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON: 'scene_id' or 'levels' are missing/invalid");
+            cJSON_Delete(root);
+            return ESP_FAIL;
+        }
+
+        uint8_t scene_id = scene_id_item->valueint;
+        SceneDeviceLevels levels;
+        cJSON* level_item = nullptr;
+        cJSON_ArrayForEach(level_item, levels_item) {
+            uint8_t addr = std::stoi(level_item->string);
+            const uint8_t level = level_item->valueint;
+            levels[addr] = level;
+        }
+
+        cJSON_Delete(root);
+
+        DaliSceneManagement::getInstance().saveScene(scene_id, levels);
+
+        httpd_resp_send(req, R"({"status":"ok", "message":"Scene configuration saved to devices."})", -1);
+        return ESP_OK;
+    }
 } // daliMQTT

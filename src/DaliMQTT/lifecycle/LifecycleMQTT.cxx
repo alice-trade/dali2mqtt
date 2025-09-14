@@ -12,7 +12,8 @@
 #include "MQTTClient.hxx"
 #include "DaliAPI.hxx"
 #include "DaliDeviceController.hxx"
-#include "DaliGroupManagement.hxx" // Добавлено
+#include "DaliGroupManagement.hxx"
+#include "DaliSceneManagement.hxx"
 #include "WebUI.hxx"
 #include "MQTTDiscovery.hxx"
 #include "Lifecycle.hxx"
@@ -50,6 +51,11 @@ namespace daliMQTT {
         std::string group_cmd_topic = std::format("{}{}", config.mqtt_base_topic, CONFIG_DALI2MQTT_MQTT_GROUP_SET_SUBTOPIC);
         mqtt.subscribe(group_cmd_topic);
         ESP_LOGI(TAG, "Subscribed to: %s", group_cmd_topic.c_str());
+
+        // Подписка на команды управления сценами
+        std::string scene_cmd_topic = std::format("{}{}", config.mqtt_base_topic, CONFIG_DALI2MQTT_MQTT_SCENE_CMD_SUBTOPIC);
+        mqtt.subscribe(scene_cmd_topic);
+        ESP_LOGI(TAG, "Subscribed to: %s", scene_cmd_topic.c_str());
 
         MQTTDiscovery mqtt_discovery;
         mqtt_discovery.publishAllDevices();
@@ -123,6 +129,26 @@ namespace daliMQTT {
         cJSON_Delete(root);
     }
 
+    // Вспомогательная функция для обработки команд сцен
+    static void handleSceneCommand(const std::string& data) {
+        cJSON* root = cJSON_Parse(data.c_str());
+        if (!root) {
+            ESP_LOGE(TAG, "Failed to parse scene command JSON");
+            return;
+        }
+
+        cJSON* scene_item = cJSON_GetObjectItem(root, "scene");
+        if (!cJSON_IsNumber(scene_item)) {
+             ESP_LOGE(TAG, "Invalid scene command JSON structure, 'scene' field is missing or not a number");
+             cJSON_Delete(root);
+             return;
+        }
+        uint8_t scene_id = scene_item->valueint;
+        DaliSceneManagement::getInstance().activateScene(scene_id);
+
+        cJSON_Delete(root);
+    }
+
     void Lifecycle::onMqttData(const std::string& topic, const std::string& data) {
         ESP_LOGD(TAG, "MQTT Rx: %s -> %s", topic.c_str(), data.c_str());
 
@@ -143,6 +169,16 @@ namespace daliMQTT {
             handleLightCommand(parts, data);
         } else if (parts[0] == "config" && parts.size() > 2 && parts[1] == "group" && parts[2] == "set") {
             handleGroupCommand(data);
+        } else if (parts[0] == "scene" && parts.size() > 1 && parts[1] == "set") {
+             std::string scene_str = data;
+             // HASS Scene Select
+             if (scene_str.starts_with("Scene ")) {
+                 scene_str.erase(0, 6); // "Scene "
+                 int scene_id = std::stoi(scene_str);
+                 DaliSceneManagement::getInstance().activateScene(scene_id);
+             } else {
+                 handleSceneCommand(data);
+             }
         }
     }
 }

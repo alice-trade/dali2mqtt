@@ -2,6 +2,7 @@
 #include "ConfigManager.hxx"
 #include "DaliAPI.hxx"
 #include "DaliGroupManagement.hxx"
+#include "DaliSceneManagement.hxx"
 #include "Lifecycle.hxx"
 #include "MQTTClient.hxx"
 #include "DaliDeviceController.hxx"
@@ -35,6 +36,9 @@ namespace daliMQTT
 
         auto& group_manager = DaliGroupManagement::getInstance();
         group_manager.init();
+
+        auto& scene_manager = DaliSceneManagement::getInstance();
+        scene_manager.init();
 
         auto& web = WebUI::getInstance();
         web.start();

@@ -90,6 +90,12 @@ menu "DALI MQTT Bridge Settings"
         help
             Sub-topic prefix for light states (e.g., /light/group/0/state).
 
+    config DALI2MQTT_MQTT_SCENE_CMD_SUBTOPIC
+        string "MQTT Scene Command Sub-Topic"
+        default "/scene/set"
+        help
+            Sub-topic for activating DALI scenes (appended to Base Topic).
+
     config DALI2MQTT_MQTT_CONFIG_SET_SUBTOPIC
         string "MQTT Config Set Sub-Topic"
         default "/config/set"

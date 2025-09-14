@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { api } from '../api';
+import DaliSceneEditor from './DaliSceneEditor.vue';
 
 type GroupAssignments = Record<string, number[]>; // { "0": [0, 15], "1": [1] }
 type GroupMatrix = Record<string, boolean[]>;     // { "0": [true, false, ..., true], "1": [false, true, ...] }
@@ -14,7 +15,7 @@ const loading = ref(true);
 const actionInProgress = ref('');
 const message = ref('');
 const isError = ref(false);
-const viewMode = ref<'names' | 'groups'>('names');
+const viewMode = ref<'names' | 'groups' | 'scenes'>('names');
 
 const loadData = async () => {
   loading.value = true;
@@ -145,17 +146,17 @@ onMounted(loadData);
         <ul>
           <li><a href="#" :class="{ 'secondary': viewMode !== 'names' }" @click.prevent="viewMode = 'names'">Device Names</a></li>
           <li><a href="#" :class="{ 'secondary': viewMode !== 'groups' }" @click.prevent="viewMode = 'groups'">Group Assignments</a></li>
+          <li><a href="#" :class="{ 'secondary': viewMode !== 'scenes' }" @click.prevent="viewMode = 'scenes'">Scene Editor</a></li>
         </ul>
       </nav>
 
       <p v-if="devices.length === 0">No devices found on the DALI bus. Try scanning or initializing.</p>
 
-      <!-- View for Device Names -->
       <div v-if="viewMode === 'names' && devices.length > 0">
         <h4>Discovered Devices ({{ devices.length }}/64)</h4>
         <form @submit.prevent="handleSaveNames">
           <div class="device-list">
-            <div v-for="device in devices" :key="device" class="device-item">
+            <div v-for="device in devices" :key="device" class="device-item-name">
               <label :for="`dali-name-${device}`">
                 <strong>Addr. {{ device }}</strong>
               </label>
@@ -196,6 +197,7 @@ onMounted(loadData);
           <button type="submit" :disabled="!!actionInProgress" :aria-busy="actionInProgress === 'save_groups'">Save Groups</button>
         </form>
       </div>
+      <DaliSceneEditor v-if="viewMode === 'scenes' && devices.length > 0" :devices="devices" :device-names="deviceNames" />
     </div>
   </article>
 </template>
@@ -207,11 +209,11 @@ onMounted(loadData);
   gap: 1rem;
   margin-block: 1rem;
 }
-.device-item {
+.device-item-name {
   display: flex;
   flex-direction: column;
 }
-.device-item label {
+.device-item-name label {
   margin-bottom: 0.25rem;
 }
 table input[type="checkbox"] {

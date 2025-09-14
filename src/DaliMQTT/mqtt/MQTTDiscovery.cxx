@@ -40,6 +40,8 @@ namespace daliMQTT
         for (uint8_t i = 0; i < 16; ++i) {
             publishLight("group", i);
         }
+
+        publishSceneSelector();
     }
 
     void MQTTDiscovery::publishLight(const std::string& type, uint8_t id) {
@@ -86,6 +88,41 @@ namespace daliMQTT
             delete json_payload;
         }
 
+        cJSON_Delete(root);
+    }
+
+    void MQTTDiscovery::publishSceneSelector() {
+        const auto& mqtt = MQTTClient::getInstance();
+        const std::string object_id = "dali_scenes";
+        const std::string discovery_topic = std::format("homeassistant/select/{}/config", object_id);
+
+        cJSON *root = cJSON_CreateObject();
+        if (!root) return;
+
+        cJSON_AddStringToObject(root, "name", "DALI Scenes");
+        cJSON_AddStringToObject(root, "unique_id", object_id.c_str());
+        cJSON_AddStringToObject(root, "command_topic", std::format("{}{}", base_topic, CONFIG_DALI2MQTT_MQTT_SCENE_CMD_SUBTOPIC).c_str());
+
+        cJSON* options = cJSON_CreateArray();
+        for (int i = 0; i < 16; ++i) {
+            cJSON_AddItemToArray(options, cJSON_CreateString(std::format("Scene {}", i).c_str()));
+        }
+        cJSON_AddItemToObject(root, "options", options);
+
+        cJSON_AddStringToObject(root, "availability_topic", availability_topic.c_str());
+        cJSON_AddStringToObject(root, "payload_available", CONFIG_DALI2MQTT_MQTT_PAYLOAD_ONLINE);
+        cJSON_AddStringToObject(root, "payload_not_available", CONFIG_DALI2MQTT_MQTT_PAYLOAD_OFFLINE);
+
+        if (cJSON *device = cJSON_CreateObject()) {
+            cJSON_AddStringToObject(device, "identifiers", bridge_public_name.c_str());
+            cJSON_AddStringToObject(device, "name", bridge_public_name.c_str());
+            cJSON_AddItemToObject(root, "device", device);
+        }
+
+        if (const char *json_payload = cJSON_PrintUnformatted(root)) {
+            mqtt.publish(discovery_topic, json_payload, 1, true);
+            delete json_payload;
+        }
         cJSON_Delete(root);
     }
 } // daliMQTT

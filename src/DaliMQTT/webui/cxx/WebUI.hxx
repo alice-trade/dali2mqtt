@@ -33,6 +33,7 @@ namespace daliMQTT
             static esp_err_t DaliSetNamesHandler(httpd_req_t *req);
             static esp_err_t DaliGetGroupsHandler(httpd_req_t *req);
             static esp_err_t DaliSetGroupsHandler(httpd_req_t *req);
+            static esp_err_t DaliSetSceneHandler(httpd_req_t *req);
         };
 
         // File handler

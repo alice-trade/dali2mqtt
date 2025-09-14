@@ -14,6 +14,7 @@ namespace daliMQTT
 
         private:
             void publishLight(const std::string& type, std::uint8_t id);
+            void publishSceneSelector();
 
             std::string base_topic;
             std::string availability_topic;
