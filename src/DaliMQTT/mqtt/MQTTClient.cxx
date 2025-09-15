@@ -18,20 +18,27 @@ namespace daliMQTT
 
         client_handle = esp_mqtt_client_init(&mqtt_cfg);
         esp_mqtt_client_register_event(client_handle, MQTT_EVENT_ANY, mqttEventHandler, this);
+        status = MqttStatus::DISCONNECTED;
     }
 
-    void MQTTClient::connect() const
+    void MQTTClient::connect()
     {
         if (client_handle) {
+            status = MqttStatus::CONNECTING;
             esp_mqtt_client_start(client_handle);
         }
     }
 
-    void MQTTClient::disconnect() const
+    void MQTTClient::disconnect()
     {
         if (client_handle) {
+            status = MqttStatus::DISCONNECTED;
             esp_mqtt_client_stop(client_handle);
         }
+    }
+
+    MqttStatus MQTTClient::getStatus() const {
+        return status;
     }
 
     void MQTTClient::publish(const std::string& topic, const std::string& payload, int qos, bool retain) const
@@ -47,17 +54,19 @@ namespace daliMQTT
     }
 
     void MQTTClient::mqttEventHandler(void* handler_args, [[maybe_unused]] esp_event_base_t base, int32_t event_id, void* event_data) {
-        auto const* client = static_cast<MQTTClient*>(handler_args);
+        auto* client = static_cast<MQTTClient*>(handler_args);
         auto const* event = static_cast<esp_mqtt_event_handle_t>(event_data);
         if (!client || !event) return;
 
         switch (static_cast<esp_mqtt_event_id_t>(event_id)) {
             case MQTT_EVENT_CONNECTED:
                 ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
+                client->status = MqttStatus::CONNECTED;
                 if(client->onConnected) client->onConnected();
                 break;
             case MQTT_EVENT_DISCONNECTED:
                 ESP_LOGW(TAG, "MQTT_EVENT_DISCONNECTED");
+                client->status = MqttStatus::DISCONNECTED;
                 if(client->onDisconnected) client->onDisconnected();
                 break;
             case MQTT_EVENT_SUBSCRIBED:

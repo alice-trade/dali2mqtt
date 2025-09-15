@@ -7,7 +7,11 @@ namespace daliMQTT
     static constexpr char TAG[] = "DaliAPI";
 
     esp_err_t DaliAPI::init(gpio_num_t rx_pin, gpio_num_t tx_pin) {
-        return dali_init(rx_pin, tx_pin);
+        esp_err_t err = dali_init(rx_pin, tx_pin);
+        if (err == ESP_OK) {
+            m_initialized = true;
+        }
+        return err;
     }
 
     esp_err_t DaliAPI::sendCommand(dali_addressType_t addr_type, uint8_t addr, uint8_t command, bool send_twice) {
@@ -125,5 +129,9 @@ namespace daliMQTT
         }
 
         return std::nullopt;
+    }
+
+    bool DaliAPI::isInitialized() const {
+        return m_initialized;
     }
 } // daliMQTT

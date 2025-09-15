@@ -3,10 +3,17 @@
 
 #include <string>
 #include <functional>
+#include <atomic>
 #include "mqtt_client.h"
 
 namespace daliMQTT
 {
+    enum class MqttStatus {
+        DISCONNECTED,
+        CONNECTING,
+        CONNECTED
+    };
+
     class MQTTClient {
         public:
             MQTTClient(const MQTTClient&) = delete;
@@ -17,8 +24,11 @@ namespace daliMQTT
                 return instance;
             }
             void init(const std::string& uri, const std::string& client_id, const std::string& availability_topic);
-            void connect() const;
-            void disconnect() const;
+
+            void connect();
+            void disconnect();
+
+            [[nodiscard]] MqttStatus getStatus() const;
 
             void publish(const std::string& topic, const std::string& payload, int qos = 0, bool retain = false) const;
             void subscribe(const std::string& topic, int qos = 0) const;
@@ -34,7 +44,8 @@ namespace daliMQTT
             static void mqttEventHandler(void* handler_args, esp_event_base_t base, int32_t event_id, void* event_data);
 
             esp_mqtt_client_handle_t client_handle{nullptr};
-        };
+            std::atomic<MqttStatus> status{MqttStatus::DISCONNECTED};
+    };
 } // daliMQTT
 
 #endif //DALIMQTT_MQTTCLIENT_HXX

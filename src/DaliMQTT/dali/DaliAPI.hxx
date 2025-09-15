@@ -1,6 +1,7 @@
 #ifndef DALIMQTT_DALIAPI_HXX
 #define DALIMQTT_DALIAPI_HXX
 #include <optional>
+#include <atomic>
 #include <mutex>
 #include <bitset>
 
@@ -44,10 +45,14 @@ namespace daliMQTT
         // Получение маски группы
         [[nodiscard]] std::optional<std::bitset<16>> getDeviceGroups(uint8_t shortAddress);
 
+        // Проверка, была ли инициализирована шина DALI
+        [[nodiscard]] bool isInitialized() const;
+
     private:
         DaliAPI() = default;
 
         std::mutex bus_mutex;
+        std::atomic<bool> m_initialized{false};
     };
 } // daliMQTT
 
