@@ -24,6 +24,6 @@ spiffs_create_partition_image(
         ${WEBUI_BUILD_DIR}
         DEPENDS webui
 )
-add_dependencies(flash spiffs_${SPIFFS_PARTITION_NAME}_bin)
+add_dependencies(flash ${SPIFFS_PARTITION_NAME}-flash)
 
 message(STATUS "Web UI build and SPIFFS image generation configured.")

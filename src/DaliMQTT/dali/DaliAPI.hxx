@@ -30,6 +30,28 @@ namespace daliMQTT
         // Отправка запроса с ожиданием ответа
         [[nodiscard]] std::optional<uint8_t> sendQuery(dali_addressType_t addr_type, uint8_t addr, uint8_t command);
 
+        /**
+      * @brief Starts the DALI bus sniffer.
+      *
+      * @return esp_err_t ESP_OK on success.
+      */
+        esp_err_t startSniffer();
+
+        /**
+         * @brief Stops the DALI bus sniffer.
+         *
+         * @return esp_err_t ESP_OK on success.
+         */
+        esp_err_t stopSniffer();
+
+        /**
+         * @brief Gets the handle to the DALI event queue.
+         * The sniffer pushes decoded dali_frame_t items into this queue.
+         *
+         * @return QueueHandle_t Handle to the event queue, or nullptr if not initialized.
+         */
+        [[nodiscard]] QueueHandle_t getEventQueue() const;
+
         // Сканирование шины на наличие уже адресованных устройств
         [[nodiscard]] std::bitset<64> scanBus();
 
@@ -53,6 +75,7 @@ namespace daliMQTT
 
         std::mutex bus_mutex;
         std::atomic<bool> m_initialized{false};
+        QueueHandle_t m_dali_event_queue{nullptr};
     };
 } // daliMQTT
 

@@ -6,6 +6,7 @@
 #include "sdkconfig.h"
 #include <esp_spiffs.h>
 #include <nvs_flash.h>
+#include <dirent.h>
 
 namespace daliMQTT
 {
@@ -39,7 +40,7 @@ namespace daliMQTT
         esp_vfs_spiffs_conf_t conf = {
           .base_path = "/spiffs",
           .partition_label = CONFIG_DALI2MQTT_WEBUI_SPIFFS_PARTITION_LABEL,
-          .max_files = 5,
+          .max_files = 10,
           .format_if_mount_failed = true
         };
 
@@ -76,14 +77,15 @@ namespace daliMQTT
         getString(nvs_handle.get(), "mqtt_base", config_cache.mqtt_base_topic, CONFIG_DALI2MQTT_MQTT_BASE_TOPIC);
         getString(nvs_handle.get(), "http_user", config_cache.http_user, CONFIG_DALI2MQTT_WEBUI_DEFAULT_USER);
         getString(nvs_handle.get(), "http_pass", config_cache.http_pass, CONFIG_DALI2MQTT_WEBUI_DEFAULT_PASS);
-        getString(nvs_handle.get(), "dali_device_identificators", config_cache.dali_device_identificators, "{}");
-        getString(nvs_handle.get(), "dali_group_assignments", config_cache.dali_group_assignments, "{}");
+        getString(nvs_handle.get(), "dali_identif", config_cache.dali_device_identificators, "{}");
+        getString(nvs_handle.get(), "dali_groups", config_cache.dali_group_assignments, "{}");
 
         getU32(nvs_handle.get(), "dali_poll", config_cache.dali_poll_interval_ms, CONFIG_DALI2MQTT_DALI_DEFAULT_POLL_INTERVAL_MS);
         getU64(nvs_handle.get(), "dali_mask", config_cache.dali_devices_mask, 0);
 
         uint8_t configured_flag = 0;
         nvs_get_u8(nvs_handle.get(), "configured", &configured_flag);
+        ESP_LOGI(TAG, "Configured flag value: %d", configured_flag);
         config_cache.configured = (configured_flag == 1);
 
         ESP_LOGI(TAG, "Configuration loaded successfully.");
@@ -111,8 +113,8 @@ namespace daliMQTT
         SetNVS(setString, "mqtt_base", config_cache.mqtt_base_topic);
         SetNVS(setString, "http_user", config_cache.http_user);
         SetNVS(setString, "http_pass", config_cache.http_pass);
-        SetNVS(setString, "dali_device_identificators", config_cache.dali_device_identificators);
-        SetNVS(setString, "dali_group_assignments", config_cache.dali_group_assignments);
+        SetNVS(setString, "dali_identif", config_cache.dali_device_identificators);
+        SetNVS(setString, "dali_groups", config_cache.dali_group_assignments);
         SetNVS(nvs_set_u32, "dali_poll", config_cache.dali_poll_interval_ms);
         SetNVS(nvs_set_u64, "dali_mask", config_cache.dali_devices_mask);
 

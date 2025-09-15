@@ -5,24 +5,52 @@
 namespace daliMQTT
 {
     static constexpr char TAG[] = "DaliAPI";
+    constexpr int DALI_EVENT_QUEUE_SIZE = 20;
 
     esp_err_t DaliAPI::init(gpio_num_t rx_pin, gpio_num_t tx_pin) {
+        if (m_initialized) {
+            return ESP_OK;
+        }
+        if (!m_dali_event_queue) {
+            m_dali_event_queue = xQueueCreate(DALI_EVENT_QUEUE_SIZE, sizeof(dali_frame_t));
+            if (!m_dali_event_queue) {
+                ESP_LOGE(TAG, "Failed to create DALI event queue");
+                return ESP_ERR_NO_MEM;
+            }
+        }
+
         esp_err_t err = dali_init(rx_pin, tx_pin);
         if (err == ESP_OK) {
             m_initialized = true;
         }
         return err;
     }
+    esp_err_t DaliAPI::startSniffer() {
+        if (!m_initialized || !m_dali_event_queue) {
+            return ESP_ERR_INVALID_STATE;
+        }
+        ESP_LOGI(TAG, "Starting DALI sniffer...");
+        return dali_sniffer_start(m_dali_event_queue);
+    }
 
+    esp_err_t DaliAPI::stopSniffer() {
+        if (!m_initialized) {
+            return ESP_OK;
+        }
+        ESP_LOGI(TAG, "Stopping DALI sniffer...");
+        return dali_sniffer_stop();
+    }
+
+    QueueHandle_t DaliAPI::getEventQueue() const {
+        return m_dali_event_queue;
+    }
     esp_err_t DaliAPI::sendCommand(dali_addressType_t addr_type, uint8_t addr, uint8_t command, bool send_twice) {
-        std::lock_guard lock(bus_mutex);
         esp_err_t err = dali_transaction(addr_type, addr, true, command, send_twice, DALI_TX_TIMEOUT_DEFAULT_MS, nullptr);
         dali_wait_between_frames();
         return err;
     }
 
     std::optional<uint8_t> DaliAPI::sendQuery(dali_addressType_t addr_type, uint8_t addr, uint8_t command) {
-        std::lock_guard lock(bus_mutex);
         int result = DALI_RESULT_NO_REPLY;
         esp_err_t err = dali_transaction(addr_type, addr, true, command, false, DALI_TX_TIMEOUT_DEFAULT_MS, &result);
         dali_wait_between_frames();

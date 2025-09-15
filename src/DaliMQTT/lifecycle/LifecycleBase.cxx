@@ -28,6 +28,18 @@ namespace daliMQTT
 
     void Lifecycle::startNormalMode() {
         ESP_LOGI(TAG, "Starting in normal mode...");
+
+        auto& wifi = Wifi::getInstance();
+        wifi.init();
+        wifi.onConnected = [this]() {
+            ESP_LOGI(TAG, "WiFi connected, starting MQTT...");
+            this->setupAndRunMqtt();
+        };
+        wifi.onDisconnected = []() {
+            ESP_LOGW(TAG, "WiFi disconnected, stopping MQTT.");
+            MQTTClient::getInstance().disconnect();
+        };
+
         auto& dali_api = DaliAPI::getInstance();
         dali_api.init(static_cast<gpio_num_t>(CONFIG_DALI2MQTT_DALI_RX_PIN), static_cast<gpio_num_t>(CONFIG_DALI2MQTT_DALI_TX_PIN));
 
@@ -42,17 +54,6 @@ namespace daliMQTT
 
         auto& web = WebUI::getInstance();
         web.start();
-
-        auto& wifi = Wifi::getInstance();
-        wifi.init();
-        wifi.onConnected = [this]() {
-            ESP_LOGI(TAG, "WiFi connected, starting MQTT...");
-            this->setupAndRunMqtt();
-        };
-        wifi.onDisconnected = []() {
-            ESP_LOGW(TAG, "WiFi disconnected, stopping MQTT.");
-            MQTTClient::getInstance().disconnect();
-        };
 
         auto config = ConfigManager::getInstance().getConfig();
         wifi.connectToAP(config.wifi_ssid, config.wifi_password);

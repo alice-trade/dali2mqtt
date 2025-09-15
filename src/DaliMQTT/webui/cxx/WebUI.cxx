@@ -66,7 +66,7 @@ namespace daliMQTT
         httpd_config_t config = HTTPD_DEFAULT_CONFIG();
         config.lru_purge_enable = true;
         config.uri_match_fn = httpd_uri_match_wildcard;
-
+        config.max_uri_handlers = 13;
         ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
         if (httpd_start(&server_handle, &config) != ESP_OK) {
             ESP_LOGE(TAG, "Error starting server!");
@@ -74,7 +74,7 @@ namespace daliMQTT
         }
 
         // Register handlers
-        const std::array<httpd_uri_t, 12> handlers = {{ // Размер увеличен до 12
+        const std::array<httpd_uri_t, 12> handlers = {{
             { .uri = "/api/config", .method = HTTP_GET,  .handler = api::GetConfigHandler, .user_ctx = this },
             { .uri = "/api/config", .method = HTTP_POST, .handler = api::SetConfigHandler, .user_ctx = this },
             { .uri = "/api/info",   .method = HTTP_GET,  .handler = api::GetInfoHandler,   .user_ctx = this },
@@ -87,6 +87,7 @@ namespace daliMQTT
             { .uri = "/api/dali/groups",     .method = HTTP_POST, .handler = api::DaliSetGroupsHandler,  .user_ctx = nullptr },
             { .uri = "/api/dali/scenes",     .method = HTTP_POST, .handler = api::DaliSetSceneHandler,   .user_ctx = nullptr },
             { .uri = "/*",          .method = HTTP_GET,  .handler = staticFileGetHandler, .user_ctx = nullptr }
+
         }};
 
         for(auto const& handler : handlers) {
@@ -119,10 +120,10 @@ namespace daliMQTT
         std::string filepath = std::format("{}{}", WEB_MOUNT_POINT, (strcmp(req->uri, "/") == 0 ? "/index.html" : req->uri));
 
         if (struct stat file_stat{}; stat(filepath.c_str(), &file_stat) == -1) {
-            ESP_LOGE(TAG, "File not found: %s, falling back to index.html", filepath.c_str());
+            ESP_LOGD(TAG, "File '%s' not found. Assuming SPA route, serving index.html.", filepath.c_str());
             filepath = std::format("{}/index.html", WEB_MOUNT_POINT);
-            if(stat(filepath.c_str(), &file_stat) == -1) {
-                ESP_LOGE(TAG, "index.html not found either.");
+            if (stat(filepath.c_str(), &file_stat) == -1) {
+                ESP_LOGE(TAG, "FATAL: Fallback file index.html not found!");
                 httpd_resp_send_404(req);
                 return ESP_FAIL;
             }
@@ -140,16 +141,19 @@ namespace daliMQTT
         std::vector<char> chunk(SCRATCH_BUFSIZE);
         size_t read_bytes;
         do {
-            read_bytes = fread(chunk.data(), 1, SCRATCH_BUFSIZE, f.get());
+            read_bytes = fread(chunk.data(), 1, chunk.size(), f.get());
             if (read_bytes > 0) {
                 if (httpd_resp_send_chunk(req, chunk.data(), read_bytes) != ESP_OK) {
                     ESP_LOGE(TAG, "File sending failed!");
+                    // Важно не возвращать ошибку сразу, а закрыть chunk-ответ
+                    httpd_resp_send_chunk(req, nullptr, 0);
                     return ESP_FAIL;
                 }
             }
         } while (read_bytes > 0);
 
         httpd_resp_send_chunk(req, nullptr, 0);
+        ESP_LOGD(TAG, "File sent successfully: %s", filepath.c_str());
         return ESP_OK;
     }
 
@@ -259,16 +263,21 @@ namespace daliMQTT
         }
 
         ConfigManager::getInstance().setConfig(current_cfg);
-        ConfigManager::getInstance().save();
 
-        httpd_resp_send(req, R"({"status":"ok", "message":"Settings saved. Restarting..."})", -1);
+        if (esp_err_t save_err = ConfigManager::getInstance().save(); save_err != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to save configuration to NVS! Error: %s (%d)", esp_err_to_name(save_err), save_err);
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to save settings to flash memory.");
+            return ESP_FAIL;
+        }
+
+        httpd_resp_send(req, R"({"status":"ok", "message":"Settings saved. Restarting..."})", HTTPD_RESP_USE_STRLEN);
 
         ESP_LOGI(TAG, "Configuration saved via WebUI. Restarting in 3 seconds...");
         vTaskDelay(pdMS_TO_TICKS(3000));
         esp_restart();
 
         return ESP_OK;
-    }
+}
 
     esp_err_t WebUI::api::GetInfoHandler(httpd_req_t *req) {
         if (checkAuth(req) != ESP_OK) return ESP_FAIL;
@@ -295,7 +304,7 @@ namespace daliMQTT
         const std::string wifi_status_str = std::format("{} ({})", get_wifi_status_string(wifi.getStatus()), wifi.getIpAddress());
 
         cJSON *root = cJSON_CreateObject();
-        cJSON_AddStringToObject(root, "version", "0.7.0");
+        cJSON_AddStringToObject(root, "version", "dev_0.8.0");
         cJSON_AddStringToObject(root, "chip_model", get_chip_model_name(chip_info.model));
         cJSON_AddNumberToObject(root, "chip_cores", chip_info.cores);
         cJSON_AddNumberToObject(root, "free_heap", esp_get_free_heap_size());
@@ -390,7 +399,6 @@ namespace daliMQTT
         return ESP_OK;
     }
 
-    // --- Новые обработчики для групп ---
     esp_err_t WebUI::api::DaliGetGroupsHandler(httpd_req_t *req) {
         if (checkAuth(req) != ESP_OK) return ESP_FAIL;
 

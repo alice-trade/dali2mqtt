@@ -1,16 +1,17 @@
-#ifndef __DALI_H__
-#define __DALI_H__
+#ifndef DALI_H_
+#define DALI_H_
 
 #include <stdint.h>
 #include <soc/gpio_num.h>
 #include <freertos/task.h>
+#include <freertos/queue.h>
 
 #define DALI_RMT_RESOLUTION_HZ 1000000
 #define DALI_USTORMT(x) ((x) * (DALI_RMT_RESOLUTION_HZ / 1000000))
 #define DALI_USTONS(x)  (x * 1000)
 
 #define DALI_ONE_TE 416
-#define DALI_RESULT_NO_REPLY  -1
+#define DALI_RESULT_NO_REPLY  (-1)
 #define DALI_THRESHOLD_1TE_LOW  334
 #define DALI_THRESHOLD_1TE_HIGH 500
 #define DALI_THRESHOLD_2TE_LOW  (2*DALI_THRESHOLD_1TE_LOW)
@@ -34,6 +35,13 @@ typedef union SI_UU16
   uint8_t u8[2];  ///< The two byte value as two unsigned 8-bit integers.
   int8_t s8[2];   ///< The two byte value as two signed 8-bit integers.
 } SI_UU16_t;
+
+typedef struct {
+    uint16_t data;
+    bool is_backward_frame;
+
+    uint64_t timestamp_us;
+} dali_frame_t;
 
 typedef enum {
   DALI_ADDRESS_TYPE_SHORT,
@@ -79,6 +87,26 @@ esp_err_t dali_transaction(dali_addressType_t address_type, uint8_t address, boo
  */
 inline void dali_wait_between_frames(void) __attribute__((always_inline));
 
+    /**
+ * @brief Starts the DALI bus sniffer task.
+ *
+ * Creates a background task that continuously monitors the DALI bus
+ * for any traffic (forward and backward frames). Decoded frames are
+ * pushed into the provided FreeRTOS queue.
+ *
+ * @param output_queue A handle to a FreeRTOS queue that will receive `dali_frame_t` items.
+ * @return esp_err_t ESP_OK on success, or an error code on failure.
+ */
+esp_err_t dali_sniffer_start(QueueHandle_t output_queue);
+
+/**
+ * @brief Stops the DALI bus sniffer task.
+ *
+ * @return esp_err_t ESP_OK on success.
+ */
+esp_err_t dali_sniffer_stop(void);
+
+
 inline void dali_wait_between_frames(void) {
     vTaskDelay(pdMS_TO_TICKS(20));
 }
@@ -87,4 +115,4 @@ inline void dali_wait_between_frames(void) {
 }
 #endif
 
-#endif // __DALI_H__
+#endif // DALI_H_

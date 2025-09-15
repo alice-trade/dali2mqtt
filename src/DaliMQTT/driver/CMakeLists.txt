@@ -1,6 +1,7 @@
 project(daliC LANGUAGES C)
 add_library(daliC STATIC
-        "dalic/dali.c")
+        "dalic/dali.c"
+        dalic/dali_sniffer.c)
 
 target_include_directories(daliC
         PRIVATE

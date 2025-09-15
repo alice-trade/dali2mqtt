@@ -6,6 +6,8 @@
 #include <mutex>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include <dalic/include/dali.h>
+
 
 namespace daliMQTT
 {
@@ -20,7 +22,10 @@ namespace daliMQTT
         }
 
         void init();
-        void startPolling();
+        /**
+         * @brief Starts all DALI background tasks: event monitoring and periodic sync.
+         */
+        void start();
 
         std::bitset<64> performFullInitialization();
         std::bitset<64> performScan();
@@ -31,11 +36,14 @@ namespace daliMQTT
 
         void loadDeviceMask();
         void saveDeviceMask();
+        void processDaliFrame(const dali_frame_t& frame);
 
-        [[noreturn]] static void daliPollTask(void* pvParameters);
+        [[noreturn]] static void daliEventHandlerTask(void* pvParameters);
+        [[noreturn]] static void daliSyncTask(void* pvParameters);
 
         std::bitset<64> m_discovered_devices;
-        TaskHandle_t m_poll_task_handle{nullptr};
+        TaskHandle_t m_event_handler_task{nullptr};
+        TaskHandle_t m_sync_task_handle{nullptr};
         mutable std::mutex m_devices_mutex;
     };
 

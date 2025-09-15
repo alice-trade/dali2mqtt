@@ -61,7 +61,7 @@ namespace daliMQTT {
         mqtt_discovery.publishAllDevices();
         ESP_LOGI(TAG, "MQTT discovery messages published.");
 
-        DaliDeviceController::getInstance().startPolling();
+        DaliDeviceController::getInstance().start();
     }
 
     // Вспомогательная функция для обработки команд управления светом
