@@ -83,9 +83,9 @@ namespace daliMQTT
             cJSON_AddItemToObject(root, "device", device);
         }
 
-        if (const char *json_payload = cJSON_PrintUnformatted(root)) {
+        if (char *json_payload = cJSON_PrintUnformatted(root)) {
             mqtt.publish(discovery_topic, json_payload, 1, true);
-            delete json_payload;
+            free(json_payload);
         }
 
         cJSON_Delete(root);
@@ -119,9 +119,9 @@ namespace daliMQTT
             cJSON_AddItemToObject(root, "device", device);
         }
 
-        if (const char *json_payload = cJSON_PrintUnformatted(root)) {
+        if ( char *json_payload = cJSON_PrintUnformatted(root)) {
             mqtt.publish(discovery_topic, json_payload, 1, true);
-            delete json_payload;
+            free( json_payload);
         }
         cJSON_Delete(root);
     }

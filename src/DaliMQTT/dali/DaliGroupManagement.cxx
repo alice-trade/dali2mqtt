@@ -68,7 +68,7 @@ namespace daliMQTT
         config.dali_group_assignments = json_string;
         config_manager.setConfig(config);
 
-        delete json_string;
+        free(json_string);
 
         return config_manager.save();
     }

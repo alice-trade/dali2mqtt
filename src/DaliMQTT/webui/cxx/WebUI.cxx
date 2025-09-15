@@ -216,7 +216,7 @@ namespace daliMQTT
         httpd_resp_set_type(req, "application/json");
         httpd_resp_send(req, json_string, strlen(json_string));
         cJSON_Delete(root);
-        delete json_string;
+        free( json_string);
         return ESP_OK;
     }
 
@@ -307,7 +307,7 @@ namespace daliMQTT
         httpd_resp_set_type(req, "application/json");
         httpd_resp_send(req, json_string, strlen(json_string));
         cJSON_Delete(root);
-        delete json_string;
+        free( json_string);
         return ESP_OK;
     }
 
@@ -327,7 +327,7 @@ namespace daliMQTT
         httpd_resp_set_type(req, "application/json");
         httpd_resp_send(req, json_string, strlen(json_string));
         cJSON_Delete(root);
-        delete json_string;
+        free( json_string);
 
         return ESP_OK;
     }
@@ -411,7 +411,7 @@ namespace daliMQTT
         httpd_resp_set_type(req, "application/json");
         httpd_resp_send(req, json_string, strlen(json_string));
         cJSON_Delete(root);
-        delete json_string;
+        free( json_string);
         return ESP_OK;
     }
 
