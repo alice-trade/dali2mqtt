@@ -154,12 +154,19 @@ menu "DALI MQTT Bridge Settings"
         help
             Default WiFi AP network password.
 
-    config DALI2MQTT_WIFI_MAX_RETRY # unimplemented
+    config DALI2MQTT_WIFI_MAX_RETRY
         int "WiFi Maximum Connection Retries"
-        default 5
-        range 0 20
+        default 10
+        range 5 30
         help
-            Number of times to retry connecting to WiFi before failing.
+            Number of times to retry connecting to WiFi before failing and entering deep sleep.
+            The counter is stored in NVS and persists across reboots. It is reset upon successful connection.
+
+    config DALI2MQTT_WIFI_DEEP_SLEEP_S
+        int "Deep Sleep Duration (seconds)"
+        default 300
+        help
+            Duration in seconds to stay in deep sleep after exceeding WiFi connection retries.
 
     endmenu
 

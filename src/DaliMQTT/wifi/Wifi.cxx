@@ -1,8 +1,13 @@
 #include <esp_log.h>
 #include <esp_netif.h>
+#include <esp_sleep.h>
 #include <lwip/ip4_addr.h>
 #include <mdns.h>
+#include <nvs_flash.h>
+#include <format>
 #include "Wifi.hxx"
+#include "utils/NvsHandle.hxx"
+#include "sdkconfig.h"
 
 namespace daliMQTT
 {
@@ -122,10 +127,38 @@ namespace daliMQTT
             ESP_LOGI(TAG, "STA_START: connecting...");
             esp_wifi_connect();
         } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
-            ESP_LOGW(TAG, "STA_DISCONNECTED: connection failed. Retrying...");
             manager->status = Status::DISCONNECTED;
             if(manager->onDisconnected) manager->onDisconnected();
-            esp_wifi_connect();
+
+            const NvsHandle nvs_handle("wifi_state", NVS_READWRITE);
+            if (!nvs_handle) {
+                ESP_LOGE(TAG, "Failed to open NVS for WiFi state. Retrying connection without counter.");
+                esp_wifi_connect();
+                return;
+            }
+
+            uint8_t retry_count = 0;
+            nvs_get_u8(nvs_handle.get(), "retry_cnt", &retry_count);
+            retry_count++;
+
+            if (retry_count >= CONFIG_DALI2MQTT_WIFI_MAX_RETRY) {
+                ESP_LOGE(TAG, "WiFi connection failed after %d attempts. Entering deep sleep for %d seconds.",
+                         retry_count, CONFIG_DALI2MQTT_WIFI_DEEP_SLEEP_S);
+
+                nvs_set_u8(nvs_handle.get(), "retry_cnt", 0);
+                nvs_commit(nvs_handle.get());
+
+                esp_deep_sleep(1000000LL * CONFIG_DALI2MQTT_WIFI_DEEP_SLEEP_S);
+            } else {
+                ESP_LOGW(TAG, "STA_DISCONNECTED: connection failed. Attempt %d of %d. Retrying...",
+                         retry_count, CONFIG_DALI2MQTT_WIFI_MAX_RETRY);
+
+                nvs_set_u8(nvs_handle.get(), "retry_cnt", retry_count);
+                nvs_commit(nvs_handle.get());
+
+                esp_wifi_connect();
+            }
+
         } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
             ip_event_got_ip_t const* event = static_cast<ip_event_got_ip_t*>(event_data);
             ESP_LOGI(TAG, "GOT_IP: " IPSTR, IP2STR(&event->ip_info.ip));
@@ -133,6 +166,17 @@ namespace daliMQTT
             manager->startMdns();
             if(manager->onConnected) manager->onConnected();
         } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_AP_START) {
+            // Сбрасываем счетчик неудачных попыток при успешном подключении
+            const NvsHandle nvs_handle("wifi_state", NVS_READWRITE);
+             if (nvs_handle) {
+                uint8_t retry_count = 0;
+                if (nvs_get_u8(nvs_handle.get(), "retry_cnt", &retry_count) == ESP_OK && retry_count > 0) {
+                    ESP_LOGI(TAG, "WiFi connected successfully. Resetting failure counter.");
+                    nvs_set_u8(nvs_handle.get(), "retry_cnt", 0);
+                    nvs_commit(nvs_handle.get());
+                }
+            }
+
             ESP_LOGI(TAG, "AP Mode started. Starting mDNS.");
             manager->startMdns();
         } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_AP_STACONNECTED) {
