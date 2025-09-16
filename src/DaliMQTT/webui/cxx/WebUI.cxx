@@ -1,14 +1,6 @@
-#include <esp_log.h>
-#include <cJSON.h>
-#include <string_view>
-#include <vector>
 #include <sys/stat.h>
-#include <format>
-#include <array>
 #include <esp_system.h>
 #include <esp_chip_info.h>
-#include <freertos/FreeRTOS.h>
-#include <freertos/task.h>
 #include <mbedtls/base64.h>
 #include "WebUI.hxx"
 #include <DaliGroupManagement.hxx>

@@ -1,10 +1,6 @@
 #ifndef DALIMQTT_DALISCENEMANAGEMENT_HXX
 #define DALIMQTT_DALISCENEMANAGEMENT_HXX
 
-#include <map>
-#include <mutex>
-#include "esp_err.h"
-
 namespace daliMQTT
 {
     // Map: short_address -> brightness_level (0-254)

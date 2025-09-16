@@ -1,10 +1,7 @@
-#include <esp_log.h>
 #include <esp_netif.h>
 #include <esp_sleep.h>
 #include <lwip/ip4_addr.h>
 #include <mdns.h>
-#include <nvs_flash.h>
-#include <format>
 #include "Wifi.hxx"
 #include "utils/NvsHandle.hxx"
 #include "sdkconfig.h"

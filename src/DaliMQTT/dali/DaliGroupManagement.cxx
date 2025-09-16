@@ -1,9 +1,6 @@
 #include "DaliGroupManagement.hxx"
 #include "ConfigManager.hxx"
 #include "DaliAPI.hxx"
-#include <cJSON.h>
-#include <esp_log.h>
-#include <format>
 
 namespace daliMQTT
 {

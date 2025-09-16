@@ -1,4 +1,3 @@
-#include <esp_log.h>
 #include "MQTTClient.hxx"
 #include "sdkconfig.h"
 

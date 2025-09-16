@@ -1,8 +1,5 @@
 #ifndef DALIMQTT_MQTTDISCOVERY_HXX
 #define DALIMQTT_MQTTDISCOVERY_HXX
-#include <cstdint>
-#include <string>
-#include <unordered_map>
 
 namespace daliMQTT
 {

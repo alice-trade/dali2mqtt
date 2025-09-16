@@ -1,9 +1,6 @@
 #include "DaliSceneManagement.hxx"
 #include "DaliAPI.hxx"
-#include <esp_log.h>
-#include <format>
-#include <freertos/FreeRTOS.h>
-#include <freertos/task.h>
+
 
 namespace daliMQTT
 {

@@ -1,4 +1,3 @@
-#include <esp_log.h>
 #include "ConfigManager.hxx"
 #include "DaliAPI.hxx"
 #include "DaliGroupManagement.hxx"

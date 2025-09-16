@@ -1,12 +1,8 @@
-#include <cJSON.h>
-#include <format>
 #include "sdkconfig.h"
 #include "MQTTDiscovery.hxx"
-
-#include <bitset>
-
 #include "MQTTClient.hxx"
 #include "ConfigManager.hxx"
+
 
 namespace daliMQTT
 {

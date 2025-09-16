@@ -1,12 +1,3 @@
-#include <cJSON.h>
-#include <string_view>
-#include <vector>
-#include <format>
-#include <charconv>
-#include <algorithm>
-#include <esp_log.h>
-#include <ranges>
-
 #include "sdkconfig.h"
 #include "ConfigManager.hxx"
 #include "MQTTClient.hxx"

@@ -1,10 +1,5 @@
 #ifndef DALIMQTT_DALIGROUPMANAGEMENT_HXX
 #define DALIMQTT_DALIGROUPMANAGEMENT_HXX
-#include <map>
-#include <bitset>
-#include <mutex>
-#include <optional>
-#include "esp_err.h"
 
 namespace daliMQTT
 {

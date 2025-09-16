@@ -1,12 +1,5 @@
 #ifndef DALIMQTT_DALIAPI_HXX
 #define DALIMQTT_DALIAPI_HXX
-#include <optional>
-#include <atomic>
-#include <mutex>
-#include <bitset>
-
-#include <driver/gpio.h>
-#include <freertos/FreeRTOS.h>
 #include "dalic/include/dali.h"
 #include "dalic/include/dali_commands.h"
 

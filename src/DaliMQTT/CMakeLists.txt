@@ -2,6 +2,9 @@ project(DaliMQTT-Core LANGUAGES CXX)
 
 add_library(DaliMQTT-Core STATIC)
 
+target_precompile_headers(DaliMQTT-Core PRIVATE pch.hxx)
+
+
 set(MODULE_DIRS
         config
         wifi

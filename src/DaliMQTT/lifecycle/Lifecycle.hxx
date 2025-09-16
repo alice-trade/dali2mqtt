@@ -1,6 +1,5 @@
 #ifndef DALIMQTT_LIFECYCLE_HXX
 #define DALIMQTT_LIFECYCLE_HXX
-#include <string>
 
 namespace daliMQTT
 {

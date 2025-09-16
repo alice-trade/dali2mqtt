@@ -1,4 +1,9 @@
+#include <esp_err.h>
 #include <esp_log.h>
+#include <string>
+#include <mutex>
+#include <nvs_flash.h>
+
 #include <DaliMQTT/config/ConfigManager.hxx>
 #include <DaliMQTT/lifecycle/Lifecycle.hxx>
 

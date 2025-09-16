@@ -1,5 +1,3 @@
-#include <esp_log.h>
-#include <format>
 #include "DaliAPI.hxx"
 
 namespace daliMQTT

@@ -1,10 +1,6 @@
 #ifndef DALIMQTT_CONFIGMANAGER_HXX
 #define DALIMQTT_CONFIGMANAGER_HXX
 
-#include <string>
-#include <mutex>
-#include <nvs.h>
-
 namespace daliMQTT
 {
     struct AppConfig {

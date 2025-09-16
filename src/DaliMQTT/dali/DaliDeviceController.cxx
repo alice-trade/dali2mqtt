@@ -3,9 +3,6 @@
 #include "ConfigManager.hxx"
 #include "DaliAPI.hxx"
 #include "MQTTClient.hxx"
-#include <esp_log.h>
-#include <format>
-#include <ranges>
 
 namespace daliMQTT
 {

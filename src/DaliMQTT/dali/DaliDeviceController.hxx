@@ -1,11 +1,6 @@
 #ifndef DALIMQTT_DALIDEVICECONTROLLER_HXX
 #define DALIMQTT_DALIDEVICECONTROLLER_HXX
 
-#include <bitset>
-#include <vector>
-#include <mutex>
-#include <freertos/FreeRTOS.h>
-#include <freertos/task.h>
 #include <dalic/include/dali.h>
 
 
