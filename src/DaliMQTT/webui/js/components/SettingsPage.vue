@@ -6,6 +6,8 @@ interface ConfigData {
   wifi_ssid: string;
   wifi_password?: string;
   mqtt_uri: string;
+  mqtt_user?: string;
+  mqtt_pass?: string;
   mqtt_client_id: string;
   mqtt_base_topic: string;
   http_user: string;
@@ -15,6 +17,7 @@ interface ConfigData {
 const config = ref<ConfigData>({
   wifi_ssid: '',
   mqtt_uri: '',
+  mqtt_user: '',
   mqtt_client_id: '',
   mqtt_base_topic: '',
   http_user: '',
@@ -51,6 +54,9 @@ const saveConfig = async () => {
   if (!payload.http_pass) {
     delete payload.http_pass;
   }
+  if (!payload.mqtt_pass) {
+    delete payload.mqtt_pass;
+  }
 
   try {
     const response = await api.saveConfig(payload);
@@ -82,7 +88,17 @@ onMounted(loadConfig);
       <fieldset>
         <legend>MQTT Settings</legend>
         <label for="mqtt_uri">Broker URI</label>
-        <input type="text" id="mqtt_uri" v-model="config.mqtt_uri" placeholder="mqtt://user:pass@host:port" required>
+        <input type="text" id="mqtt_uri" v-model="config.mqtt_uri" placeholder="mqtt://host:port" required>
+        <div class="grid">
+          <div>
+            <label for="mqtt_user">Username</label>
+            <input type="text" id="mqtt_user" v-model="config.mqtt_user">
+          </div>
+          <div>
+            <label for="mqtt_pass">Password</label>
+            <input type="password" id="mqtt_pass" v-model="config.mqtt_pass" placeholder="Leave blank to keep unchanged">
+          </div>
+        </div>
         <label for="mqtt_cid">Client ID</label>
         <input type="text" id="mqtt_cid" v-model="config.mqtt_client_id">
         <label for="mqtt_base">Base Topic</label>

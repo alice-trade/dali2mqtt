@@ -212,6 +212,7 @@ namespace daliMQTT
         cJSON *root = cJSON_CreateObject();
         cJSON_AddStringToObject(root, "wifi_ssid", cfg.wifi_ssid.c_str());
         cJSON_AddStringToObject(root, "mqtt_uri", cfg.mqtt_uri.c_str());
+        cJSON_AddStringToObject(root, "mqtt_user", cfg.mqtt_user.c_str());
         cJSON_AddStringToObject(root, "mqtt_client_id", cfg.mqtt_client_id.c_str());
         cJSON_AddStringToObject(root, "mqtt_base_topic", cfg.mqtt_base_topic.c_str());
         cJSON_AddStringToObject(root, "http_user", cfg.http_user.c_str());
@@ -248,6 +249,8 @@ namespace daliMQTT
         JsonSetStrConfig(wifi_ssid);
         JsonSetStrConfig(wifi_password);
         JsonSetStrConfig(mqtt_uri);
+        JsonSetStrConfig(mqtt_user);
+        JsonSetStrConfig(mqtt_pass);
         JsonSetStrConfig(mqtt_client_id);
         JsonSetStrConfig(mqtt_base_topic);
         JsonSetStrConfig(http_user);

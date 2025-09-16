@@ -73,6 +73,8 @@ namespace daliMQTT
         getString(nvs_handle.get(), "wifi_ssid", config_cache.wifi_ssid, "");
         getString(nvs_handle.get(), "wifi_pass", config_cache.wifi_password, "");
         getString(nvs_handle.get(), "mqtt_uri", config_cache.mqtt_uri, "");
+        getString(nvs_handle.get(), "mqtt_user", config_cache.mqtt_user, "");
+        getString(nvs_handle.get(), "mqtt_pass", config_cache.mqtt_pass, "");
         getString(nvs_handle.get(), "mqtt_cid", config_cache.mqtt_client_id, "");
         getString(nvs_handle.get(), "mqtt_base", config_cache.mqtt_base_topic, CONFIG_DALI2MQTT_MQTT_BASE_TOPIC);
         getString(nvs_handle.get(), "http_user", config_cache.http_user, CONFIG_DALI2MQTT_WEBUI_DEFAULT_USER);
@@ -109,6 +111,8 @@ namespace daliMQTT
         SetNVS(setString, "wifi_ssid", config_cache.wifi_ssid);
         SetNVS(setString, "wifi_pass", config_cache.wifi_password);
         SetNVS(setString, "mqtt_uri", config_cache.mqtt_uri);
+        SetNVS(setString, "mqtt_user", config_cache.mqtt_user);
+        SetNVS(setString, "mqtt_pass", config_cache.mqtt_pass);
         SetNVS(setString, "mqtt_cid", config_cache.mqtt_client_id);
         SetNVS(setString, "mqtt_base", config_cache.mqtt_base_topic);
         SetNVS(setString, "http_user", config_cache.http_user);

@@ -4,7 +4,6 @@
     <mapping directory="" vcs="Git" />
     <mapping directory="$PROJECT_DIR$" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/cmake-build-debug-esp32/_deps/esp-protocols-src" vcs="Git" />
-    <mapping directory="$PROJECT_DIR$/cmake-build-debug-esp32/tests_build/_deps/esp-protocols-src" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/cmake-build-release-esp32/_deps/esp-protocols-src" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/tests/cmake-build-test/_deps/esp-protocols-src" vcs="Git" />
   </component>

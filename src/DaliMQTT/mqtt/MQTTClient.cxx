@@ -7,10 +7,16 @@ namespace daliMQTT
     static constexpr char  TAG[] = "MQTTClient";
 
 
-    void MQTTClient::init(const std::string& uri, const std::string& client_id, const std::string& availability_topic) {
+    void MQTTClient::init(const std::string& uri, const std::string& client_id, const std::string& availability_topic, const std::string& username, const std::string& password) {
         esp_mqtt_client_config_t mqtt_cfg = {};
         mqtt_cfg.broker.address.uri = uri.c_str();
         mqtt_cfg.credentials.client_id = client_id.c_str();
+        if (!username.empty()) {
+            mqtt_cfg.credentials.username = username.c_str();
+        }
+        if (!password.empty()) {
+            mqtt_cfg.credentials.authentication.password = password.c_str();
+        }
         mqtt_cfg.session.last_will.topic = availability_topic.c_str();
         mqtt_cfg.session.last_will.msg = CONFIG_DALI2MQTT_MQTT_PAYLOAD_OFFLINE;
         mqtt_cfg.session.last_will.qos = 1;

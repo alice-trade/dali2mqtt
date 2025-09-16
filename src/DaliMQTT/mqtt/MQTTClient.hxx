@@ -23,7 +23,7 @@ namespace daliMQTT
                 static MQTTClient instance;
                 return instance;
             }
-            void init(const std::string& uri, const std::string& client_id, const std::string& availability_topic);
+            void init(const std::string& uri, const std::string& client_id, const std::string& availability_topic, const std::string& username, const std::string& password);
 
             void connect();
             void disconnect();

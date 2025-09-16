@@ -14,6 +14,8 @@ namespace daliMQTT
 
         // MQTT
         std::string mqtt_uri;
+        std::string mqtt_user;
+        std::string mqtt_pass;
         std::string mqtt_client_id;
         std::string mqtt_base_topic;
 
