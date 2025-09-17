@@ -10,6 +10,7 @@ set(MODULE_DIRS
         wifi
         lifecycle
         webui/cxx
+        webui/cxx/api
         dali
         mqtt
 )
