@@ -1,7 +1,7 @@
 #include <esp_chip_info.h>
 
-#include "DaliAPI.hxx"
 #include <esp_system.h>
+#include "DaliAPI.hxx"
 #include "DaliDeviceController.hxx"
 #include "WebUI.hxx"
 #include "Wifi.hxx"
@@ -71,7 +71,7 @@ namespace daliMQTT {
         const std::string wifi_status_str = std::format("{} ({})", get_wifi_status_string(wifi.getStatus()), wifi.getIpAddress());
 
         cJSON *root = cJSON_CreateObject();
-        cJSON_AddStringToObject(root, "version", "dev_0.8.0");
+        cJSON_AddStringToObject(root, "version", "dev_0.8.2");
         cJSON_AddStringToObject(root, "chip_model", get_chip_model_name(chip_info.model));
         cJSON_AddNumberToObject(root, "chip_cores", chip_info.cores);
         cJSON_AddNumberToObject(root, "free_heap", esp_get_free_heap_size());
