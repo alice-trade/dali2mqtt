@@ -18,11 +18,11 @@ menu "DALI MQTT Bridge Settings"
             GPIO pin number used for transmitting DALI signals.
 
     config DALI2MQTT_DALI_DEFAULT_POLL_INTERVAL_MS
-        int "Default DALI Poll Interval (ms)"
-        default 1500
-        range 500 3600
+        int "Default DALI Sync Poll Interval (ms)"
+        default 600000
+        range 300000 3600000
         help
-            Default interval for polling DALI status if not found in NVS.
+            Default interval for syncronizing (polling) DALI status for all devices
 
     config DALI2MQTT_DALI_TRANSACTION_TIMEOUT_MS # unimplemented
         int "DALI Transaction Timeout (ms)"
