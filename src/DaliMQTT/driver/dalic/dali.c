@@ -4,7 +4,7 @@
 #include <esp_log.h>
 #include <driver/rmt_tx.h>
 #include <driver/rmt_rx.h>
-#include "dali_defs.h"
+#include "dali_priv_defs.h"
 
 #define DALI_ADDRESS_TYPE_SHORT_MASK        0x00
 #define DALI_ADDRESS_TYPE_GROUP_MASK        0x80

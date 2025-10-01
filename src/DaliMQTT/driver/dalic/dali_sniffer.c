@@ -3,7 +3,7 @@
 #include <driver/rmt_tx.h>
 #include <driver/rmt_rx.h>
 #include <esp_log.h>
-#include "dali_defs.h"
+#include "dali_priv_defs.h"
 static const char *TAG = "DALISniffer";
 
 static TaskHandle_t dali_sniffer_task_handle = nullptr;
