@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(DaliMQTTTestsESP C CXX)
+project(DaliMQTTTests LANGUAGES C CXX)
 
 include(../scripts/common.cmake)
 include(../esp32/idf_buildup.cmake)
