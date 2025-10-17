@@ -47,8 +47,6 @@ if(BUILD_TESTS)
             TEST_COMMAND ""
             INSTALL_COMMAND ""
 
-            BUILD_ALWAYS 1
-
             USES_TERMINAL_CONFIGURE 1
             USES_TERMINAL_BUILD 1
     )

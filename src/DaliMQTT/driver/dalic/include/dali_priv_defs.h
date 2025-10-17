@@ -2,6 +2,7 @@
 #define DALI_INTERNAL_H
 
 #include <driver/rmt_tx.h>
+#include <freertos/semphr.h>
 #include <driver/rmt_rx.h>
 #include "dali.h"
 
@@ -10,6 +11,7 @@ typedef enum {
     DALI_RECEIVE_PREV_BIT_ONE
 } dali_receivePrevBit_t;
 
+extern SemaphoreHandle_t bus_mutex;
 extern rmt_channel_handle_t dali_rxChannel;
 extern rmt_receive_config_t dali_rxChannelConfig;
 extern QueueHandle_t dali_rxChannelQueue;

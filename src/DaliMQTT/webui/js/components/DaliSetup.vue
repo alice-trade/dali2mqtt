@@ -24,7 +24,7 @@ const viewMode = ref<'management' | 'scenes'>('management');
 
 const createGroupMatrix = (devices: number[], assignments: GroupAssignments): GroupMatrix => {
   const matrix: GroupMatrix = {};
-  devices.forEach(addr => {
+  devices.forEach((addr: number) => {
     const groupList = assignments[String(addr)] || [];
     const boolArray = Array(16).fill(false);
     groupList.forEach(g => {
@@ -57,14 +57,13 @@ const loadData = async () => {
     const names: DeviceNames = namesRes.data;
     const groups: GroupAssignments = groupsRes.data;
 
-    sortedDevices.forEach(addr => {
+    sortedDevices.forEach((addr: number) => {
       if (!names[addr]) names[addr] = "";
       if (!groups[addr]) groups[addr] = [];
     });
 
     const matrix = createGroupMatrix(sortedDevices, groups);
 
-    // Устанавливаем текущее и "чистое" состояние
     const namesClone = JSON.parse(JSON.stringify(names));
     const matrixClone = JSON.parse(JSON.stringify(matrix));
 

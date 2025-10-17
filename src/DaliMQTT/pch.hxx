@@ -19,7 +19,7 @@
 #include <charconv>
 #include <array>
 
-// ESP-IDF C headers
+// C headers
 #ifdef __cplusplus
 extern "C" {
 #endif

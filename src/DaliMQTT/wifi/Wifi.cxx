@@ -171,17 +171,6 @@ namespace daliMQTT
             manager->startMdns();
             if(manager->onConnected) manager->onConnected();
         } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_AP_START) {
-            // Сбрасываем счетчик неудачных попыток при успешном подключении
-            const NvsHandle nvs_handle("wifi_state", NVS_READWRITE);
-             if (nvs_handle) {
-                uint8_t retry_count = 0;
-                if (nvs_get_u8(nvs_handle.get(), "retry_cnt", &retry_count) == ESP_OK && retry_count > 0) {
-                    ESP_LOGI(TAG, "WiFi connected successfully. Resetting failure counter.");
-                    nvs_set_u8(nvs_handle.get(), "retry_cnt", 0);
-                    nvs_commit(nvs_handle.get());
-                }
-            }
-
             ESP_LOGI(TAG, "AP Mode started. Starting mDNS.");
             manager->startMdns();
         } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_AP_STACONNECTED) {

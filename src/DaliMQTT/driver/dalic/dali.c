@@ -26,7 +26,7 @@ QueueHandle_t dali_rxChannelQueue;
 rmt_channel_handle_t dali_txChannel;
 rmt_tx_channel_config_t dali_txChannelConfig;
 rmt_encoder_handle_t dali_txChannelEncoder;
-static SemaphoreHandle_t bus_mutex = nullptr;
+SemaphoreHandle_t bus_mutex = nullptr;
 
 extern volatile bool is_sniffer_running;
 

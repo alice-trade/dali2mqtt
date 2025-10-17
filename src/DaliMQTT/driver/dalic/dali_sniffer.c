@@ -27,8 +27,11 @@ static void dali_sniffer_task([[maybe_unused]] void* pvParameters) {
 
     ESP_LOGI(TAG, "DALI sniffer task started.");
 
+    xSemaphoreTake(bus_mutex, portMAX_DELAY);
     ESP_ERROR_CHECK(rmt_enable(dali_rxChannel));
     ESP_ERROR_CHECK(rmt_receive(dali_rxChannel, rmt_buffer, buffer_size, &dali_rxChannelConfig));
+    xSemaphoreGive(bus_mutex);
+
 
     while (is_sniffer_running) {
         if (xQueueReceive(dali_rxChannelQueue, &rx_data, pdMS_TO_TICKS(100)) == pdPASS) {
@@ -55,7 +58,9 @@ static void dali_sniffer_task([[maybe_unused]] void* pvParameters) {
                 }
             }
 
+            xSemaphoreTake(bus_mutex, portMAX_DELAY);
             ESP_ERROR_CHECK(rmt_receive(dali_rxChannel, rmt_buffer, buffer_size, &dali_rxChannelConfig));
+            xSemaphoreGive(bus_mutex);
         }
     }
 
@@ -100,5 +105,9 @@ esp_err_t dali_sniffer_stop(void) {
         dali_sniffer_task_handle = nullptr;
     }
 
-    return rmt_disable(dali_rxChannel);
+    xSemaphoreTake(bus_mutex, portMAX_DELAY);
+    const esp_err_t err = rmt_disable(dali_rxChannel);
+    xSemaphoreGive(bus_mutex);
+
+    return err;
 }
