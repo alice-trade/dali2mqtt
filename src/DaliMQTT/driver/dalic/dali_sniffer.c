@@ -13,35 +13,34 @@ volatile bool is_sniffer_running = false;
 
 static void dali_sniffer_task([[maybe_unused]] void* pvParameters) {
     rmt_rx_done_event_data_t rx_data;
-    size_t received_symbols_size = sizeof(rmt_symbol_word_t) * 64;
-    rmt_symbol_word_t *raw_symbols = malloc(received_symbols_size);
-    if (!raw_symbols) {
-        ESP_LOGE(TAG, "Failed to allocate memory for RMT symbols");
+    
+    // The RMT receiver needs a buffer to store symbols. The driver manages this internally,
+    // but we need to provide one for the initial rmt_receive() call to "arm" the receiver.
+    // The actual received symbols will be pointed to by rx_data.received_symbols.
+    size_t buffer_size = sizeof(rmt_symbol_word_t) * 64;
+    rmt_symbol_word_t* rmt_buffer = malloc(buffer_size);
+    if (!rmt_buffer) {
+        ESP_LOGE(TAG, "Failed to allocate memory for RMT buffer");
         is_sniffer_running = false;
-        vTaskDelete(nullptr);
         return;
     }
 
     ESP_LOGI(TAG, "DALI sniffer task started.");
 
     ESP_ERROR_CHECK(rmt_enable(dali_rxChannel));
+    ESP_ERROR_CHECK(rmt_receive(dali_rxChannel, rmt_buffer, buffer_size, &dali_rxChannelConfig));
 
     while (is_sniffer_running) {
-        esp_err_t status = rmt_receive(dali_rxChannel, raw_symbols, received_symbols_size, &dali_rxChannelConfig);
-
-        if (status == ESP_OK) {
-            dali_receivePrevBit_t receive_prev_bit = DALI_RECEIVE_PREV_BIT_ONE;
+        if (xQueueReceive(dali_rxChannelQueue, &rx_data, pdMS_TO_TICKS(100)) == pdPASS) {
+            dali_receivePrevBit_t receive_prev_bit = DALI_RECEIVE_PREV_BIT_ONE; // Start bit is always a '1'
             uint16_t frame_data_16bit = 0;
             uint8_t bit_count = 0;
 
-            uint8_t* frame_ptr = (uint8_t*)&frame_data_16bit;
-
-            dali_rmt_rx_decoder(&receive_prev_bit, frame_ptr, &bit_count, rx_data.received_symbols[0].duration1, rx_data.received_symbols[0].level1);
-            for (size_t i = 1; i < rx_data.num_symbols; i++) {
+            for (size_t i = 0; i < rx_data.num_symbols; i++) {
                 if (bit_count >= 17) break;
-                dali_rmt_rx_decoder(&receive_prev_bit, frame_ptr, &bit_count, rx_data.received_symbols[i].duration0, rx_data.received_symbols[i].level0);
+                dali_rmt_rx_decoder(&receive_prev_bit, &frame_data_16bit, &bit_count, rx_data.received_symbols[i].duration0, rx_data.received_symbols[i].level0);
                 if (bit_count >= 17) break;
-                dali_rmt_rx_decoder(&receive_prev_bit, frame_ptr, &bit_count, rx_data.received_symbols[i].duration1, rx_data.received_symbols[i].level1);
+                dali_rmt_rx_decoder(&receive_prev_bit, &frame_data_16bit, &bit_count, rx_data.received_symbols[i].duration1, rx_data.received_symbols[i].level1);
             }
 
             if (bit_count == 8 || bit_count == 16) {
@@ -49,21 +48,21 @@ static void dali_sniffer_task([[maybe_unused]] void* pvParameters) {
                     .data = frame_data_16bit,
                     .is_backward_frame = (bit_count == 8)
                 };
+                ESP_LOGD(TAG, "Decoded %s frame, bits: %d, data: 0x%04X",
+                         frame.is_backward_frame ? "Backward" : "Forward", bit_count, frame.data);
                 if (dali_output_queue) {
                     xQueueSend(dali_output_queue, &frame, 0);
                 }
             }
-        } else if (status == ESP_ERR_TIMEOUT) {
-            continue;
-        } else {
-            ESP_LOGW(TAG, "RMT receive error: %s", esp_err_to_name(status));
+
+            ESP_ERROR_CHECK(rmt_receive(dali_rxChannel, rmt_buffer, buffer_size, &dali_rxChannelConfig));
         }
     }
 
-    free(raw_symbols);
+    free(rmt_buffer);
     ESP_LOGI(TAG, "DALI sniffer task stopped.");
     dali_sniffer_task_handle = nullptr;
-    vTaskDelete(nullptr);
+    vTaskDelete(NULL);
 }
 
 

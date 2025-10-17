@@ -17,6 +17,6 @@ extern rmt_channel_handle_t dali_txChannel;
 extern rmt_tx_channel_config_t dali_txChannelConfig;
 extern rmt_encoder_handle_t dali_txChannelEncoder;
 
-esp_err_t dali_rmt_rx_decoder(dali_receivePrevBit_t* receive_prev_bit, uint8_t* frame, uint8_t* bit_index, uint16_t duration, uint16_t level);
+esp_err_t dali_rmt_rx_decoder(dali_receivePrevBit_t* receive_prev_bit, uint16_t* frame, uint8_t* bit_index, uint16_t duration, uint16_t level);
 
 #endif // DALI_INTERNAL_H

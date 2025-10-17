@@ -159,6 +159,14 @@ namespace daliMQTT
         } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
             ip_event_got_ip_t const* event = static_cast<ip_event_got_ip_t*>(event_data);
             ESP_LOGI(TAG, "GOT_IP: " IPSTR, IP2STR(&event->ip_info.ip));
+
+            const NvsHandle nvs_handle("wifi_state", NVS_READWRITE);
+            if (nvs_handle) {
+                ESP_LOGI(TAG, "WiFi connected successfully. Resetting failure counter.");
+                nvs_set_u8(nvs_handle.get(), "retry_cnt", 0);
+                nvs_commit(nvs_handle.get());
+            }
+
             manager->status = Status::CONNECTED;
             manager->startMdns();
             if(manager->onConnected) manager->onConnected();

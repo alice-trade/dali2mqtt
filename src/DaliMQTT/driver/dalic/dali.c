@@ -51,7 +51,7 @@ static const rmt_symbol_word_t DALI_SYMBOL_STOP = {
     .duration1 = DALI_USTORMT(DALI_ONE_TE) * 2,
 };
 
-esp_err_t dali_rmt_rx_decoder(dali_receivePrevBit_t* receive_prev_bit, uint8_t* backward_frame, uint8_t* backward_frame_index, uint16_t duration, uint16_t level) {
+esp_err_t dali_rmt_rx_decoder(dali_receivePrevBit_t* receive_prev_bit, uint16_t* frame, uint8_t* bit_index, uint16_t duration, uint16_t level) {
     if ((duration > DALI_USTORMT(DALI_THRESHOLD_1TE_LOW))
             && (duration < DALI_USTORMT(DALI_THRESHOLD_1TE_HIGH))) {
         // short break (1 Te)
@@ -63,9 +63,9 @@ esp_err_t dali_rmt_rx_decoder(dali_receivePrevBit_t* receive_prev_bit, uint8_t* 
         } else if (((*receive_prev_bit) == DALI_RECEIVE_PREV_BIT_ONE)
                 && (level == 1)) {
             // this is a repeated one
-            (*backward_frame) <<= 1;
-            (*backward_frame) |= 1;
-            (*backward_frame_index)++;
+            (*frame) <<= 1;
+            (*frame) |= 1;
+            (*bit_index)++;
             (*receive_prev_bit) = DALI_RECEIVE_PREV_BIT_ONE;
         } else if (((*receive_prev_bit) == DALI_RECEIVE_PREV_BIT_ZERO)
                 && (level == 1)) {
@@ -75,8 +75,8 @@ esp_err_t dali_rmt_rx_decoder(dali_receivePrevBit_t* receive_prev_bit, uint8_t* 
         } else if (((*receive_prev_bit) == DALI_RECEIVE_PREV_BIT_ZERO)
                 && (level == 0)) {
             // this is a repeated zero
-            (*backward_frame) <<= 1;
-            (*backward_frame_index)++;
+            (*frame) <<= 1;
+            (*bit_index)++;
             (*receive_prev_bit) = DALI_RECEIVE_PREV_BIT_ZERO;
         }
     } else if ((duration > DALI_USTORMT(DALI_THRESHOLD_2TE_LOW))
@@ -84,15 +84,15 @@ esp_err_t dali_rmt_rx_decoder(dali_receivePrevBit_t* receive_prev_bit, uint8_t* 
         if (((*receive_prev_bit) == DALI_RECEIVE_PREV_BIT_ONE)
                 && (level == 0)) {
             // this is a zero following a one
-            (*backward_frame) <<= 1;
-            (*backward_frame_index)++;
+            (*frame) <<= 1;
+            (*bit_index)++;
             (*receive_prev_bit) = DALI_RECEIVE_PREV_BIT_ZERO;
         } else if (((*receive_prev_bit) == DALI_RECEIVE_PREV_BIT_ZERO)
                 && (level == 1)) {
-            // this is a one following a zero
-            (*backward_frame) <<= 1;
-            (*backward_frame) |= 1;
-            (*backward_frame_index)++;
+            // this is a one following a zero.
+            (*frame) <<= 1;
+            (*frame) |= 1;
+            (*bit_index)++;
             (*receive_prev_bit) = DALI_RECEIVE_PREV_BIT_ONE;
         } else {
             // illegal state
@@ -233,7 +233,7 @@ esp_err_t dali_transaction(dali_addressType_t address_type, uint8_t address, boo
     uint8_t tx_buffer[2];
     rmt_rx_done_event_data_t rx_data;
     rmt_symbol_word_t raw_symbols[64];
-    uint8_t backward_frame;
+    uint16_t backward_frame;
     uint8_t backward_frame_index;
     dali_receivePrevBit_t receive_prev_bit;
     rmt_transmit_config_t transmit_config;
@@ -308,7 +308,7 @@ esp_err_t dali_transaction(dali_addressType_t address_type, uint8_t address, boo
                     break;
                 }
             }
-            (*result) = backward_frame;
+            (*result) = (uint8_t)backward_frame;
         } else {
             // Waiting for the backward frame timed out -> no reply was received
             (*result) = DALI_RESULT_NO_REPLY;
