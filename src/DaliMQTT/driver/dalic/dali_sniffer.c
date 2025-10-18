@@ -13,24 +13,26 @@ volatile bool is_sniffer_running = false;
 
 static void dali_sniffer_task([[maybe_unused]] void* pvParameters) {
     rmt_rx_done_event_data_t rx_data;
-    
-    // The RMT receiver needs a buffer to store symbols. The driver manages this internally,
-    // but we need to provide one for the initial rmt_receive() call to "arm" the receiver.
-    // The actual received symbols will be pointed to by rx_data.received_symbols.
+
     size_t buffer_size = sizeof(rmt_symbol_word_t) * 64;
     rmt_symbol_word_t* rmt_buffer = malloc(buffer_size);
     if (!rmt_buffer) {
         ESP_LOGE(TAG, "Failed to allocate memory for RMT buffer");
         is_sniffer_running = false;
+        dali_sniffer_task_handle = nullptr;
+        vTaskDelete(nullptr);
         return;
     }
 
     ESP_LOGI(TAG, "DALI sniffer task started.");
 
     xSemaphoreTake(bus_mutex, portMAX_DELAY);
-    ESP_ERROR_CHECK(rmt_enable(dali_rxChannel));
-    ESP_ERROR_CHECK(rmt_receive(dali_rxChannel, rmt_buffer, buffer_size, &dali_rxChannelConfig));
+    esp_err_t err = rmt_enable(dali_rxChannel);
+    if (err == ESP_OK) {
+        err = rmt_receive(dali_rxChannel, rmt_buffer, buffer_size, &dali_rxChannelConfig);
+    }
     xSemaphoreGive(bus_mutex);
+    ESP_ERROR_CHECK(err);
 
 
     while (is_sniffer_running) {
@@ -58,16 +60,17 @@ static void dali_sniffer_task([[maybe_unused]] void* pvParameters) {
                 }
             }
 
-            xSemaphoreTake(bus_mutex, portMAX_DELAY);
-            ESP_ERROR_CHECK(rmt_receive(dali_rxChannel, rmt_buffer, buffer_size, &dali_rxChannelConfig));
-            xSemaphoreGive(bus_mutex);
+            if (rmt_receive(dali_rxChannel, rmt_buffer, buffer_size, &dali_rxChannelConfig) != ESP_OK) {
+                ESP_LOGD(TAG, "Failed to re-arm RMT receiver, channel might be busy.");
+                vTaskDelay(pdMS_TO_TICKS(10));
+            }
         }
     }
 
     free(rmt_buffer);
     ESP_LOGI(TAG, "DALI sniffer task stopped.");
     dali_sniffer_task_handle = nullptr;
-    vTaskDelete(NULL);
+    vTaskDelete(nullptr);
 }
 
 
@@ -86,6 +89,7 @@ esp_err_t dali_sniffer_start(QueueHandle_t output_queue) {
     if (xTaskCreate(dali_sniffer_task, "dali_sniffer", 4096, NULL, 10, &dali_sniffer_task_handle) != pdPASS) {
         ESP_LOGE(TAG, "Failed to create sniffer task.");
         is_sniffer_running = false;
+        dali_sniffer_task_handle = nullptr;
         return ESP_FAIL;
     }
 
@@ -96,18 +100,17 @@ esp_err_t dali_sniffer_stop(void) {
     if (!is_sniffer_running) {
         return ESP_OK;
     }
+
     is_sniffer_running = false;
 
-    vTaskDelay(pdMS_TO_TICKS(50));
-
-    if (dali_sniffer_task_handle) {
-        vTaskDelete(dali_sniffer_task_handle);
-        dali_sniffer_task_handle = nullptr;
+    while (dali_sniffer_task_handle != nullptr) {
+        vTaskDelay(pdMS_TO_TICKS(20));
     }
 
     xSemaphoreTake(bus_mutex, portMAX_DELAY);
     const esp_err_t err = rmt_disable(dali_rxChannel);
     xSemaphoreGive(bus_mutex);
 
+    ESP_LOGI(TAG, "Sniffer fully stopped and channel disabled.");
     return err;
 }
