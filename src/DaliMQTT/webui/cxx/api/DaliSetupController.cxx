@@ -124,13 +124,29 @@ namespace daliMQTT {
                 httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON: root must be an object");
                 return ESP_FAIL;
             }
+
+            const cJSON* item = nullptr;
+            cJSON_ArrayForEach(item, root) {
+                if (!cJSON_IsString(item)) {
+                    cJSON_Delete(root);
+                    httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON: all device names must be strings.");
+                    return ESP_FAIL;
+                }
+            }
+
+            char* clean_json_string = cJSON_PrintUnformatted(root);
             cJSON_Delete(root);
+            if (!clean_json_string) {
+                httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to serialize JSON.");
+                return ESP_FAIL;
+            }
 
             auto& configManager = ConfigManager::getInstance();
             auto current_cfg = configManager.getConfig();
-            current_cfg.dali_device_identificators = std::string(buf.data(), ret);
+            current_cfg.dali_device_identificators = clean_json_string;
             configManager.setConfig(current_cfg);
             configManager.save();
+            free(clean_json_string);
 
             httpd_resp_send(req, R"({"status":"ok", "message":"Device names saved."})", -1);
             return ESP_OK;

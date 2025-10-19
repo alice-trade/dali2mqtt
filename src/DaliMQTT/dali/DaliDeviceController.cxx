@@ -48,31 +48,33 @@ namespace daliMQTT
     }
 
 
-    static void processGroupCommand(uint8_t group_addr, std::function<void(uint8_t)> const& action) {
+    static void processGroupCommand(uint8_t group_addr, std::optional<uint8_t> known_level) {
         auto& dali = DaliAPI::getInstance();
         auto const& group_manager = DaliGroupManagement::getInstance();
         auto all_assignments = group_manager.getAllAssignments();
 
         for (const auto& [device_addr, groups] : all_assignments) {
             if (groups.test(group_addr)) {
-                action(device_addr);
-                if (auto level_opt = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, device_addr, DALI_COMMAND_QUERY_ACTUAL_LEVEL); level_opt) {
-                    publishState(device_addr, level_opt.value());
+                if (known_level.has_value()) {
+                    publishState(device_addr, *known_level);
+                } else if (auto level_opt = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, device_addr, DALI_COMMAND_QUERY_ACTUAL_LEVEL); level_opt) {
+                     publishState(device_addr, level_opt.value());
                 }
             }
         }
     }
 
-    static void processBroadcastCommand(std::function<void(uint8_t)> const& action) {
+    static void processBroadcastCommand(std::optional<uint8_t> known_level) {
         auto& dali = DaliAPI::getInstance();
         auto const& controller = DaliDeviceController::getInstance();
         auto discovered_devices = controller.getDiscoveredDevices();
 
         for (uint8_t i = 0; i < 64; ++i) {
             if (discovered_devices.test(i)) {
-                action(i);
-                if (auto level_opt = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, i, DALI_COMMAND_QUERY_ACTUAL_LEVEL); level_opt) {
-                    publishState(i, level_opt.value());
+                if (known_level.has_value()) {
+                    publishState(i, *known_level);
+                } else if (auto level_opt = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, i, DALI_COMMAND_QUERY_ACTUAL_LEVEL); level_opt) {
+                     publishState(i, level_opt.value());
                 }
             }
         }
@@ -97,11 +99,11 @@ namespace daliMQTT
             // Групповой адрес
             else if ((addr_byte & 0xE0) == 0x80) {
                 uint8_t group_addr = (addr_byte >> 1) & 0x0F;
-                processGroupCommand(group_addr, [](uint8_t){ /* действие уже произошло */ });
+                processGroupCommand(group_addr, level);
             }
             // Broadcast
             else if (addr_byte == 0xFE) {
-                processBroadcastCommand([](uint8_t){ /* действие уже произошло */ });
+                processBroadcastCommand(level);
             }
             return;
         }
@@ -110,13 +112,13 @@ namespace daliMQTT
             case DALI_COMMAND_OFF:
             case DALI_COMMAND_RECALL_MIN_LEVEL:
             case DALI_COMMAND_STEP_DOWN_AND_OFF: {
-                uint8_t level = 0;
+                std::optional<uint8_t> known_level = (cmd_byte == DALI_COMMAND_OFF) ? std::optional(0) : std::nullopt;
                 if ((addr_byte & 0x80) == 0) {
-                    publishState((addr_byte >> 1) & 0x3F, level);
+                    publishState((addr_byte >> 1) & 0x3F, 0);
                 } else if ((addr_byte & 0xE0) == 0x80) {
-                    processGroupCommand((addr_byte >> 1) & 0x0F, [](uint8_t){});
+                    processGroupCommand((addr_byte >> 1) & 0x0F, known_level);
                 } else if ((addr_byte & 0xFE) == 0xFE) {
-                     processBroadcastCommand([](uint8_t){});
+                     processBroadcastCommand(known_level);
                 }
                 break;
             }
@@ -127,10 +129,6 @@ namespace daliMQTT
                     if (auto level_opt = DaliAPI::getInstance().sendQuery(DALI_ADDRESS_TYPE_SHORT, short_addr, DALI_COMMAND_QUERY_ACTUAL_LEVEL); level_opt) {
                         publishState(short_addr, level_opt.value());
                     }
-                } else if ((addr_byte & 0xE0) == 0x80) {
-                    processGroupCommand((addr_byte >> 1) & 0x0F, [](uint8_t){});
-                } else if ((addr_byte & 0xFE) == 0xFE) {
-                     processBroadcastCommand([](uint8_t){});
                 }
                 break;
             }

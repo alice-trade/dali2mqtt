@@ -226,6 +226,8 @@ esp_err_t dali_transaction(dali_addressType_t address_type, uint8_t address, boo
     if (xSemaphoreTake(bus_mutex, pdMS_TO_TICKS(200)) != pdTRUE) {
         return ESP_ERR_TIMEOUT;
     }
+    esp_err_t ret = ESP_OK;
+
     if (is_sniffer_running) {
         rmt_disable(dali_rxChannel);
     }
@@ -274,17 +276,21 @@ esp_err_t dali_transaction(dali_addressType_t address_type, uint8_t address, boo
     transmit_config = (rmt_transmit_config_t) {
         .loop_count = 0
     };
-    CHECK_FOR_ERROR(rmt_transmit(dali_txChannel, dali_txChannelEncoder, tx_buffer, 2, &transmit_config));
-    CHECK_FOR_ERROR(rmt_tx_wait_all_done(dali_txChannel, tx_timeout_ms));
+    ret = rmt_transmit(dali_txChannel, dali_txChannelEncoder, tx_buffer, 2, &transmit_config);
+    if (ret != ESP_OK) goto cleanup;
+
+    ret = rmt_tx_wait_all_done(dali_txChannel, tx_timeout_ms);
+    if (ret != ESP_OK) goto cleanup;
 
     // Some commands need to be repeated within 100 ms and this is done here
     if (send_twice) {
         vTaskDelay(pdMS_TO_TICKS(DALI_COMMAND_REPEAT_TIME_MS));
-        CHECK_FOR_ERROR(rmt_transmit(dali_txChannel, dali_txChannelEncoder, tx_buffer, 2, &transmit_config));
-        CHECK_FOR_ERROR(rmt_tx_wait_all_done(dali_txChannel, tx_timeout_ms));
-    }
+        ret = rmt_transmit(dali_txChannel, dali_txChannelEncoder, tx_buffer, 2, &transmit_config);
+        if (ret != ESP_OK) goto cleanup;
 
-    esp_err_t ret = ESP_OK;
+        ret = rmt_tx_wait_all_done(dali_txChannel, tx_timeout_ms);
+        if (ret != ESP_OK) goto cleanup;
+    }
 
     // If no result is expected, return to caller after a wait time
     if (result == NULL) {
@@ -297,13 +303,17 @@ esp_err_t dali_transaction(dali_addressType_t address_type, uint8_t address, boo
             receive_prev_bit = DALI_RECEIVE_PREV_BIT_ONE;
             backward_frame = 0;
             backward_frame_index = 0;
-            CHECK_FOR_ERROR(dali_rmt_rx_decoder(&receive_prev_bit, &backward_frame, &backward_frame_index, rx_data.received_symbols[0].duration1, rx_data.received_symbols[0].level1));
+            ret = dali_rmt_rx_decoder(&receive_prev_bit, &backward_frame, &backward_frame_index, rx_data.received_symbols[0].duration1, rx_data.received_symbols[0].level1);
+            if (ret != ESP_OK) goto cleanup_rx;
+
             for (size_t i = 1; i < rx_data.num_symbols; i++) {
-                CHECK_FOR_ERROR(dali_rmt_rx_decoder(&receive_prev_bit, &backward_frame, &backward_frame_index, rx_data.received_symbols[i].duration0, rx_data.received_symbols[i].level0));
+                ret = dali_rmt_rx_decoder(&receive_prev_bit, &backward_frame, &backward_frame_index, rx_data.received_symbols[i].duration0, rx_data.received_symbols[i].level0);
+                if (ret != ESP_OK) goto cleanup_rx;
                 if (backward_frame_index == 8) {
                     break;
                 }
-                CHECK_FOR_ERROR(dali_rmt_rx_decoder(&receive_prev_bit, &backward_frame, &backward_frame_index, rx_data.received_symbols[i].duration1, rx_data.received_symbols[i].level1));
+                ret = dali_rmt_rx_decoder(&receive_prev_bit, &backward_frame, &backward_frame_index, rx_data.received_symbols[i].duration1, rx_data.received_symbols[i].level1);
+                if (ret != ESP_OK) goto cleanup_rx;
                 if (backward_frame_index == 8) {
                     break;
                 }
@@ -313,14 +323,14 @@ esp_err_t dali_transaction(dali_addressType_t address_type, uint8_t address, boo
             // Waiting for the backward frame timed out -> no reply was received
             (*result) = DALI_RESULT_NO_REPLY;
         }
-
+cleanup_rx:
         rmt_disable(dali_rxChannel);
     }
 
+cleanup:
     if (is_sniffer_running) {
         rmt_enable(dali_rxChannel);
     }
-
     xSemaphoreGive(bus_mutex);
 
     return ret;

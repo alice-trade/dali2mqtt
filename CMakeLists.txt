@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 project(
         daliMQTT
-        VERSION 0.9
+        VERSION 0.9.2
         DESCRIPTION "DALI-to-MQTT bridge for ESP platform"
         LANGUAGES C CXX)
 
