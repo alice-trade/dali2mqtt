@@ -25,7 +25,16 @@ namespace daliMQTT
 
         cJSON* device_item = nullptr;
         cJSON_ArrayForEach(device_item, root) {
-            uint8_t short_address = std::stoi(device_item->string);
+            char* endptr;
+            long addr_val = strtol(device_item->string, &endptr, 10);
+
+            if (endptr == device_item->string || *endptr != '\0' || addr_val < 0 || addr_val > 63) {
+                ESP_LOGW(TAG, "Skipping invalid key '%s' in DALI group assignments JSON.", device_item->string);
+                continue;
+            }
+            uint8_t short_address = static_cast<uint8_t>(addr_val);
+
+
             std::bitset<16> groups;
             if (cJSON_IsArray(device_item)) {
                 cJSON* group_item = nullptr;
@@ -60,14 +69,9 @@ namespace daliMQTT
         char* json_string = cJSON_PrintUnformatted(root);
         cJSON_Delete(root);
 
-        auto& config_manager = ConfigManager::getInstance();
-        auto config = config_manager.getConfig();
-        config.dali_group_assignments = json_string;
-        config_manager.setConfig(config);
-
+        const esp_err_t err = ConfigManager::getInstance().saveDaliGroupAssignments(json_string);
         free(json_string);
-
-        return config_manager.save();
+        return err;
     }
 
     GroupAssignments DaliGroupManagement::getAllAssignments() const {

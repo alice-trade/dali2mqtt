@@ -223,14 +223,6 @@ esp_err_t dali_transaction(dali_addressType_t address_type, uint8_t address, boo
     if ((address_type == DALI_ADDRESS_TYPE_GROUP) && (address > 15)) {
         return ESP_ERR_INVALID_ARG;
     }
-    if (xSemaphoreTake(bus_mutex, pdMS_TO_TICKS(200)) != pdTRUE) {
-        return ESP_ERR_TIMEOUT;
-    }
-    esp_err_t ret = ESP_OK;
-
-    if (is_sniffer_running) {
-        rmt_disable(dali_rxChannel);
-    }
     uint8_t address_;
     uint8_t tx_buffer[2];
     rmt_rx_done_event_data_t rx_data;
@@ -239,6 +231,15 @@ esp_err_t dali_transaction(dali_addressType_t address_type, uint8_t address, boo
     uint8_t backward_frame_index;
     dali_receivePrevBit_t receive_prev_bit;
     rmt_transmit_config_t transmit_config;
+
+    if (xSemaphoreTake(bus_mutex, pdMS_TO_TICKS(200)) != pdTRUE) {
+        return ESP_ERR_TIMEOUT;
+    }
+    esp_err_t ret = ESP_OK;
+
+    if (is_sniffer_running) {
+        rmt_disable(dali_rxChannel);
+    }
 
     // Construct DALI address
     // General format is YAAA AAAS where

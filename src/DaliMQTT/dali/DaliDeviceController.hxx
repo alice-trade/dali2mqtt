@@ -30,7 +30,7 @@ namespace daliMQTT
         DaliDeviceController() = default;
 
         void loadDeviceMask();
-        void saveDeviceMask();
+        void saveDeviceMask() const;
         void processDaliFrame(const dali_frame_t& frame);
 
         [[noreturn]] static void daliEventHandlerTask(void* pvParameters);

@@ -8,7 +8,7 @@
 #include "MQTTClient.hxx"
 
 namespace daliMQTT {
-    static constexpr char  TAG[] = "WebUI::Info";
+    static constexpr char  TAG[] = "WebUIInfo";
 
  // --- Helpers for API Info ---
     static const char* get_chip_model_name(esp_chip_model_t model) {

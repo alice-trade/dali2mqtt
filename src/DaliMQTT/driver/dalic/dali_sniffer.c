@@ -86,7 +86,7 @@ esp_err_t dali_sniffer_start(QueueHandle_t output_queue) {
     dali_output_queue = output_queue;
     is_sniffer_running = true;
 
-    if (xTaskCreate(dali_sniffer_task, "dali_sniffer", 4096, NULL, 10, &dali_sniffer_task_handle) != pdPASS) {
+    if (xTaskCreate(dali_sniffer_task, "dali_sniffer", 4096, nullptr, 10, &dali_sniffer_task_handle) != pdPASS) {
         ESP_LOGE(TAG, "Failed to create sniffer task.");
         is_sniffer_running = false;
         dali_sniffer_task_handle = nullptr;

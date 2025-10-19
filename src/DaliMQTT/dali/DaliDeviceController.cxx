@@ -67,7 +67,7 @@ namespace daliMQTT
     static void processBroadcastCommand(std::optional<uint8_t> known_level) {
         auto& dali = DaliAPI::getInstance();
         auto const& controller = DaliDeviceController::getInstance();
-        auto discovered_devices = controller.getDiscoveredDevices();
+        const auto discovered_devices = controller.getDiscoveredDevices();
 
         for (uint8_t i = 0; i < 64; ++i) {
             if (discovered_devices.test(i)) {
@@ -254,12 +254,10 @@ namespace daliMQTT
         m_discovered_devices = std::bitset<64>(config.dali_devices_mask);
     }
 
-    void DaliDeviceController::saveDeviceMask() {
+    void DaliDeviceController::saveDeviceMask() const
+    {
         auto& config_manager = ConfigManager::getInstance();
-        auto config = config_manager.getConfig();
-        config.dali_devices_mask = m_discovered_devices.to_ullong();
-        config_manager.setConfig(config);
-        config_manager.save();
+        config_manager.saveDaliDeviceMask(m_discovered_devices.to_ullong());
         ESP_LOGI(TAG, "Saved DALI device mask to NVS.");
     }
 }// daliMQTT

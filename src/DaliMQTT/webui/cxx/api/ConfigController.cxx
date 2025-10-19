@@ -5,7 +5,7 @@
 
 
 namespace daliMQTT {
-    static constexpr char  TAG[] = "WebUI::Config";
+    static constexpr char  TAG[] = "WebUIConfig";
     esp_err_t WebUI::api::SetConfigHandler(httpd_req_t *req) {
             if (checkAuth(req) != ESP_OK) return ESP_FAIL;
 
@@ -46,14 +46,11 @@ namespace daliMQTT {
                 return ESP_FAIL;
             }
 
-            ConfigManager::getInstance().setConfig(current_cfg);
-
-            if (esp_err_t save_err = ConfigManager::getInstance().save(); save_err != ESP_OK) {
+            if (esp_err_t save_err = ConfigManager::getInstance().saveMainConfig(current_cfg); save_err != ESP_OK) {
                 ESP_LOGE(TAG, "Failed to save configuration to NVS! Error: %s (%d)", esp_err_to_name(save_err), save_err);
                 httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to save settings to flash memory.");
                 return ESP_FAIL;
             }
-
             httpd_resp_send(req, R"({"status":"ok", "message":"Settings saved. Restarting..."})", HTTPD_RESP_USE_STRLEN);
 
             ESP_LOGI(TAG, "Configuration saved via WebUI. Restarting in 3 seconds...");

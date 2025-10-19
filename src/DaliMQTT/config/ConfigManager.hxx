@@ -45,6 +45,11 @@ namespace daliMQTT
             // Загрузка конфигурации из NVS
             esp_err_t load();
 
+            // Гранулярные методы сохранения
+            esp_err_t saveMainConfig(const AppConfig& new_config);
+            esp_err_t saveDaliDeviceMask(uint64_t mask);
+            esp_err_t saveDaliDeviceIdentificators(const std::string& identificators);
+            esp_err_t saveDaliGroupAssignments(const std::string& assignments);
             // Сохранение конфигурации в NVS
             esp_err_t save();
 
@@ -60,6 +65,8 @@ namespace daliMQTT
         private:
             ConfigManager() = default;
             esp_err_t initSpiffs();
+            esp_err_t ensureConfiguredAndCommit(nvs_handle_t handle);
+
             static esp_err_t getString(nvs_handle_t handle, const char* key, std::string& out_value, const char* default_value);
             static esp_err_t getU32(nvs_handle_t handle, const char* key, uint32_t& out_value, uint32_t default_value);
             static esp_err_t getU64(nvs_handle_t handle, const char* key, uint64_t& out_value, uint64_t default_value);

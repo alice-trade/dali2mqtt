@@ -10,7 +10,7 @@ namespace daliMQTT {
     enum class DaliTaskStatus { IDLE, SCANNING, INITIALIZING };
     static std::atomic<DaliTaskStatus> g_dali_task_status = DaliTaskStatus::IDLE;
 
-    static constexpr char  TAG[] = "WebUI::Dali";
+    static constexpr char  TAG[] = "WebUIDali";
 
     static void dali_scan_task(void*) {
         ESP_LOGI(TAG, "Starting background DALI scan...");
@@ -92,7 +92,7 @@ namespace daliMQTT {
 
         esp_err_t WebUI::api::DaliGetStatusHandler(httpd_req_t *req) {
             const char* status_str = (g_dali_task_status == DaliTaskStatus::IDLE) ? "idle" : ((g_dali_task_status == DaliTaskStatus::SCANNING) ? "scanning" : "initializing");
-            std::string response = std::format(R"({{"status":"{}"}})", status_str);
+            const std::string response = std::format(R"({{"status":"{}"}})", status_str);
             httpd_resp_set_type(req, "application/json");
             httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
             return ESP_OK;
@@ -141,11 +141,7 @@ namespace daliMQTT {
                 return ESP_FAIL;
             }
 
-            auto& configManager = ConfigManager::getInstance();
-            auto current_cfg = configManager.getConfig();
-            current_cfg.dali_device_identificators = clean_json_string;
-            configManager.setConfig(current_cfg);
-            configManager.save();
+            ConfigManager::getInstance().saveDaliDeviceIdentificators(clean_json_string);
             free(clean_json_string);
 
             httpd_resp_send(req, R"({"status":"ok", "message":"Device names saved."})", -1);
