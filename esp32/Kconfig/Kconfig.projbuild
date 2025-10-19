@@ -24,14 +24,14 @@ menu "DALI MQTT Bridge Settings"
         help
             Default interval for syncronizing (polling) DALI status for all devices
 
-    config DALI2MQTT_DALI_TRANSACTION_TIMEOUT_MS # unimplemented
+    config DALI2MQTT_DALI_TRANSACTION_TIMEOUT_MS
         int "DALI Transaction Timeout (ms)"
         default 100
         range 50 1000
         help
             Timeout in milliseconds for waiting for a DALI backward frame.
 
-    config DALI2MQTT_DALI_INTER_FRAME_DELAY_MS # unimplemented
+    config DALI2MQTT_DALI_INTER_FRAME_DELAY_MS
         int "DALI Inter-Frame Delay (ms)"
         default 20
         range 10 100

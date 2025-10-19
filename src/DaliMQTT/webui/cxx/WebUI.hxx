@@ -28,6 +28,7 @@ namespace daliMQTT
             static esp_err_t GetInfoHandler(httpd_req_t *req);
             static esp_err_t DaliGetDevicesHandler(httpd_req_t *req);
             static esp_err_t DaliScanHandler(httpd_req_t *req);
+            static esp_err_t DaliGetStatusHandler(httpd_req_t *req);
             static esp_err_t DaliInitializeHandler(httpd_req_t *req);
             static esp_err_t DaliGetNamesHandler(httpd_req_t *req);
             static esp_err_t DaliSetNamesHandler(httpd_req_t *req);

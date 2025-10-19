@@ -172,9 +172,11 @@ namespace daliMQTT
             return ESP_OK;
         }
 
-        out_value.resize(required_size);
-        err = nvs_get_str(handle, key, out_value.data(), &required_size);
-        if(required_size > 0 && out_value.back() == '\0') out_value.pop_back();
+        std::vector<char> buf(required_size);
+        err = nvs_get_str(handle, key, buf.data(), &required_size);
+        if (err == ESP_OK) {
+            out_value.assign(buf.data(), required_size > 0 ? required_size - 1 : 0);
+        }
         return err;
     }
 

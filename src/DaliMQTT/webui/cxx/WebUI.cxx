@@ -19,7 +19,7 @@ namespace daliMQTT
 
         config.lru_purge_enable = true;
         config.uri_match_fn = httpd_uri_match_wildcard;
-        config.max_uri_handlers = 13;
+        config.max_uri_handlers = 14;
 
         ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
         if (httpd_start(&server_handle, &config) != ESP_OK) {
@@ -28,12 +28,13 @@ namespace daliMQTT
         }
 
         // Register handlers
-        const std::array<httpd_uri_t, 12> handlers = {{
+        const std::array<httpd_uri_t, 13> handlers = {{
             { .uri = "/api/config", .method = HTTP_GET,  .handler = api::GetConfigHandler, .user_ctx = this },
             { .uri = "/api/config", .method = HTTP_POST, .handler = api::SetConfigHandler, .user_ctx = this },
             { .uri = "/api/info",   .method = HTTP_GET,  .handler = api::GetInfoHandler,   .user_ctx = this },
             { .uri = "/api/dali/devices",    .method = HTTP_GET,  .handler = api::DaliGetDevicesHandler, .user_ctx = this },
             { .uri = "/api/dali/scan",       .method = HTTP_POST, .handler = api::DaliScanHandler,       .user_ctx = this },
+            { .uri = "/api/dali/status",     .method = HTTP_GET,  .handler = api::DaliGetStatusHandler,  .user_ctx = this },
             { .uri = "/api/dali/initialize", .method = HTTP_POST, .handler = api::DaliInitializeHandler, .user_ctx = this },
             { .uri = "/api/dali/names",      .method = HTTP_GET,  .handler = api::DaliGetNamesHandler,   .user_ctx = this },
             { .uri = "/api/dali/names",      .method = HTTP_POST, .handler = api::DaliSetNamesHandler,   .user_ctx = this },

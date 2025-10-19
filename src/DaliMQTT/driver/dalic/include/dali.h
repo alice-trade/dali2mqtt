@@ -5,6 +5,7 @@
 #include <soc/gpio_num.h>
 #include <freertos/task.h>
 #include <freertos/queue.h>
+#include "sdkconfig.h"
 
 #define DALI_RMT_RESOLUTION_HZ 1000000
 #define DALI_USTORMT(x) ((x) * (DALI_RMT_RESOLUTION_HZ / 1000000))
@@ -108,7 +109,7 @@ esp_err_t dali_sniffer_stop(void);
 
 
 inline void dali_wait_between_frames(void) {
-    vTaskDelay(pdMS_TO_TICKS(20));
+    vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
 }
 
 #ifdef __cplusplus

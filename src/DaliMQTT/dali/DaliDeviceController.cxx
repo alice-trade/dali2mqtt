@@ -153,7 +153,11 @@ namespace daliMQTT
             case DALI_COMMAND_GO_TO_SCENE_15: {
                 uint8_t scene_id = cmd_byte - DALI_COMMAND_GO_TO_SCENE_0;
                 ESP_LOGI(TAG, "Sniffed GO TO SCENE %d", scene_id);
-                processBroadcastCommand([](uint8_t){});
+
+                // TODO: fix scene change levels on devices
+                auto const& mqtt = MQTTClient::getInstance();
+                auto config = ConfigManager::getInstance().getConfig();
+                mqtt.publish(std::format("{}/scene/state", config.mqtt_base_topic), std::to_string(scene_id));
                 break;
             }
 

@@ -80,38 +80,61 @@ const loadData = async () => {
   }
 };
 
-const runAction = async (action: 'scan' | 'init' | 'save', asyncFn: () => Promise<any>, successMessage: string) => {
+const pollStatus = (action: 'scan' | 'init', successMessage: string) => {
+  const intervalId = setInterval(async () => {
+    try {
+      const res = await api.getDaliStatus();
+      if (res.data.status === 'idle') {
+        clearInterval(intervalId);
+        message.value = successMessage;
+        await loadData();
+        actionInProgress.value = '';
+        setTimeout(() => { if (message.value === successMessage) message.value = ''; }, 3000);
+      }
+    } catch (e) {
+      clearInterval(intervalId);
+      message.value = `Ошибка при проверке статуса: ${action}.`;
+      isError.value = true;
+      actionInProgress.value = '';
+    }
+  }, 2000);
+};
+
+const runAction = async (action: 'scan' | 'init' | 'save', asyncFn: () => Promise<any>, successMessage: string, isAsyncDali: boolean = false) => {
   actionInProgress.value = action;
   message.value = `Выполняется: ${action}...`;
   isError.value = false;
   try {
     await asyncFn();
-    message.value = successMessage;
-    if (action === 'scan' || action === 'init') {
-      await loadData();
-    }
   } catch (e) {
     message.value = `Произошла ошибка во время выполнения: ${action}.`;
     isError.value = true;
   } finally {
     actionInProgress.value = '';
     if (!isError.value) {
-      setTimeout(() => {
-        if (message.value === successMessage) message.value = '';
-      }, 3000);
+        if(isAsyncDali) {
+            actionInProgress.value = action; // Keep busy indicator on
+            pollStatus(action as 'scan' | 'init', successMessage);
+        } else {
+            message.value = successMessage;
+            actionInProgress.value = '';
+            setTimeout(() => {
+                if (message.value === successMessage) message.value = '';
+            }, 3000);
+        }
     }
   }
 };
 
 const handleScan = () => {
-  runAction('scan', api.daliScan, 'Сканирование завершено!');
+  runAction('scan', api.daliScan, 'Сканирование завершено!', true);
 };
 
 const handleInitialize = () => {
   if (!confirm('Это действие назначит новые короткие адреса неинициализированным устройствам на шине. Это необратимо. Вы уверены?')) {
     return;
   }
-  runAction('init', api.daliInitialize, 'Инициализация завершена!');
+  runAction('init', api.daliInitialize, 'Инициализация завершена!', true);
 };
 
 const handleSaveChanges = () => {

@@ -36,7 +36,7 @@ static void dali_sniffer_task([[maybe_unused]] void* pvParameters) {
 
 
     while (is_sniffer_running) {
-        if (xQueueReceive(dali_rxChannelQueue, &rx_data, pdMS_TO_TICKS(100)) == pdPASS) {
+        if (xQueueReceive(dali_rxChannelQueue, &rx_data, portMAX_DELAY) == pdPASS) {
             dali_receivePrevBit_t receive_prev_bit = DALI_RECEIVE_PREV_BIT_ONE; // Start bit is always a '1'
             uint16_t frame_data_16bit = 0;
             uint8_t bit_count = 0;

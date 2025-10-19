@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.30)
+cmake_minimum_required(VERSION 3.20)
 project(
         daliMQTT
         VERSION 0.9
@@ -6,7 +6,7 @@ project(
         LANGUAGES C CXX)
 
 include(scripts/common.cmake)
-
+set(PROJVER ${CMAKE_PROJECT_VERSION})
 
 message("daliMQTT version " ${CMAKE_PROJECT_VERSION})
 set(targets "esp32")

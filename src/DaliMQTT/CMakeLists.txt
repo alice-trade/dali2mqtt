@@ -4,6 +4,7 @@ add_library(DaliMQTT-Core STATIC)
 
 target_precompile_headers(DaliMQTT-Core PRIVATE pch.hxx)
 
+target_compile_definitions(DaliMQTT-Core PUBLIC DALIMQTT_VERSION=\"${PROJVER}\")
 
 set(MODULE_DIRS
         config

@@ -52,6 +52,9 @@ export const api = {
     async daliScan() {
         return await apiClient.post('/api/dali/scan');
     },
+    async getDaliStatus() {
+        return await apiClient.get('/api/dali/status');
+    },
     async daliInitialize() {
         return await apiClient.post('/api/dali/initialize');
     },

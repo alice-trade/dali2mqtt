@@ -1,4 +1,5 @@
 #include "DaliAPI.hxx"
+#include "sdkconfig.h"
 
 namespace daliMQTT
 {
@@ -43,14 +44,14 @@ namespace daliMQTT
         return m_dali_event_queue;
     }
     esp_err_t DaliAPI::sendCommand(dali_addressType_t addr_type, uint8_t addr, uint8_t command, bool send_twice) {
-        esp_err_t err = dali_transaction(addr_type, addr, true, command, send_twice, DALI_TX_TIMEOUT_DEFAULT_MS, nullptr);
+        esp_err_t err = dali_transaction(addr_type, addr, true, command, send_twice, CONFIG_DALI2MQTT_DALI_TRANSACTION_TIMEOUT_MS, nullptr);
         dali_wait_between_frames();
         return err;
     }
 
     std::optional<uint8_t> DaliAPI::sendQuery(dali_addressType_t addr_type, uint8_t addr, uint8_t command) {
         int result = DALI_RESULT_NO_REPLY;
-        esp_err_t err = dali_transaction(addr_type, addr, true, command, false, DALI_TX_TIMEOUT_DEFAULT_MS, &result);
+        esp_err_t err = dali_transaction(addr_type, addr, true, command, false, CONFIG_DALI2MQTT_DALI_TRANSACTION_TIMEOUT_MS, &result);
         dali_wait_between_frames();
 
         if (err == ESP_OK && result != DALI_RESULT_NO_REPLY) {

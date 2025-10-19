@@ -7,7 +7,18 @@
 
 
 namespace daliMQTT {
+    enum class DaliTaskStatus { IDLE, SCANNING, INITIALIZING };
+    static std::atomic<DaliTaskStatus> g_dali_task_status = DaliTaskStatus::IDLE;
+
     static constexpr char  TAG[] = "WebUI::Dali";
+
+    static void dali_scan_task(void*) {
+        ESP_LOGI(TAG, "Starting background DALI scan...");
+        DaliDeviceController::getInstance().performScan();
+        ESP_LOGI(TAG, "Background DALI scan finished.");
+        g_dali_task_status = DaliTaskStatus::IDLE;
+        vTaskDelete(nullptr);
+    }
     esp_err_t WebUI::api::DaliGetDevicesHandler(httpd_req_t *req) {
             if (checkAuth(req) != ESP_OK) return ESP_FAIL;
 
@@ -31,21 +42,59 @@ namespace daliMQTT {
 
         esp_err_t WebUI::api::DaliScanHandler(httpd_req_t *req) {
             if (checkAuth(req) != ESP_OK) return ESP_FAIL;
+            if (g_dali_task_status != DaliTaskStatus::IDLE) {
+                httpd_resp_set_status(req, "409 Conflict");
+                httpd_resp_send(req, "Another DALI operation is already in progress.", HTTPD_RESP_USE_STRLEN);
+                return ESP_OK;
+            }
+
+            g_dali_task_status = DaliTaskStatus::SCANNING;
+            if (xTaskCreate(dali_scan_task, "dali_scan_task", 4096, nullptr, 5, nullptr) != pdPASS) {
+                g_dali_task_status = DaliTaskStatus::IDLE;
+                httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to create scan task");
+                return ESP_FAIL;
+            }
 
             ESP_LOGI(TAG, "Triggering DALI scan from WebUI.");
-            DaliDeviceController::getInstance().performScan();
-
-            httpd_resp_send(req, R"({"status":"ok", "message":"Scan completed."})", -1);
+            httpd_resp_set_status(req, "202 Accepted");
+            httpd_resp_send(req, R"({"status":"ok", "message":"Scan initiated."})", -1);
             return ESP_OK;
+        }
+
+        static void dali_init_task(void*) {
+            ESP_LOGI(TAG, "Starting background DALI initialization...");
+            DaliDeviceController::getInstance().performFullInitialization();
+            ESP_LOGI(TAG, "Background DALI initialization finished.");
+            g_dali_task_status = DaliTaskStatus::IDLE;
+            vTaskDelete(nullptr);
         }
 
         esp_err_t WebUI::api::DaliInitializeHandler(httpd_req_t *req) {
             if (checkAuth(req) != ESP_OK) return ESP_FAIL;
+            if (g_dali_task_status != DaliTaskStatus::IDLE) { // Check if busy
+                httpd_resp_set_status(req, "409 Conflict");
+                httpd_resp_send(req, "Another DALI operation is already in progress.", HTTPD_RESP_USE_STRLEN);
+                return ESP_OK;
+            }
+
+            g_dali_task_status = DaliTaskStatus::INITIALIZING;
+            if (xTaskCreate(dali_init_task, "dali_init_task", 4096, nullptr, 5, nullptr) != pdPASS) {
+                g_dali_task_status = DaliTaskStatus::IDLE;
+                httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to create initialization task");
+                return ESP_FAIL;
+            }
 
             ESP_LOGI(TAG, "Triggering DALI initialization from WebUI.");
-            DaliDeviceController::getInstance().performFullInitialization();
+            httpd_resp_set_status(req, "202 Accepted");
+            httpd_resp_send(req, R"({"status":"ok", "message":"Initialization initiated."})", -1);
+            return ESP_OK;
+        }
 
-            httpd_resp_send(req, R"({"status":"ok", "message":"Initialization completed."})", -1);
+        esp_err_t WebUI::api::DaliGetStatusHandler(httpd_req_t *req) {
+            const char* status_str = (g_dali_task_status == DaliTaskStatus::IDLE) ? "idle" : ((g_dali_task_status == DaliTaskStatus::SCANNING) ? "scanning" : "initializing");
+            std::string response = std::format(R"({{"status":"{}"}})", status_str);
+            httpd_resp_set_type(req, "application/json");
+            httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
             return ESP_OK;
         }
 
