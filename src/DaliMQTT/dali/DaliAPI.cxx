@@ -61,6 +61,7 @@ namespace daliMQTT
     }
 
     std::bitset<64> DaliAPI::scanBus() {
+        std::lock_guard lock(bus_mutex);
         std::bitset<64> found_devices;
         ESP_LOGI(TAG, "Starting DALI bus scan...");
         for (uint8_t i = 0; i < 64; ++i) {
