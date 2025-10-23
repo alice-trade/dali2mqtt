@@ -10,6 +10,7 @@ const loggedIn = ref(false);
 const username = ref('admin');
 const password = ref('');
 const error = ref('');
+const loading = ref(false);
 const currentView = ref('settings');
 
 const handleLogin = async () => {
@@ -18,6 +19,7 @@ const handleLogin = async () => {
     error.value = 'Please enter username and password.';
     return;
   }
+  loading.value = true;
   try {
     const token = setAuth(username.value, password.value);
     await api.getInfo();
@@ -30,6 +32,8 @@ const handleLogin = async () => {
     } else {
       error.value = 'Failed to connect to the device.';
     }
+  } finally {
+    loading.value = false;
   }
 };
 
@@ -71,7 +75,7 @@ onMounted(checkLogin);
           <label for="password">Password</label>
           <input type="password" id="password" v-model="password" required>
 
-          <button type="submit">Login</button>
+          <button type="submit" :aria-busy="loading">Login</button>
         </form>
         <p v-if="error" style="color: var(--pico-color-red-500);">{{ error }}</p>
       </article>
