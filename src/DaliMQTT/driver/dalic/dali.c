@@ -231,13 +231,16 @@ esp_err_t dali_transaction(dali_addressType_t address_type, uint8_t address, boo
     uint8_t backward_frame_index;
     dali_receivePrevBit_t receive_prev_bit;
     rmt_transmit_config_t transmit_config;
+    bool sniffer_was_running = false;
 
-    if (xSemaphoreTake(bus_mutex, pdMS_TO_TICKS(200)) != pdTRUE) {
+    if (xSemaphoreTake(bus_mutex, pdMS_TO_TICKS(500)) != pdTRUE) {
+        ESP_LOGE("DALI", "Failed to acquire DALI bus mutex in transaction");
         return ESP_ERR_TIMEOUT;
     }
     esp_err_t ret = ESP_OK;
 
-    if (is_sniffer_running) {
+    sniffer_was_running = is_sniffer_running;
+    if (sniffer_was_running) {
         rmt_disable(dali_rxChannel);
     }
 
@@ -329,8 +332,9 @@ cleanup_rx:
     }
 
 cleanup:
-    if (is_sniffer_running) {
+    if (sniffer_was_running) {
         rmt_enable(dali_rxChannel);
+        rmt_receive(dali_rxChannel, raw_symbols, sizeof(raw_symbols), &dali_rxChannelConfig);
     }
     xSemaphoreGive(bus_mutex);
 

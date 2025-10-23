@@ -75,24 +75,29 @@ static void dali_sniffer_task([[maybe_unused]] void* pvParameters) {
 
 
 esp_err_t dali_sniffer_start(QueueHandle_t output_queue) {
+    if (xSemaphoreTake(bus_mutex, portMAX_DELAY) != pdTRUE) {
+        return ESP_ERR_TIMEOUT;
+    }
+
     if (is_sniffer_running) {
         ESP_LOGW(TAG, "Sniffer is already running.");
+        xSemaphoreGive(bus_mutex);
         return ESP_ERR_INVALID_STATE;
     }
     if (!output_queue) {
+        xSemaphoreGive(bus_mutex);
         return ESP_ERR_INVALID_ARG;
     }
 
     dali_output_queue = output_queue;
-    is_sniffer_running = true;
 
     if (xTaskCreate(dali_sniffer_task, "dali_sniffer", 4096, nullptr, 10, &dali_sniffer_task_handle) != pdPASS) {
         ESP_LOGE(TAG, "Failed to create sniffer task.");
-        is_sniffer_running = false;
-        dali_sniffer_task_handle = nullptr;
+        xSemaphoreGive(bus_mutex);
         return ESP_FAIL;
     }
 
+    is_sniffer_running = true;
     return ESP_OK;
 }
 
