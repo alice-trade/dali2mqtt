@@ -162,7 +162,7 @@ esp_err_t dali_init(gpio_num_t dali_rx_gpio, gpio_num_t dali_tx_gpio) {
             return ESP_ERR_NO_MEM;
         }
     }
-    CHECK_ARG(dali_rx_gpio && dali_tx_gpio);
+    CHECK_ARG(dali_rx_gpio);
     
     // Create RMT RX channel
     dali_rxChannel = NULL;
@@ -192,26 +192,7 @@ esp_err_t dali_init(gpio_num_t dali_rx_gpio, gpio_num_t dali_tx_gpio) {
     };
 
     dali_txChannel = NULL;
-    dali_txChannelConfig = (rmt_tx_channel_config_t) {
-        .clk_src = RMT_CLK_SRC_REF_TICK, // select source clock
-        .gpio_num = dali_tx_gpio,
-        .mem_block_symbols = 64,
-        .resolution_hz = DALI_RMT_RESOLUTION_HZ,
-        .trans_queue_depth = 3, // set the number of transactions that can be pending in the background
-        .flags.invert_out = true,
-    };
-    CHECK_FOR_ERROR(rmt_new_tx_channel(&dali_txChannelConfig, &dali_txChannel));
-
-    // Create simple callback-based encoder
-    dali_txChannelEncoder = NULL;
-    const rmt_simple_encoder_config_t simple_encoder_cfg = {
-        .callback = dali_rmt_tx_encoder_cb
-        //Note we don't set min_chunk_size here as the default of 64 is good enough.
-    };
-    CHECK_FOR_ERROR(rmt_new_simple_encoder(&simple_encoder_cfg, &dali_txChannelEncoder));
-
-    // Enable TX channel
-    CHECK_FOR_ERROR(rmt_enable(dali_txChannel));
+    (void)dali_tx_gpio;
 
     return ESP_OK;
 }

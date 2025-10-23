@@ -30,7 +30,6 @@ namespace daliMQTT
         if (dali_api.isInitialized()) {
             dali_api.startSniffer();
             xTaskCreate(daliEventHandlerTask, "dali_event_handler", 4096, this, 5, &m_event_handler_task);
-            xTaskCreate(daliSyncTask, "dali_sync", 4096, this, 4, &m_sync_task_handle);
             ESP_LOGI(TAG, "DALI monitoring and sync tasks started.");
         } else {
             ESP_LOGE(TAG, "Cannot start DALI tasks: DaliAPI not initialized.");
