@@ -5,6 +5,7 @@
 #include <driver/rmt_tx.h>
 #include <driver/rmt_rx.h>
 #include "dali_priv_defs.h"
+#include "dali_debug.h"
 
 #define DALI_ADDRESS_TYPE_SHORT_MASK        0x00
 #define DALI_ADDRESS_TYPE_GROUP_MASK        0x80
@@ -23,6 +24,7 @@
 rmt_channel_handle_t dali_rxChannel;
 rmt_receive_config_t dali_rxChannelConfig;
 QueueHandle_t dali_rxChannelQueue;
+static rmt_symbol_word_t dali_rx_buffer[64];
 rmt_channel_handle_t dali_txChannel;
 rmt_tx_channel_config_t dali_txChannelConfig;
 rmt_encoder_handle_t dali_txChannelEncoder;
@@ -150,7 +152,6 @@ static size_t dali_rmt_tx_encoder_cb(const void *data, size_t data_size,
 static bool dali_rmt_rx_done_cb(rmt_channel_handle_t channel, const rmt_rx_done_event_data_t *edata, void *user_data) {
     BaseType_t high_task_wakeup = pdFALSE;
     QueueHandle_t dali_rxChannelQueue = (QueueHandle_t)user_data;
-    // send the received RMT symbols to the parser task
     xQueueSendFromISR(dali_rxChannelQueue, edata, &high_task_wakeup);
     return high_task_wakeup == pdTRUE;
 }
@@ -171,7 +172,7 @@ esp_err_t dali_init(gpio_num_t dali_rx_gpio, gpio_num_t dali_tx_gpio) {
         .resolution_hz = DALI_RMT_RESOLUTION_HZ,
         .mem_block_symbols = 64, // amount of RMT symbols that the channel can store at a time
         .gpio_num = dali_rx_gpio,
-        .flags.invert_in = true,
+        .flags.invert_in = false,
     };
 
     CHECK_FOR_ERROR(rmt_new_rx_channel(&rx_channel_cfg, &dali_rxChannel));
@@ -187,7 +188,7 @@ esp_err_t dali_init(gpio_num_t dali_rx_gpio, gpio_num_t dali_tx_gpio) {
     // Create RMT TX channel
     // The following timing requirement is based on DALI protocol
     dali_rxChannelConfig = (rmt_receive_config_t) {
-        .signal_range_min_ns = DALI_USTONS(2),
+        .signal_range_min_ns = 500,
         .signal_range_max_ns = DALI_USTONS(DALI_THRESHOLD_2TE_HIGH),
     };
 
@@ -213,6 +214,9 @@ esp_err_t dali_init(gpio_num_t dali_rx_gpio, gpio_num_t dali_tx_gpio) {
     // Enable TX channel
     CHECK_FOR_ERROR(rmt_enable(dali_txChannel));
 
+    // Initialize and start the GPIO debug poller
+    dali_debug_init(dali_rx_gpio, dali_tx_gpio);
+
     return ESP_OK;
 }
 
@@ -226,7 +230,6 @@ esp_err_t dali_transaction(dali_addressType_t address_type, uint8_t address, boo
     uint8_t address_;
     uint8_t tx_buffer[2];
     rmt_rx_done_event_data_t rx_data;
-    rmt_symbol_word_t raw_symbols[64];
     uint16_t backward_frame;
     uint8_t backward_frame_index;
     dali_receivePrevBit_t receive_prev_bit;
@@ -241,7 +244,9 @@ esp_err_t dali_transaction(dali_addressType_t address_type, uint8_t address, boo
 
     sniffer_was_running = is_sniffer_running;
     if (sniffer_was_running) {
+        // Temporarily disable sniffer's RMT channel to take control of the bus
         rmt_disable(dali_rxChannel);
+        xQueueReset(dali_rxChannelQueue);
     }
 
     // Construct DALI address
@@ -281,61 +286,63 @@ esp_err_t dali_transaction(dali_addressType_t address_type, uint8_t address, boo
         .loop_count = 0
     };
     ret = rmt_transmit(dali_txChannel, dali_txChannelEncoder, tx_buffer, 2, &transmit_config);
-    if (ret != ESP_OK) goto cleanup;
-
+    if (ret != ESP_OK) {
+        ESP_LOGE("DALI", "RMT transmit failed: %s", esp_err_to_name(ret));
+        goto cleanup;
+    }
     ret = rmt_tx_wait_all_done(dali_txChannel, tx_timeout_ms);
-    if (ret != ESP_OK) goto cleanup;
+    if (ret != ESP_OK) {
+        ESP_LOGE("DALI", "RMT wait all done failed: %s", esp_err_to_name(ret));
+        goto cleanup;
+    }
 
     // Some commands need to be repeated within 100 ms and this is done here
     if (send_twice) {
         vTaskDelay(pdMS_TO_TICKS(DALI_COMMAND_REPEAT_TIME_MS));
         ret = rmt_transmit(dali_txChannel, dali_txChannelEncoder, tx_buffer, 2, &transmit_config);
-        if (ret != ESP_OK) goto cleanup;
-
+        if (ret != ESP_OK) {
+            ESP_LOGE("DALI", "RMT transmit (2nd) failed: %s", esp_err_to_name(ret));
+            goto cleanup;
+        }
         ret = rmt_tx_wait_all_done(dali_txChannel, tx_timeout_ms);
-        if (ret != ESP_OK) goto cleanup;
+        if (ret != ESP_OK) {
+            ESP_LOGE("DALI", "RMT wait all done (2nd) failed: %s", esp_err_to_name(ret));
+            goto cleanup;
+        }
     }
 
     // If no result is expected, return to caller after a wait time
     if (result == NULL) {
         vTaskDelay(pdMS_TO_TICKS(DALI_BACKWARD_FRAME_TIMEOUT_MS));
     } else {
-        rmt_enable(dali_rxChannel);
-        rmt_receive(dali_rxChannel, raw_symbols, sizeof(raw_symbols), &dali_rxChannelConfig);
+        rmt_enable(dali_rxChannel); // Enable RX for backward frame
+        rmt_receive(dali_rxChannel, dali_rx_buffer, sizeof(dali_rx_buffer), &dali_rxChannelConfig);
 
+        (*result) = DALI_RESULT_NO_REPLY; // Default to no reply
         if (xQueueReceive(dali_rxChannelQueue, &rx_data, pdMS_TO_TICKS(DALI_BACKWARD_FRAME_TIMEOUT_MS)) == pdPASS) {
             receive_prev_bit = DALI_RECEIVE_PREV_BIT_ONE;
             backward_frame = 0;
             backward_frame_index = 0;
-            ret = dali_rmt_rx_decoder(&receive_prev_bit, &backward_frame, &backward_frame_index, rx_data.received_symbols[0].duration1, rx_data.received_symbols[0].level1);
-            if (ret != ESP_OK) goto cleanup_rx;
-
-            for (size_t i = 1; i < rx_data.num_symbols; i++) {
-                ret = dali_rmt_rx_decoder(&receive_prev_bit, &backward_frame, &backward_frame_index, rx_data.received_symbols[i].duration0, rx_data.received_symbols[i].level0);
-                if (ret != ESP_OK) goto cleanup_rx;
-                if (backward_frame_index == 8) {
-                    break;
-                }
-                ret = dali_rmt_rx_decoder(&receive_prev_bit, &backward_frame, &backward_frame_index, rx_data.received_symbols[i].duration1, rx_data.received_symbols[i].level1);
-                if (ret != ESP_OK) goto cleanup_rx;
-                if (backward_frame_index == 8) {
-                    break;
-                }
+            for (size_t i = 0; i < rx_data.num_symbols; i++) {
+                 if (backward_frame_index >= 8) break;
+                 dali_rmt_rx_decoder(&receive_prev_bit, &backward_frame, &backward_frame_index, rx_data.received_symbols[i].duration0, rx_data.received_symbols[i].level0);
+                 if (backward_frame_index >= 8) break;
+                 dali_rmt_rx_decoder(&receive_prev_bit, &backward_frame, &backward_frame_index, rx_data.received_symbols[i].duration1, rx_data.received_symbols[i].level1);
             }
-            (*result) = (uint8_t)backward_frame;
-        } else {
-            // Waiting for the backward frame timed out -> no reply was received
-            (*result) = DALI_RESULT_NO_REPLY;
+
+            if (backward_frame_index == 8) {
+                (*result) = (uint8_t)backward_frame;
+            } else {
+                 ESP_LOGW("DALI", "Framing error on backward frame, got %d bits", backward_frame_index);
+            }
         }
-cleanup_rx:
         rmt_disable(dali_rxChannel);
     }
 
 cleanup:
     if (sniffer_was_running) {
         rmt_enable(dali_rxChannel);
-        rmt_receive(dali_rxChannel, raw_symbols, sizeof(raw_symbols), &dali_rxChannelConfig);
-    }
+        rmt_receive(dali_rxChannel, dali_rx_buffer, sizeof(dali_rx_buffer), &dali_rxChannelConfig);    }
     xSemaphoreGive(bus_mutex);
 
     return ret;

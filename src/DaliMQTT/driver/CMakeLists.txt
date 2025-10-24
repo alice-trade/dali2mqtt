@@ -1,7 +1,8 @@
 project(daliC LANGUAGES C)
 add_library(daliC STATIC
         "dalic/dali.c"
-        dalic/dali_sniffer.c)
+        dalic/dali_sniffer.c
+        dalic/dali_debug.c)
 
 target_include_directories(daliC
         PRIVATE
@@ -15,4 +16,5 @@ target_link_libraries(daliC PRIVATE
         idf::driver
         idf::esp_event
         idf::log
+        idf::esp_timer
 )

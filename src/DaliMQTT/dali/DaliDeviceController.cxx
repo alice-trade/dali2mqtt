@@ -81,12 +81,12 @@ namespace daliMQTT
     }
      void DaliDeviceController::processDaliFrame(const dali_frame_t& frame) {
         if (frame.is_backward_frame) {
-            ESP_LOGD(TAG, "Sniffed Backward Frame: 0x%02X", frame.data & 0xFF);
+            ESP_LOGI(TAG, "[DEBUG L7] Processing Backward Frame: 0x%02X", frame.data & 0xFF);
             return;
         }
-
-        ESP_LOGD(TAG, "Sniffed Forward Frame: 0x%04X", frame.data);
-
+ 
+        ESP_LOGI(TAG, "[DEBUG L7] Processing Forward Frame: 0x%04X", frame.data);
+ 
         uint8_t addr_byte = (frame.data >> 8) & 0xFF;
         uint8_t cmd_byte = frame.data & 0xFF;
 
@@ -173,6 +173,7 @@ namespace daliMQTT
 
         while (true) {
             if (xQueueReceive(queue, &frame, portMAX_DELAY) == pdPASS) {
+                ESP_LOGI(TAG, "[DEBUG L6] App task received frame from queue. is_backward: %d, data: 0x%04X", frame.is_backward_frame, frame.data);
                 self->processDaliFrame(frame);
             }
         }
