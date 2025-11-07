@@ -167,7 +167,11 @@ esp_err_t dali_init(gpio_num_t dali_rx_gpio, gpio_num_t dali_tx_gpio) {
     // Create RMT RX channel
     dali_rxChannel = NULL;
     rmt_rx_channel_config_t rx_channel_cfg = {
+    #ifdef CONFIG_IDF_TARGET_ESP32
         .clk_src = RMT_CLK_SRC_REF_TICK,
+    #else
+        .clk_src = RMT_CLK_SRC_DEFAULT,
+    #endif
         .resolution_hz = DALI_RMT_RESOLUTION_HZ,
         .mem_block_symbols = 64, // amount of RMT symbols that the channel can store at a time
         .gpio_num = dali_rx_gpio,
@@ -175,7 +179,7 @@ esp_err_t dali_init(gpio_num_t dali_rx_gpio, gpio_num_t dali_tx_gpio) {
     };
 
     CHECK_FOR_ERROR(rmt_new_rx_channel(&rx_channel_cfg, &dali_rxChannel));
-        
+
     // Register RX done callback
     dali_rxChannelQueue = xQueueCreate(1, sizeof(rmt_rx_done_event_data_t));
     CHECK_POINTER(dali_rxChannelQueue);
@@ -193,7 +197,11 @@ esp_err_t dali_init(gpio_num_t dali_rx_gpio, gpio_num_t dali_tx_gpio) {
 
     dali_txChannel = NULL;
     dali_txChannelConfig = (rmt_tx_channel_config_t) {
-        .clk_src = RMT_CLK_SRC_REF_TICK, // select source clock
+    #ifdef CONFIG_IDF_TARGET_ESP32
+        .clk_src = RMT_CLK_SRC_REF_TICK,
+    #else
+        .clk_src = RMT_CLK_SRC_DEFAULT,
+    #endif
         .gpio_num = dali_tx_gpio,
         .mem_block_symbols = 64,
         .resolution_hz = DALI_RMT_RESOLUTION_HZ,
