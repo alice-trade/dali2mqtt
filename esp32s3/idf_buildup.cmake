@@ -33,7 +33,7 @@ idf_build_component(${ESP_BUILD_UTILS_PATH}/Kconfig)
 idf_build_component(${ESP_PROTO_BASEDIR}/mdns)
 
 
-idf_build_process(esp32
+idf_build_process(esp32s3
         COMPONENTS
             ${PLATFORM_MODULES}
         SDKCONFIG

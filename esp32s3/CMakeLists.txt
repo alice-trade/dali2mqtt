@@ -37,7 +37,7 @@ if(BUILD_TESTS)
             -G "${CMAKE_GENERATOR}"
             -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
             -DTARGET=${TARGET}
-            -DIDF_TARGET=esp32
+            -DIDF_TARGET=esp32s3
             -DBUILD_UNITY=1
             -DESP_BUILD_UTILS_PATH=${ESP_BUILD_UTILS_PATH}
             ${CMAKE_SOURCE_DIR}/tests
