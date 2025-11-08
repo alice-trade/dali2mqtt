@@ -19,6 +19,8 @@ Changelog:
 2020-11-14 Rewrite with sampling instead of pinchange
 2020-11-10 Split off hardware specific code into separate class
 2020-11-08 Created & tested on ATMega328 @ 8Mhz
+
+Patched: daliMQTT Project
 ###########################################################################*/
 #include <inttypes.h>
 

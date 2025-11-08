@@ -75,13 +75,13 @@ namespace daliMQTT {
 
         if (cJSON const* state = cJSON_GetObjectItem(root, "state"); state && cJSON_IsString(state)) {
             if (strcmp(state->valuestring, "OFF") == 0) {
-                dali.sendCommand(addr_type, id, DALI_COMMAND_OFF);
+                dali.sendCommand(addr_type, id, DALI_OFF);
             }
         }
 
         if (cJSON* brightness = cJSON_GetObjectItem(root, "brightness"); brightness && cJSON_IsNumber(brightness)) {
              uint8_t level = static_cast<uint8_t>(std::clamp(brightness->valueint, 0, 254));
-             dali.sendCommand(addr_type, id, level, false); // DACP command
+             dali.sendDACP(addr_type, id, level);
         }
 
         cJSON_Delete(root);

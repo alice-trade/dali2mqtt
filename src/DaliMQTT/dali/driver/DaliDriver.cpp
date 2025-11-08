@@ -19,6 +19,8 @@ Changelog:
 2020-11-14 Rewrite with sampling instead of pinchange
 2020-11-10 Split off hardware specific code into separate class
 2020-11-08 Created & tested on ATMega328 @ 8Mhz
+
+Patched: daliMQTT Project
 ###########################################################################*/
 
 // #define DALI_DEBUG
@@ -26,7 +28,7 @@ Changelog:
 //=================================================================
 // LOW LEVEL DRIVER
 //=================================================================
-#include "DALI_Lib.hpp"
+#include "DaliDriver.hpp"
 
 #include "esp_task_wdt.h"
 #include "esp_timer.h"
@@ -46,7 +48,7 @@ Changelog:
 #define TX 3
 #define COLLISION_TX 4
 
-static const char* TAG = "qqqdali";
+static constexpr const char* TAG = "DALI Driver";
 
 void Dali::begin(uint8_t (*bus_is_high)(), void (*bus_set_low)(), void (*bus_set_high)())
 {
