@@ -23,19 +23,6 @@ namespace daliMQTT
         // Отправка запроса с ожиданием ответа
         [[nodiscard]] std::optional<uint8_t> sendQuery(dali_addressType_t addr_type, uint8_t addr, uint8_t command);
 
-        /**
-      * @brief Starts the DALI bus sniffer.
-      *
-      * @return esp_err_t ESP_OK on success.
-      */
-        esp_err_t startSniffer();
-
-        /**
-         * @brief Stops the DALI bus sniffer.
-         *
-         * @return esp_err_t ESP_OK on success.
-         */
-        esp_err_t stopSniffer();
 
         /**
          * @brief Gets the handle to the DALI event queue.

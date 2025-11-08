@@ -24,21 +24,6 @@ namespace daliMQTT
         }
         return err;
     }
-    esp_err_t DaliAPI::startSniffer() {
-        if (!m_initialized || !m_dali_event_queue) {
-            return ESP_ERR_INVALID_STATE;
-        }
-        ESP_LOGI(TAG, "Starting DALI sniffer...");
-        return dali_sniffer_start(m_dali_event_queue);
-    }
-
-    esp_err_t DaliAPI::stopSniffer() {
-        if (!m_initialized) {
-            return ESP_OK;
-        }
-        ESP_LOGI(TAG, "Stopping DALI sniffer...");
-        return dali_sniffer_stop();
-    }
 
     QueueHandle_t DaliAPI::getEventQueue() const {
         return m_dali_event_queue;
@@ -64,10 +49,10 @@ namespace daliMQTT
         std::lock_guard lock(bus_mutex);
         std::bitset<64> found_devices;
         ESP_LOGI(TAG, "Starting DALI bus scan...");
-        dali_transaction(DALI_ADDRESS_TYPE_SHORT, 0, true, DALI_COMMAND_ON_AND_STEP_UP, false, DALI_TX_TIMEOUT_DEFAULT_MS, NULL);
+        dali_transaction(DALI_ADDRESS_TYPE_SHORT, 0, true, DALI_COMMAND_OFF, false, DALI_TX_TIMEOUT_DEFAULT_MS, NULL);
         dali_wait_between_frames();
         int result;
-        esp_err_t status = dali_transaction(DALI_ADDRESS_TYPE_SHORT, 0, false, DALI_COMMAND_QUERY_STATUS, false, DALI_TX_TIMEOUT_DEFAULT_MS, &result);
+        esp_err_t status = dali_transaction(DALI_ADDRESS_TYPE_SHORT, 1, false, DALI_COMMAND_QUERY_STATUS, false, DALI_TX_TIMEOUT_DEFAULT_MS, &result);
         if (status == ESP_OK) {
             ESP_LOGW("TEST", "DALI Query Status result: %d", result);
         }

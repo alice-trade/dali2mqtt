@@ -1,11 +1,9 @@
-#ifndef DALI_H_
-#define DALI_H_
+#ifndef __DALI_H__
+#define __DALI_H__
 
 #include <stdint.h>
 #include <soc/gpio_num.h>
 #include <freertos/task.h>
-#include <freertos/queue.h>
-#include "sdkconfig.h"
 
 #define DALI_RMT_RESOLUTION_HZ 1000000
 #define DALI_USTORMT(x) ((x) * (DALI_RMT_RESOLUTION_HZ / 1000000))
@@ -53,10 +51,10 @@ typedef enum {
 
 /**
  * @brief Initializes the DALI communication interface.
- * 
+ *
  * Sets up the specified GPIO pins for DALI RX and TX communication
  * and configures the necessary peripherals for DALI data transmission.
- * 
+ *
  * @param dali_rx_gpio GPIO number for the DALI RX (receive) pin.
  * @param dali_tx_gpio GPIO number for the DALI TX (transmit) pin.
  * @return esp_err_t ESP_OK on success or an error code on failure.
@@ -65,10 +63,10 @@ esp_err_t dali_init(gpio_num_t dali_rx_gpio, gpio_num_t dali_tx_gpio);
 
 /**
  * @brief Executes a DALI transaction.
- * 
+ *
  * Sends a command to a DALI device at the specified address and optionally
  * waits for a response. This function can handle both commands and queries.
- * 
+ *
  * @param address_type Type of DALI address (short, group, broadcast, or special command).
  * @param address The DALI address of the target device.
  * @param is_cmd Boolean indicating if the operation is a command (true) or query (false).
@@ -82,31 +80,11 @@ esp_err_t dali_transaction(dali_addressType_t address_type, uint8_t address, boo
 
 /**
  * @brief Waits between DALI frames.
- * 
+ *
  * A delay function to wait for the required time between DALI frames, ensuring
  * timing compliance in communication.
  */
 inline void dali_wait_between_frames(void) __attribute__((always_inline));
-
-    /**
- * @brief Starts the DALI bus sniffer task.
- *
- * Creates a background task that continuously monitors the DALI bus
- * for any traffic (forward and backward frames). Decoded frames are
- * pushed into the provided FreeRTOS queue.
- *
- * @param output_queue A handle to a FreeRTOS queue that will receive `dali_frame_t` items.
- * @return esp_err_t ESP_OK on success, or an error code on failure.
- */
-esp_err_t dali_sniffer_start(QueueHandle_t output_queue);
-
-/**
- * @brief Stops the DALI bus sniffer task.
- *
- * @return esp_err_t ESP_OK on success.
- */
-esp_err_t dali_sniffer_stop(void);
-
 
 inline void dali_wait_between_frames(void) {
     vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
