@@ -1,6 +1,7 @@
 #ifndef DALIMQTT_DALIAPI_HXX
 #define DALIMQTT_DALIAPI_HXX
-#include "DaliDriver.hpp"
+#include "DaliDriver.hxx"
+#include "dali_commands.h"
 #include <esp_timer.h>
 
 

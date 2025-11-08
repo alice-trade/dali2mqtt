@@ -28,7 +28,7 @@ Patched: daliMQTT Project
 //=================================================================
 // LOW LEVEL DRIVER
 //=================================================================
-#include "DaliDriver.hpp"
+#include "DaliDriver.hxx"
 
 #include "esp_task_wdt.h"
 #include "esp_timer.h"
@@ -48,7 +48,7 @@ Patched: daliMQTT Project
 #define TX 3
 #define COLLISION_TX 4
 
-static constexpr const char* TAG = "DALI Driver";
+static constexpr const char* TAG = "DALILibDriver";
 
 void Dali::begin(uint8_t (*bus_is_high)(), void (*bus_set_low)(), void (*bus_set_high)())
 {
