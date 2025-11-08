@@ -1,6 +1,6 @@
 #ifndef DALIMQTT_DALIAPI_HXX
 #define DALIMQTT_DALIAPI_HXX
-#include "libdali/DALI_Lib.hpp"
+#include "DALIDriver.hpp"
 
 
 
