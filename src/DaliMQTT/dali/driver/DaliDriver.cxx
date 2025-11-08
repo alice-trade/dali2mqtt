@@ -146,6 +146,7 @@ void IRAM_ATTR Dali::timer()
                 && (txhigh && !busishigh) // transmitting high, but bus is low
                 && (txspcnt == 1 || txspcnt == 2)) // in middle of transmitting low period
             {
+                ESP_DRAM_LOGE("DALI_COLLISION", "txh: %d, bus_is_h: %d, spcnt: %d", txhigh, busishigh, txspcnt);
                 if (txcollision != 0xFF)
                     txcollision++;
                 txspcnt = 0;

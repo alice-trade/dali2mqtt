@@ -2,7 +2,7 @@
 #define DALIMQTT_DALIAPI_HXX
 #include "DaliDriver.hxx"
 #include "dali_commands.h"
-#include <esp_timer.h>
+#include "driver/gptimer.h"
 
 
 
@@ -82,7 +82,7 @@ namespace daliMQTT
         DaliAPI() = default;
         [[noreturn]] static void dali_sniffer_task(void* arg);
         Dali m_dali_impl;
-        esp_timer_handle_t m_dali_timer{nullptr};
+        gptimer_handle_t m_dali_timer{nullptr};
         TaskHandle_t m_sniffer_task_handle{nullptr};
         std::mutex bus_mutex;
         std::atomic<bool> m_initialized{false};

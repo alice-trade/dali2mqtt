@@ -36,9 +36,9 @@ target_link_libraries(DaliMQTT-Core PUBLIC
         idf::esp_event
         idf::json
         idf::driver
-        idf::esp_timer
         idf::esp_netif
         idf::freertos
+        idf::esp_timer
         idf::spiffs
         idf::mdns
         idf::esp_wifi

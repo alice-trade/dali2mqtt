@@ -17,14 +17,16 @@ namespace daliMQTT
         gpio_set_level(static_cast<gpio_num_t>(CONFIG_DALI2MQTT_DALI_TX_PIN), 1);
     }
 
-    static void IRAM_ATTR dali_timer_callback(void* arg) {
-        Dali* dali_instance = static_cast<Dali*>(arg);
-        dali_instance->timer();
+    static bool IRAM_ATTR dali_timer_isr_callback(gptimer_handle_t timer, const gptimer_alarm_event_data_t *edata, void *user_ctx) {
+        Dali* dali_instance = static_cast<Dali*>(user_ctx);
+        if (dali_instance) {
+            dali_instance->timer();
+        }
+        return false;
     }
 
     [[noreturn]] void DaliAPI::dali_sniffer_task(void* arg) {
         auto* self = static_cast<DaliAPI*>(arg);
-        auto& dali_impl = self->m_dali_impl;
         QueueHandle_t queue = self->m_dali_event_queue;
 
         uint8_t decoded_data[4];
@@ -61,34 +63,7 @@ namespace daliMQTT
             return ESP_OK;
         }
 
-        gpio_config_t tx_conf = {
-            .pin_bit_mask = (1ULL << tx_pin),
-            .mode = GPIO_MODE_OUTPUT_OD,
-            .pull_up_en = GPIO_PULLUP_DISABLE,
-            .pull_down_en = GPIO_PULLDOWN_DISABLE,
-            .intr_type = GPIO_INTR_DISABLE
-        };
-        gpio_config(&tx_conf);
-        gpio_set_level(tx_pin, 1);
-
-        gpio_config_t rx_conf = {
-            .pin_bit_mask = (1ULL << rx_pin),
-            .mode = GPIO_MODE_INPUT,
-            .pull_up_en = GPIO_PULLUP_ENABLE,
-            .pull_down_en = GPIO_PULLDOWN_DISABLE,
-            .intr_type = GPIO_INTR_DISABLE
-        };
-        gpio_config(&rx_conf);
-
-        m_dali_impl.begin(bus_is_high, bus_set_low, bus_set_high);
-
-        const esp_timer_create_args_t timer_args = {
-            .callback = &dali_timer_callback,
-            .arg = &m_dali_impl,
-            .name = "dali_timer"
-        };
-        ESP_ERROR_CHECK(esp_timer_create(&timer_args, &m_dali_timer));
-        ESP_ERROR_CHECK(esp_timer_start_periodic(m_dali_timer, 104)); // ~9615 Hz
+        // todo
 
         if (!m_dali_event_queue) {
             m_dali_event_queue = xQueueCreate(DALI_EVENT_QUEUE_SIZE, sizeof(dali_frame_t));
@@ -196,13 +171,26 @@ namespace daliMQTT
         ESP_LOGI(TAG, "Starting DALI bus scan...");
 
         for (uint8_t i = 0; i < 64; ++i) {
-            int16_t response = m_dali_impl.cmd(DALI_QUERY_STATUS, i);
-            if (response >= 0) {
-                 ESP_LOGI(TAG, "Device found at short address %d", i);
-                 found_devices.set(i);
+            int16_t rv = m_dali_impl.cmd(DALI_QUERY_STATUS, i);
+
+
+            if (rv >= 0) {
+                ESP_LOGI(TAG, "Device found at short address %d (Status: 0x%02X)", i, rv);
+                found_devices.set(i);
+
+
+                m_dali_impl.set_level(254, i);
+                vTaskDelay(pdMS_TO_TICKS(500));
+                m_dali_impl.set_level(0, i);
+                vTaskDelay(pdMS_TO_TICKS(100));
+
+            } else if (-rv != DALI_RESULT_NO_REPLY) {
+                ESP_LOGW(TAG, "Scan error at address %d: code %d", i, -rv);
             }
-            vTaskDelay(pdMS_TO_TICKS(10));
+
+            vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_POLL_DELAY_MS));
         }
+
         ESP_LOGI(TAG, "Scan finished. Found %zu devices.", found_devices.count());
         return found_devices;
     }
