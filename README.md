@@ -1,4 +1,4 @@
-# DALI-to-MQTT Bridge for ESP32
+# DALI-to-MQTT Bridge for ESP
 
 ![ESP-IDF](https://img.shields.io/badge/ESP--IDF-v5.x-blue)
 ![Language](https://img.shields.io/badge/language-C++23-purple)
@@ -20,7 +20,7 @@
 
 ## Аппаратные требования
 
-1.  **Плата на базе ESP32**: Любая плата с модулем ESP32 (например, ESP32-DevKitC).
+1.  **Плата на базе ESP**: Любая плата с модулем ESP32/ESP32-S3 (например, ESP32-S3-DevKitC).
 2.  **DALI Трансивер/Блок питания**: Специализированное устройство, которое обеспечивает питание шины DALI и преобразует логические уровни ESP32 в электрические сигналы DALI. Примеры: Mean Well L-C Bus Power Supply, кастомные решения на оптопарах.
 
 ## Программные требования
@@ -48,7 +48,7 @@ cd daliMQTT
 . $HOME/esp/esp-idf/export.sh
 
 # Запустите menuconfig
-cmake -B build -DCMAKE_TOOLCHAIN_FILE=/path/to/esp-idf/tools/cmake/toolchain-esp32.cmake -DTARGET=esp32 -GNinja .
+cmake -B build -DCMAKE_TOOLCHAIN_FILE=/path/to/esp-idf/tools/cmake/toolchain-esp<chip>.cmake -DTARGET=esp<chip> -GNinja .
 cmake --build build --target menuconfig
 ```
 Основные настройки находятся в разделе `DALI MQTT Bridge Settings`.
@@ -206,7 +206,7 @@ cmake --build build --target test-monitor
 
 ```
 .
-├── esp32/                # Конфигурация ESP-IDF для основной прошивки
+├── esp32s3/              # Конфигурация ESP-IDF для прошивки ESP32-S3
 ├── scripts/              # Вспомогательные CMake-скрипты
 ├── src/DaliMQT           # Исходный код
 │   ├── config/           # Менеджер конфигурации

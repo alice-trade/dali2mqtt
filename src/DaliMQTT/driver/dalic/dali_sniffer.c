@@ -98,6 +98,7 @@ esp_err_t dali_sniffer_start(QueueHandle_t output_queue) {
     }
 
     is_sniffer_running = true;
+    xSemaphoreGive(bus_mutex);
     return ESP_OK;
 }
 

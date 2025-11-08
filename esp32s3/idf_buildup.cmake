@@ -40,6 +40,6 @@ idf_build_process(esp32s3
             ${CMAKE_CURRENT_SOURCE_DIR}/sdkconfig
         PROJECT_VER ${CMAKE_PROJECT_VERSION}
         PROJECT_DIR ${CMAKE_CURRENT_SOURCE_DIR}
-        #SDKCONFIG_DEFAULTS ${ESP_BUILD_UTILS_PATH}/sdkconfig.default
+        SDKCONFIG_DEFAULTS ${ESP_BUILD_UTILS_PATH}/sdkconfig.default
         BUILD_DIR ${CMAKE_BINARY_DIR}
 )

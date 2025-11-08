@@ -225,29 +225,20 @@ esp_err_t dali_init(gpio_num_t dali_rx_gpio, gpio_num_t dali_tx_gpio) {
 }
 
 esp_err_t dali_transaction(dali_addressType_t address_type, uint8_t address, bool is_cmd, uint8_t command, bool send_twice, int tx_timeout_ms, int* result) {
-    if ((address_type == DALI_ADDRESS_TYPE_SHORT) && (address > 63)) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    if ((address_type == DALI_ADDRESS_TYPE_GROUP) && (address > 15)) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    uint8_t address_;
+    if ((address_type == DALI_ADDRESS_TYPE_SHORT) && (address > 63)) return ESP_ERR_INVALID_ARG;
+    if ((address_type == DALI_ADDRESS_TYPE_GROUP) && (address > 15)) return ESP_ERR_INVALID_ARG;
+
     uint8_t tx_buffer[2];
-    rmt_rx_done_event_data_t rx_data;
     rmt_symbol_word_t raw_symbols[64];
-    uint16_t backward_frame;
-    uint8_t backward_frame_index;
-    dali_receivePrevBit_t receive_prev_bit;
-    rmt_transmit_config_t transmit_config;
-    bool sniffer_was_running = false;
+    rmt_rx_done_event_data_t rx_data;
+    esp_err_t ret = ESP_OK;
 
     if (xSemaphoreTake(bus_mutex, pdMS_TO_TICKS(500)) != pdTRUE) {
         ESP_LOGE("DALI", "Failed to acquire DALI bus mutex in transaction");
         return ESP_ERR_TIMEOUT;
     }
-    esp_err_t ret = ESP_OK;
 
-    sniffer_was_running = is_sniffer_running;
+    bool sniffer_was_running = is_sniffer_running;
     if (sniffer_was_running) {
         rmt_disable(dali_rxChannel);
     }
@@ -257,25 +248,21 @@ esp_err_t dali_transaction(dali_addressType_t address_type, uint8_t address, boo
     // - Y is 0 for short addresses and 1 for group or broadcast
     // - AA AAAA is address
     // - S is 0 for DACP and 1 for commands
+    uint8_t address_;
     if (address_type == DALI_ADDRESS_TYPE_SPECIAL_CMD) {
         address_ = address;
     } else if (address_type == DALI_ADDRESS_TYPE_BROADCAST) {
         address_ = DALI_ADDRESS_TYPE_BROADCAST_MASK;
-        if (is_cmd) {
-            address_ |= 1;
-        }
+        if (is_cmd) address_ |= 1;
     } else if (address_type == DALI_ADDRESS_TYPE_SHORT) {
         address_ = DALI_ADDRESS_TYPE_SHORT_MASK | (address << 1);
-        if (is_cmd) {
-            address_ |= 1;
-        }
+        if (is_cmd) address_ |= 1;
     } else if (address_type == DALI_ADDRESS_TYPE_GROUP) {
         address_ = DALI_ADDRESS_TYPE_GROUP_MASK | (address << 1);
-        if (is_cmd) {
-            address_ |= 1;
-        }
+        if (is_cmd) address_ |= 1;
     } else {
-        return ESP_ERR_INVALID_ARG;
+        ret = ESP_ERR_INVALID_ARG;
+        goto cleanup;
     }
 
     // Reset RX queue
@@ -284,10 +271,7 @@ esp_err_t dali_transaction(dali_addressType_t address_type, uint8_t address, boo
     // Copy address and command to TX buffer for transmission
     tx_buffer[0] = address_;
     tx_buffer[1] = command;
-
-    transmit_config = (rmt_transmit_config_t) {
-        .loop_count = 0
-    };
+    rmt_transmit_config_t transmit_config = { .loop_count = 0 };
     ret = rmt_transmit(dali_txChannel, dali_txChannelEncoder, tx_buffer, 2, &transmit_config);
     if (ret != ESP_OK) goto cleanup;
 
@@ -312,30 +296,20 @@ esp_err_t dali_transaction(dali_addressType_t address_type, uint8_t address, boo
         rmt_receive(dali_rxChannel, raw_symbols, sizeof(raw_symbols), &dali_rxChannelConfig);
 
         if (xQueueReceive(dali_rxChannelQueue, &rx_data, pdMS_TO_TICKS(DALI_BACKWARD_FRAME_TIMEOUT_MS)) == pdPASS) {
-            receive_prev_bit = DALI_RECEIVE_PREV_BIT_ONE;
-            backward_frame = 0;
-            backward_frame_index = 0;
-            ret = dali_rmt_rx_decoder(&receive_prev_bit, &backward_frame, &backward_frame_index, rx_data.received_symbols[0].duration1, rx_data.received_symbols[0].level1);
-            if (ret != ESP_OK) goto cleanup_rx;
-
-            for (size_t i = 1; i < rx_data.num_symbols; i++) {
-                ret = dali_rmt_rx_decoder(&receive_prev_bit, &backward_frame, &backward_frame_index, rx_data.received_symbols[i].duration0, rx_data.received_symbols[i].level0);
-                if (ret != ESP_OK) goto cleanup_rx;
-                if (backward_frame_index == 8) {
-                    break;
-                }
-                ret = dali_rmt_rx_decoder(&receive_prev_bit, &backward_frame, &backward_frame_index, rx_data.received_symbols[i].duration1, rx_data.received_symbols[i].level1);
-                if (ret != ESP_OK) goto cleanup_rx;
-                if (backward_frame_index == 8) {
-                    break;
-                }
+            uint16_t backward_frame = 0;
+            uint8_t backward_frame_index = 0;
+            dali_receivePrevBit_t receive_prev_bit = DALI_RECEIVE_PREV_BIT_ONE;
+            for (size_t i = 0; i < rx_data.num_symbols; i++) {
+                 dali_rmt_rx_decoder(&receive_prev_bit, &backward_frame, &backward_frame_index, rx_data.received_symbols[i].duration0, rx_data.received_symbols[i].level0);
+                 if (backward_frame_index >= 8) break;
+                 dali_rmt_rx_decoder(&receive_prev_bit, &backward_frame, &backward_frame_index, rx_data.received_symbols[i].duration1, rx_data.received_symbols[i].level1);
+                 if (backward_frame_index >= 8) break;
             }
             (*result) = (uint8_t)backward_frame;
         } else {
             // Waiting for the backward frame timed out -> no reply was received
             (*result) = DALI_RESULT_NO_REPLY;
         }
-cleanup_rx:
         rmt_disable(dali_rxChannel);
     }
 
