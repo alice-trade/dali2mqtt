@@ -4,7 +4,7 @@ project(DaliMQTTTests LANGUAGES C CXX)
 include(../scripts/common.cmake)
 include(../esp32s3/idf_buildup.cmake)
 
-add_subdirectory(../src/DaliMQTT/driver daliC)
+add_subdirectory(../src/DaliMQTT/driver libDALI)
 add_subdirectory(../src/DaliMQTT daliMQTTModules)
 
 set(TEST_APP_NAME "daliMQTTTestESP")

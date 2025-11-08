@@ -1,18 +1,21 @@
-project(daliC LANGUAGES C)
-add_library(daliC STATIC
-        "dalic/dali.c"
-        dalic/dali_sniffer.c)
+project(libDALI LANGUAGES CXX)
 
-target_include_directories(daliC
+# IN DEVELOPMENT REIMPLIMENTATION OF DALI_LIB
+#TODO: TO BE REWRITTEN TO RMT
+add_library(libDALI STATIC
+        "libdali/DALI_Lib.cpp"
+)
+target_include_directories(libDALI
         PRIVATE
-        dalic/include
+        libdali
         INTERFACE
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
 )
 
-target_link_libraries(daliC PRIVATE
+target_link_libraries(libDALI PRIVATE
         idf::freertos
         idf::driver
         idf::esp_event
         idf::log
+        idf::esp_timer
 )

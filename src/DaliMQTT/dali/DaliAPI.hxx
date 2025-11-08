@@ -1,7 +1,7 @@
 #ifndef DALIMQTT_DALIAPI_HXX
 #define DALIMQTT_DALIAPI_HXX
-#include "dalic/include/dali.h"
-#include "dalic/include/dali_commands.h"
+#include "libdali/DALI_Lib.hpp"
+
 
 
 namespace daliMQTT
@@ -65,7 +65,8 @@ namespace daliMQTT
 
     private:
         DaliAPI() = default;
-
+        Dali m_dali_impl;
+        esp_timer_handle_t m_dali_timer{nullptr};
         std::mutex bus_mutex;
         std::atomic<bool> m_initialized{false};
         QueueHandle_t m_dali_event_queue{nullptr};

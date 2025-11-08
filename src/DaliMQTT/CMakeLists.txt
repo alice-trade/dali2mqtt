@@ -29,7 +29,7 @@ target_sources(DaliMQTT-Core PRIVATE ${MODULE_SOURCES})
 
 target_include_directories(DaliMQTT-Core PRIVATE ${MODULE_DIRS} include INTERFACE ..)
 target_link_libraries(DaliMQTT-Core PUBLIC
-        daliC
+        libDALI
         idf::nvs_flash
         idf::mqtt
         idf::log
