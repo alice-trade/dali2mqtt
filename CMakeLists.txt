@@ -9,7 +9,7 @@ include(scripts/common.cmake)
 set(PROJVER ${CMAKE_PROJECT_VERSION})
 
 message("daliMQTT version " ${CMAKE_PROJECT_VERSION})
-set(targets "esp32s3")
+set(targets "esp32s3" "esp32c3")
 
 if("${TARGET}" IN_LIST targets)
     message("Target platform: " ${TARGET})
