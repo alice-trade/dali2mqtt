@@ -1,8 +1,7 @@
 #ifndef DALIMQTT_DALIDEVICECONTROLLER_HXX
 #define DALIMQTT_DALIDEVICECONTROLLER_HXX
 
-#include <dalic/include/dali.h>
-
+#include "DaliAPI.hxx"
 
 namespace daliMQTT
 {

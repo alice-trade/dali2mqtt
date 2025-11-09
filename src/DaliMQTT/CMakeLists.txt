@@ -13,6 +13,7 @@ set(MODULE_DIRS
         webui/cxx
         webui/cxx/api
         dali
+        dali/driver
         mqtt
 )
 
@@ -29,7 +30,6 @@ target_sources(DaliMQTT-Core PRIVATE ${MODULE_SOURCES})
 
 target_include_directories(DaliMQTT-Core PRIVATE ${MODULE_DIRS} include INTERFACE ..)
 target_link_libraries(DaliMQTT-Core PUBLIC
-        daliC
         idf::nvs_flash
         idf::mqtt
         idf::log
@@ -38,6 +38,7 @@ target_link_libraries(DaliMQTT-Core PUBLIC
         idf::driver
         idf::esp_netif
         idf::freertos
+        idf::esp_timer
         idf::spiffs
         idf::mdns
         idf::esp_wifi

@@ -108,7 +108,6 @@ namespace daliMQTT {
 
         esp_err_t WebUI::api::DaliSetNamesHandler(httpd_req_t *req) {
             if (checkAuth(req) != ESP_OK) return ESP_FAIL;
-
             if (req->content_len >= 1024) {
                 httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Request too long");
                 return ESP_FAIL;
@@ -140,6 +139,7 @@ namespace daliMQTT {
                 httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to serialize JSON.");
                 return ESP_FAIL;
             }
+            ESP_LOGD(TAG, "Called set names with JSON: %s", clean_json_string);
 
             ConfigManager::getInstance().saveDaliDeviceIdentificators(clean_json_string);
             free(clean_json_string);
@@ -189,6 +189,7 @@ namespace daliMQTT {
             cJSON* device_item = nullptr;
             cJSON_ArrayForEach(device_item, root) {
                 uint8_t addr = std::stoi(device_item->string);
+                ESP_LOGD(TAG, "Called set group with JSON: %s", device_item->string);
                 std::bitset<16> groups;
                 if (cJSON_IsArray(device_item)) {
                     cJSON* group_item = nullptr;

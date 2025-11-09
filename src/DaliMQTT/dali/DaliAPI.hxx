@@ -1,11 +1,25 @@
 #ifndef DALIMQTT_DALIAPI_HXX
 #define DALIMQTT_DALIAPI_HXX
-#include "dalic/include/dali.h"
-#include "dalic/include/dali_commands.h"
+#include "DaliDriver.hxx"
+#include "dali_commands.h"
+#include "driver/gptimer.h"
+
 
 
 namespace daliMQTT
 {
+    typedef enum {
+              DALI_ADDRESS_TYPE_SHORT,
+              DALI_ADDRESS_TYPE_GROUP,
+              DALI_ADDRESS_TYPE_BROADCAST,
+              DALI_ADDRESS_TYPE_SPECIAL_CMD
+    } dali_addressType_t;
+
+    struct dali_frame_t {
+        uint16_t data;
+        bool is_backward_frame;
+    };
+
     class DaliAPI {
     public:
         DaliAPI(const DaliAPI&) = delete;
@@ -18,8 +32,9 @@ namespace daliMQTT
         esp_err_t init(gpio_num_t rx_pin, gpio_num_t tx_pin);
 
         // Отправка команды без ожидания ответа
-        esp_err_t sendCommand(dali_addressType_t addr_type, uint8_t addr, uint8_t command, bool send_twice = false);
-
+        esp_err_t sendCommand(dali_addressType_t addr_type, uint8_t addr, uint8_t command);
+        // DACP - Direct Arc Power Control
+        esp_err_t sendDACP(dali_addressType_t addr_type, uint8_t addr, uint8_t level);
         // Отправка запроса с ожиданием ответа
         [[nodiscard]] std::optional<uint8_t> sendQuery(dali_addressType_t addr_type, uint8_t addr, uint8_t command);
 
@@ -65,8 +80,11 @@ namespace daliMQTT
 
     private:
         DaliAPI() = default;
-
-        std::mutex bus_mutex;
+        [[noreturn]] static void dali_sniffer_task(void* arg);
+        Dali m_dali_impl;
+        gptimer_handle_t m_dali_timer{nullptr};
+        TaskHandle_t m_sniffer_task_handle{nullptr};
+        std::recursive_mutex bus_mutex;
         std::atomic<bool> m_initialized{false};
         QueueHandle_t m_dali_event_queue{nullptr};
     };

@@ -21,6 +21,7 @@ set(PLATFORM_MODULES
         driver
         esp_netif
         nvs_flash
+        esp_timer
         Kconfig
 )
 
