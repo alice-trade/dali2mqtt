@@ -157,6 +157,7 @@ namespace daliMQTT {
         if (parts.empty()) return;
 
         if (parts[0] == "light") {
+            ESP_LOGD("MQTTDEBUG", "MQTT Light: %s", data.c_str());
             handleLightCommand(parts, data);
         } else if (parts[0] == "config" && parts.size() > 2 && parts[1] == "group" && parts[2] == "set") {
             handleGroupCommand(data);

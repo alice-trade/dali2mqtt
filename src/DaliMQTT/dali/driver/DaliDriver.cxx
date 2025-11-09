@@ -408,17 +408,15 @@ uint8_t Dali::tx_wait(uint8_t* data, uint8_t bitlen, uint32_t timeout_ms)
         return DALI_RESULT_DATA_TOO_LONG;
     uint32_t start_ms = milli();
     while (1) {
-        // wait for 10ms idle
         while (idlecnt < BEFORE_CMD_IDLE_MS) {
-            // Serial.print('w');
             if (milli() - start_ms > timeout_ms)
                 return DALI_RESULT_TIMEOUT;
+            vTaskDelay(1);
         }
-        // try transmit
         while (tx(data, bitlen) != DALI_OK) {
-            // Serial.print('w');
             if (milli() - start_ms > timeout_ms)
                 return DALI_RESULT_TIMEOUT;
+            vTaskDelay(1);
         }
         // wait for completion
         uint8_t rv;
@@ -428,18 +426,14 @@ uint8_t Dali::tx_wait(uint8_t* data, uint8_t bitlen, uint32_t timeout_ms)
                 break;
             if (milli() - start_ms > timeout_ms)
                 return DALI_RESULT_TIMEOUT;
+            vTaskDelay(1);
         }
         // exit if transmit was ok
         if (rv == DALI_OK) {
-            int64_t start_us = esp_timer_get_time();
-            // wait for some time idle
-            while (esp_timer_get_time() - start_us < 1000)
-                __asm__ __volatile__("nop");
-
-            // Serial.print('o');
             return DALI_OK;
         }
         // not ok (for example collision) - retry until timeout
+        vTaskDelay(pdMS_TO_TICKS(5));
     }
     return DALI_RESULT_TIMEOUT;
 }
@@ -449,17 +443,12 @@ uint8_t Dali::tx_wait(uint8_t* data, uint8_t bitlen, uint32_t timeout_ms)
 // returns <0 with negative result code
 int16_t Dali::tx_wait_rx(uint8_t cmd0, uint8_t cmd1, uint32_t timeout_ms)
 {
-#ifdef DALI_DEBUG
-    ESP_LOGI(TAG, "TX%1X%1X%1X%1X", cmd0 >> 4, cmd0 & 0xF, cmd1 >> 4, cmd1 & 0xF);
-#endif
-
     uint8_t data[4];
     data[0] = cmd0;
     data[1] = cmd1;
     int16_t rv = tx_wait(data, 16, timeout_ms);
     if (rv)
         return -rv;
-    ;
 
     // wait up to 10 ms for start of reply, additional 15ms for receive to complete
     uint32_t rx_start_ms = milli();
@@ -480,8 +469,11 @@ int16_t Dali::tx_wait_rx(uint8_t cmd0, uint8_t cmd1, uint32_t timeout_ms)
             else
                 return -DALI_RESULT_INVALID_REPLY;
         }
+
         if (milli() - rx_start_ms > rx_timeout_ms)
             return -DALI_RESULT_NO_REPLY;
+
+        vTaskDelay(1);
     }
     return -DALI_RESULT_NO_REPLY; // should not get here
 }
@@ -527,7 +519,6 @@ int16_t Dali::cmd(uint16_t cmd, uint8_t arg)
         tx_wait_rx(cmd0, cmd1);
     }
     int16_t rv = tx_wait_rx(cmd0, cmd1);
-    // Serial.print(" rv=");Serial.println(rv);
     return rv;
 }
 

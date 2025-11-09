@@ -13,10 +13,10 @@ namespace daliMQTT
         return gpio_get_level(static_cast<gpio_num_t>(CONFIG_DALI2MQTT_DALI_RX_PIN));
     }
     static void bus_set_low() {
-        gpio_set_level(static_cast<gpio_num_t>(CONFIG_DALI2MQTT_DALI_TX_PIN), 0);
+        gpio_set_level(static_cast<gpio_num_t>(CONFIG_DALI2MQTT_DALI_TX_PIN), 1);
     }
     static void bus_set_high() {
-        gpio_set_level(static_cast<gpio_num_t>(CONFIG_DALI2MQTT_DALI_TX_PIN), 1);
+        gpio_set_level(static_cast<gpio_num_t>(CONFIG_DALI2MQTT_DALI_TX_PIN), 0);
     }
 
     static bool IRAM_ATTR dali_timer_isr_callback(gptimer_handle_t timer, const gptimer_alarm_event_data_t *edata, void *user_ctx) {
@@ -68,7 +68,7 @@ namespace daliMQTT
         ESP_LOGI(TAG, "Configuring DALI GPIOs: RX=%d, TX=%d", rx_pin, tx_pin);
         gpio_config_t tx_conf = {
             .pin_bit_mask = (1ULL << tx_pin),
-            .mode = GPIO_MODE_OUTPUT_OD,
+            .mode = GPIO_MODE_OUTPUT,
             .pull_up_en = GPIO_PULLUP_DISABLE,
             .pull_down_en = GPIO_PULLDOWN_DISABLE,
             .intr_type = GPIO_INTR_DISABLE,
@@ -78,15 +78,15 @@ namespace daliMQTT
         gpio_config_t rx_conf = {
             .pin_bit_mask = (1ULL << rx_pin),
             .mode = GPIO_MODE_INPUT,
-            .pull_up_en = GPIO_PULLUP_ENABLE,
+            .pull_up_en = GPIO_PULLUP_DISABLE,
             .pull_down_en = GPIO_PULLDOWN_DISABLE,
             .intr_type = GPIO_INTR_DISABLE,
         };
         ESP_ERROR_CHECK(gpio_config(&rx_conf));
 
-        bus_set_low();
+        bus_set_high();
 
-        m_dali_impl.begin(bus_is_high, bus_set_high, bus_set_low);
+        m_dali_impl.begin(bus_is_high, bus_set_low, bus_set_high);
 
         ESP_LOGI(TAG, "Configuring DALI GPTimer...");
         gptimer_config_t timer_config = {
@@ -161,7 +161,7 @@ namespace daliMQTT
         return ESP_OK;
     }
 
-    esp_err_t DaliAPI::sendCommand(dali_addressType_t addr_type, uint8_t addr, uint8_t command, bool send_twice) {
+    esp_err_t DaliAPI::sendCommand(dali_addressType_t addr_type, uint8_t addr, uint8_t command) {
         std::lock_guard lock(bus_mutex);
         uint8_t dali_arg;
         uint16_t dali_cmd = command;
@@ -176,9 +176,6 @@ namespace daliMQTT
                 case DALI_ADDRESS_TYPE_BROADCAST: dali_arg = 0x7F; break;
                 default: return ESP_ERR_INVALID_ARG;
             }
-        }
-        if (send_twice) {
-            dali_cmd |= 0x0200;
         }
 
         m_dali_impl.cmd(dali_cmd, dali_arg);
@@ -216,11 +213,9 @@ namespace daliMQTT
         std::lock_guard lock(bus_mutex);
         std::bitset<64> found_devices;
         ESP_LOGI(TAG, "Starting DALI bus scan...");
-
+        sendCommand(DALI_ADDRESS_TYPE_SHORT, 0, DALI_ON_AND_STEP_UP);
         for (uint8_t i = 0; i < 64; ++i) {
             int16_t rv = m_dali_impl.cmd(DALI_QUERY_STATUS, i);
-
-
             if (rv >= 0) {
                 ESP_LOGI(TAG, "Device found at short address %d (Status: 0x%02X)", i, rv);
                 found_devices.set(i);
@@ -250,12 +245,12 @@ namespace daliMQTT
 
     esp_err_t DaliAPI::assignToGroup(uint8_t shortAddress, uint8_t group) {
         if (group >= 16) return ESP_ERR_INVALID_ARG;
-        return sendCommand(DALI_ADDRESS_TYPE_SHORT, shortAddress, DALI_ADD_TO_GROUP0 + group, true);
+        return sendCommand(DALI_ADDRESS_TYPE_SHORT, shortAddress, DALI_ADD_TO_GROUP0 + group);
     }
 
     esp_err_t DaliAPI::removeFromGroup(uint8_t shortAddress, uint8_t group) {
         if (group >= 16) return ESP_ERR_INVALID_ARG;
-        return sendCommand(DALI_ADDRESS_TYPE_SHORT, shortAddress, DALI_REMOVE_FROM_GROUP0 + group, true);
+        return sendCommand(DALI_ADDRESS_TYPE_SHORT, shortAddress, DALI_REMOVE_FROM_GROUP0 + group);
     }
 
     std::optional<std::bitset<16>> DaliAPI::getDeviceGroups(const uint8_t shortAddress) {
