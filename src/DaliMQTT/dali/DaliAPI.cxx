@@ -6,6 +6,8 @@ namespace daliMQTT
 {
     static constexpr char TAG[] = "DaliAPI";
     constexpr int DALI_EVENT_QUEUE_SIZE = 20;
+    constexpr uint32_t DALI_TIMER_RESOLUTION_HZ = 1000000; // 1MHz
+    constexpr uint32_t DALI_TIMER_ALARM_PERIOD_US = 104;
 
     static uint8_t bus_is_high() {
         return gpio_get_level(static_cast<gpio_num_t>(CONFIG_DALI2MQTT_DALI_RX_PIN));
@@ -63,7 +65,52 @@ namespace daliMQTT
             return ESP_OK;
         }
 
-        // todo
+        ESP_LOGI(TAG, "Configuring DALI GPIOs: RX=%d, TX=%d", rx_pin, tx_pin);
+        gpio_config_t tx_conf = {
+            .pin_bit_mask = (1ULL << tx_pin),
+            .mode = GPIO_MODE_OUTPUT_OD,
+            .pull_up_en = GPIO_PULLUP_DISABLE,
+            .pull_down_en = GPIO_PULLDOWN_DISABLE,
+            .intr_type = GPIO_INTR_DISABLE,
+        };
+        ESP_ERROR_CHECK(gpio_config(&tx_conf));
+
+        gpio_config_t rx_conf = {
+            .pin_bit_mask = (1ULL << rx_pin),
+            .mode = GPIO_MODE_INPUT,
+            .pull_up_en = GPIO_PULLUP_ENABLE,
+            .pull_down_en = GPIO_PULLDOWN_DISABLE,
+            .intr_type = GPIO_INTR_DISABLE,
+        };
+        ESP_ERROR_CHECK(gpio_config(&rx_conf));
+
+        bus_set_low();
+
+        m_dali_impl.begin(bus_is_high, bus_set_high, bus_set_low);
+
+        ESP_LOGI(TAG, "Configuring DALI GPTimer...");
+        gptimer_config_t timer_config = {
+            .clk_src = GPTIMER_CLK_SRC_DEFAULT,
+            .direction = GPTIMER_COUNT_UP,
+            .resolution_hz = DALI_TIMER_RESOLUTION_HZ,
+        };
+        ESP_ERROR_CHECK(gptimer_new_timer(&timer_config, &m_dali_timer));
+
+        gptimer_event_callbacks_t cbs = {
+            .on_alarm = dali_timer_isr_callback,
+        };
+        ESP_ERROR_CHECK(gptimer_register_event_callbacks(m_dali_timer, &cbs, &m_dali_impl));
+        ESP_ERROR_CHECK(gptimer_enable(m_dali_timer));
+
+        gptimer_alarm_config_t alarm_config = {
+            .alarm_count = DALI_TIMER_ALARM_PERIOD_US,
+            .reload_count = 0,
+            .flags = {
+                .auto_reload_on_alarm = true,
+            },
+        };
+        ESP_ERROR_CHECK(gptimer_set_alarm_action(m_dali_timer, &alarm_config));
+        ESP_ERROR_CHECK(gptimer_start(m_dali_timer));
 
         if (!m_dali_event_queue) {
             m_dali_event_queue = xQueueCreate(DALI_EVENT_QUEUE_SIZE, sizeof(dali_frame_t));
@@ -182,8 +229,6 @@ namespace daliMQTT
                 m_dali_impl.set_level(254, i);
                 vTaskDelay(pdMS_TO_TICKS(500));
                 m_dali_impl.set_level(0, i);
-                vTaskDelay(pdMS_TO_TICKS(100));
-
             } else if (-rv != DALI_RESULT_NO_REPLY) {
                 ESP_LOGW(TAG, "Scan error at address %d: code %d", i, -rv);
             }
