@@ -52,22 +52,30 @@ namespace daliMQTT
     }
 
     esp_err_t DaliGroupManagement::saveToConfig() {
-        std::lock_guard lock(m_mutex);
-        cJSON* root = cJSON_CreateObject();
-        if (!root) return ESP_ERR_NO_MEM;
+        cJSON* root = nullptr;
+        char* json_string = nullptr;
 
-        for (const auto& [addr, groups] : m_assignments) {
-            cJSON* group_array = cJSON_CreateArray();
-            for (int i = 0; i < 16; ++i) {
-                if (groups.test(i)) {
-                    cJSON_AddItemToArray(group_array, cJSON_CreateNumber(i));
+        {
+            std::lock_guard lock(m_mutex);
+            root = cJSON_CreateObject();
+            if (!root) return ESP_ERR_NO_MEM;
+
+            for (const auto& [addr, groups] : m_assignments) {
+                cJSON* group_array = cJSON_CreateArray();
+                for (int i = 0; i < 16; ++i) {
+                    if (groups.test(i)) {
+                        cJSON_AddItemToArray(group_array, cJSON_CreateNumber(i));
+                    }
                 }
+                cJSON_AddItemToObject(root, std::to_string(addr).c_str(), group_array);
             }
-            cJSON_AddItemToObject(root, std::to_string(addr).c_str(), group_array);
         }
 
-        char* json_string = cJSON_PrintUnformatted(root);
+        json_string = cJSON_PrintUnformatted(root);
         cJSON_Delete(root);
+        if (!json_string) {
+            return ESP_ERR_NO_MEM;
+        }
 
         const esp_err_t err = ConfigManager::getInstance().saveDaliGroupAssignments(json_string);
         free(json_string);
@@ -90,56 +98,71 @@ namespace daliMQTT
     esp_err_t DaliGroupManagement::setGroupMembership(uint8_t shortAddress, uint8_t group, bool assigned) {
         if (group >= 16) return ESP_ERR_INVALID_ARG;
 
-        std::lock_guard lock(m_mutex);
+        {
+            std::lock_guard lock(m_mutex);
+            m_assignments[shortAddress].set(group, assigned);
+        }
         auto& dali = DaliAPI::getInstance();
+        esp_err_t result;
 
         if (assigned) {
             ESP_LOGD(TAG, "Assigning device %d to group %d", shortAddress, group);
-            dali.assignToGroup(shortAddress, group);
+            result = dali.assignToGroup(shortAddress, group);
         } else {
             ESP_LOGD(TAG, "Removing device %d from group %d", shortAddress, group);
-            dali.removeFromGroup(shortAddress, group);
+            result = dali.removeFromGroup(shortAddress, group);
         }
-        m_assignments[shortAddress].set(group, assigned);
-
-        return saveToConfig();
-    }
-
-    void DaliGroupManagement::syncDeviceToBus(uint8_t shortAddress, std::bitset<16> newGroups, std::bitset<16> oldGroups) {
-        auto& dali = DaliAPI::getInstance();
-        // Находим различия
-        std::bitset<16> changed = newGroups ^ oldGroups;
-
-        for (uint8_t i = 0; i < 16; ++i) {
-            if (changed.test(i)) {
-                if (newGroups.test(i)) { // Был 0, стал 1 -> Добавить
-                    ESP_LOGI(TAG, "Sync: Adding device %d to group %d", shortAddress, i);
-                    dali.assignToGroup(shortAddress, i);
-                } else { // Был 1, стал 0 -> Удалить
-                    ESP_LOGI(TAG, "Sync: Removing device %d from group %d", shortAddress, i);
-                    dali.removeFromGroup(shortAddress, i);
-                }
-            }
+        if (result == ESP_OK) {
+            return saveToConfig();
         }
-    }
 
+        {
+            std::lock_guard lock(m_mutex);
+            m_assignments[shortAddress].set(group, !assigned);
+        }
+        return result;
+    }
 
     esp_err_t DaliGroupManagement::setAllAssignments(const GroupAssignments& newAssignments) {
-        std::lock_guard lock(m_mutex);
+        struct CommandToSend {
+            uint8_t address;
+            uint8_t group;
+            bool assign;
+        };
+        std::vector<CommandToSend> commands_to_send;
+        {
+            std::lock_guard lock(m_mutex);
+            std::set<uint8_t> all_addresses;
+            for(const auto& addr : m_assignments | std::views::keys) all_addresses.insert(addr);
+            for(const auto& addr : newAssignments | std::views::keys) all_addresses.insert(addr);
 
-        // Сначала применяем изменения на шине DALI
-        for(const auto& [addr, new_groups] : newAssignments) {
-            std::bitset<16> old_groups;
-            if (auto it = m_assignments.find(addr); it != m_assignments.end()) {
-                old_groups = it->second;
+            for (const auto& addr : all_addresses) {
+                std::bitset<16> old_groups = m_assignments.contains(addr) ? m_assignments.at(addr) : std::bitset<16>();
+                std::bitset<16> new_groups = newAssignments.contains(addr) ? newAssignments.at(addr) : std::bitset<16>();
+
+                if (old_groups == new_groups) continue;
+
+                std::bitset<16> changed_bits = old_groups ^ new_groups;
+                for (uint8_t i = 0; i < 16; ++i) {
+                    if (changed_bits.test(i)) {
+                        commands_to_send.push_back({addr, i, new_groups.test(i)});
+                    }
+                }
             }
-            syncDeviceToBus(addr, new_groups, old_groups);
+            m_assignments = newAssignments;
         }
 
-        // Затем обновляем наше внутреннее состояние
-        m_assignments = newAssignments;
-
-        // И сохраняем в NVS
+        auto& dali = DaliAPI::getInstance();
+        for (const auto& cmd : commands_to_send) {
+            if (cmd.assign) {
+                ESP_LOGI(TAG, "Sync: Adding device %d to group %d", cmd.address, cmd.group);
+                dali.assignToGroup(cmd.address, cmd.group);
+            } else {
+                ESP_LOGI(TAG, "Sync: Removing device %d from group %d", cmd.address, cmd.group);
+                dali.removeFromGroup(cmd.address, cmd.group);
+            }
+            vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
+        }
         return saveToConfig();
     }
 }

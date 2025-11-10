@@ -32,7 +32,7 @@ namespace daliMQTT
         esp_err_t init(gpio_num_t rx_pin, gpio_num_t tx_pin);
 
         // Отправка команды без ожидания ответа
-        esp_err_t sendCommand(dali_addressType_t addr_type, uint8_t addr, uint8_t command);
+        esp_err_t sendCommand(dali_addressType_t addr_type, uint8_t addr, uint8_t command, bool send_twice = false);
         // DACP - Direct Arc Power Control
         esp_err_t sendDACP(dali_addressType_t addr_type, uint8_t addr, uint8_t level);
         // Отправка запроса с ожиданием ответа

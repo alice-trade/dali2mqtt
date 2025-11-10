@@ -6,8 +6,8 @@ namespace daliMQTT
 {
     static constexpr char TAG[] = "DaliAPI";
     constexpr int DALI_EVENT_QUEUE_SIZE = 20;
-    constexpr uint32_t DALI_TIMER_RESOLUTION_HZ = 1000000; // 1MHz
-    constexpr uint32_t DALI_TIMER_ALARM_PERIOD_US = 104;
+    constexpr uint32_t DALI_TIMER_RESOLUTION_HZ = 24000000; // 24MHz
+    constexpr uint32_t DALI_TIMER_ALARM_PERIOD_US = 2500; // 24'000'000 / 9600 = 2500
 
     static uint8_t bus_is_high() {
         return gpio_get_level(static_cast<gpio_num_t>(CONFIG_DALI2MQTT_DALI_RX_PIN));
@@ -34,7 +34,11 @@ namespace daliMQTT
         uint8_t decoded_data[4];
 
         while (true) {
-            uint8_t bit_len = self->m_dali_impl.rx(decoded_data);
+            uint8_t bit_len;
+            {
+                std::lock_guard lock(self->bus_mutex);
+                bit_len = self->m_dali_impl.rx(decoded_data);
+            }
 
             if (bit_len > 2) {
                 dali_frame_t frame = {};
@@ -161,25 +165,39 @@ namespace daliMQTT
         return ESP_OK;
     }
 
-    esp_err_t DaliAPI::sendCommand(dali_addressType_t addr_type, uint8_t addr, uint8_t command) {
+    esp_err_t DaliAPI::sendCommand(dali_addressType_t addr_type, uint8_t addr, uint8_t command, bool send_twice) {
         std::lock_guard lock(bus_mutex);
         uint8_t dali_arg;
         uint16_t dali_cmd = command;
-
+        if (send_twice) {
+            dali_cmd |= 0x0200;
+        }
+        ESP_LOGD(TAG, "Got Command: %u", dali_cmd);
         if (addr_type == DALI_ADDRESS_TYPE_SPECIAL_CMD) {
             dali_cmd |= 0x0100;
+            ESP_LOGD(TAG, "Sending Special Command: %u", dali_cmd);
             dali_arg = addr;
         } else {
             switch (addr_type) {
-                case DALI_ADDRESS_TYPE_SHORT: dali_arg = addr; break;
-                case DALI_ADDRESS_TYPE_GROUP: dali_arg = 0x40 | addr; break;
-                case DALI_ADDRESS_TYPE_BROADCAST: dali_arg = 0x7F; break;
+                case DALI_ADDRESS_TYPE_SHORT:
+                    dali_arg = addr;
+                    ESP_LOGD(TAG,"Short addr execution command for: %u", dali_arg);
+                    break;
+                case DALI_ADDRESS_TYPE_GROUP:
+                    dali_arg = 0x40 | addr;
+                    ESP_LOGD(TAG,"Group command execution command for: %u", dali_arg);
+                    break;
+                case DALI_ADDRESS_TYPE_BROADCAST:
+                    dali_arg = 0x7F;
+                    ESP_LOGD(TAG,"Got Broadcast command from: %u with cmd %u", addr, command);
+                    break;
                 default: return ESP_ERR_INVALID_ARG;
             }
         }
 
-        m_dali_impl.cmd(dali_cmd, dali_arg);
-        vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
+        int16_t result = m_dali_impl.cmd(dali_cmd, dali_arg);
+        ESP_LOGD(TAG,"Executed Command: %u with code %u", dali_cmd, result);
+        // vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
         return ESP_OK;
     }
 
@@ -245,12 +263,13 @@ namespace daliMQTT
 
     esp_err_t DaliAPI::assignToGroup(uint8_t shortAddress, uint8_t group) {
         if (group >= 16) return ESP_ERR_INVALID_ARG;
-        return sendCommand(DALI_ADDRESS_TYPE_SHORT, shortAddress, DALI_ADD_TO_GROUP0 + group);
+        ESP_LOGD(TAG, "Process group addition of %u to %u", shortAddress, group);
+        return sendCommand(DALI_ADDRESS_TYPE_SHORT, shortAddress, DALI_COMMAND_ADD_TO_GROUP_0 + group, true);
     }
 
     esp_err_t DaliAPI::removeFromGroup(uint8_t shortAddress, uint8_t group) {
         if (group >= 16) return ESP_ERR_INVALID_ARG;
-        return sendCommand(DALI_ADDRESS_TYPE_SHORT, shortAddress, DALI_REMOVE_FROM_GROUP0 + group);
+        return sendCommand(DALI_ADDRESS_TYPE_SHORT, shortAddress, DALI_COMMAND_REMOVE_FROM_GROUP_0 + group, true);
     }
 
     std::optional<std::bitset<16>> DaliAPI::getDeviceGroups(const uint8_t shortAddress) {

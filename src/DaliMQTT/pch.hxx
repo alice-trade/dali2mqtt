@@ -4,6 +4,7 @@
 // Standard C++ library headers
 #include <algorithm>
 #include <array>
+#include <set>
 #include <atomic>
 #include <bitset>
 #include <charconv>

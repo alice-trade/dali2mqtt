@@ -81,11 +81,11 @@ namespace daliMQTT
     }
      void DaliDeviceController::processDaliFrame(const dali_frame_t& frame) {
         if (frame.is_backward_frame) {
-            ESP_LOGD(TAG, "Sniffed Backward Frame: 0x%02X", frame.data & 0xFF);
+            ESP_LOGD(TAG, "Process sniffed backward frame 0x%02X", frame.data & 0xFF);
             return;
         }
 
-        ESP_LOGD(TAG, "Sniffed Forward Frame: 0x%04X", frame.data);
+        ESP_LOGD(TAG, "Process sniffed forward frame 0x%04X", frame.data);
 
         uint8_t addr_byte = (frame.data >> 8) & 0xFF;
         uint8_t cmd_byte = frame.data & 0xFF;
@@ -94,15 +94,18 @@ namespace daliMQTT
             uint8_t level = cmd_byte;
             if ((addr_byte & 0x80) == 0) {
                 uint8_t short_addr = (addr_byte >> 1) & 0x3F;
+                ESP_LOGD(TAG,"Found direct change of short address state: %u, %u", short_addr, level);
                 publishState(short_addr, level);
             }
             // Групповой адрес
             else if ((addr_byte & 0xE0) == 0x80) {
                 uint8_t group_addr = (addr_byte >> 1) & 0x0F;
+                ESP_LOGD(TAG,"Found direct change of group address state: %u, %u", group_addr, level);
                 processGroupCommand(group_addr, level);
             }
             // Broadcast
             else if (addr_byte == 0xFE) {
+                ESP_LOGD(TAG,"Found direct change of broadcast address state: %u", level);
                 processBroadcastCommand(level);
             }
             return;
@@ -114,8 +117,10 @@ namespace daliMQTT
             case DALI_COMMAND_STEP_DOWN_AND_OFF: {
                 std::optional<uint8_t> known_level = (cmd_byte == DALI_COMMAND_OFF) ? std::optional(0) : std::nullopt;
                 if ((addr_byte & 0x80) == 0) {
+                    ESP_LOGD(TAG,"Found OFF command of short address state: %u", (addr_byte >> 1) & 0x3F);
                     publishState((addr_byte >> 1) & 0x3F, 0);
                 } else if ((addr_byte & 0xE0) == 0x80) {
+                    ESP_LOGD(TAG,"Found OFF command of group address state: %u", (addr_byte >> 1) & 0x0F);
                     processGroupCommand((addr_byte >> 1) & 0x0F, known_level);
                 } else if ((addr_byte & 0xFE) == 0xFE) {
                      processBroadcastCommand(known_level);
@@ -126,9 +131,19 @@ namespace daliMQTT
             case DALI_COMMAND_RECALL_MAX_LEVEL: {
                 if ((addr_byte & 0x80) == 0) {
                     uint8_t short_addr = (addr_byte >> 1) & 0x3F;
+                    ESP_LOGD(TAG,"Found ON command of short address with recall level state: %u", short_addr);
                     if (auto level_opt = DaliAPI::getInstance().sendQuery(DALI_ADDRESS_TYPE_SHORT, short_addr, DALI_COMMAND_QUERY_ACTUAL_LEVEL); level_opt) {
                         publishState(short_addr, level_opt.value());
                     }
+                }
+                else if ((addr_byte & 0xE0) == 0x80) {
+                    uint8_t group_addr = (addr_byte >> 1) & 0x0F;
+                    ESP_LOGD(TAG,"Found ON command of group address: %u", group_addr);
+                    processGroupCommand(group_addr, std::nullopt);
+                }
+                else if ((addr_byte & 0xFE) == 0xFE) {
+                    ESP_LOGD(TAG,"Found ON command of broadcast: %u");
+                    processBroadcastCommand(std::nullopt);
                 }
                 break;
             }
@@ -167,8 +182,8 @@ namespace daliMQTT
 
     [[noreturn]] void DaliDeviceController::daliEventHandlerTask(void* pvParameters) {
         auto* self = static_cast<DaliDeviceController*>(pvParameters);
-        auto& dali_api = DaliAPI::getInstance();
-        QueueHandle_t queue = dali_api.getEventQueue();
+        const auto& dali_api = DaliAPI::getInstance();
+        const QueueHandle_t queue = dali_api.getEventQueue();
         dali_frame_t frame;
 
         while (true) {
@@ -226,10 +241,14 @@ namespace daliMQTT
             ESP_LOGE(TAG, "Cannot initialize DALI bus: DALI driver is not initialized (device might be in provisioning mode).");
             return {};
         }
-        std::lock_guard lock(m_devices_mutex);
-        m_discovered_devices = DaliAPI::getInstance().initializeBus();
+        const std::bitset<64> found_devices = DaliAPI::getInstance().initializeBus();
+        {
+            std::lock_guard lock(m_devices_mutex);
+            m_discovered_devices = found_devices;
+        }
         saveDeviceMask();
-        return m_discovered_devices;
+
+        return found_devices;
     }
 
     std::bitset<64> DaliDeviceController::performScan() {
@@ -237,10 +256,15 @@ namespace daliMQTT
             ESP_LOGE(TAG, "Cannot scan DALI bus: DALI driver is not initialized (device might be in provisioning mode).");
             return {};
         }
-        std::lock_guard lock(m_devices_mutex);
-        m_discovered_devices = DaliAPI::getInstance().scanBus();
+        const std::bitset<64> found_devices = DaliAPI::getInstance().scanBus();
+
+        {
+            std::lock_guard lock(m_devices_mutex);
+            m_discovered_devices = found_devices;
+        }
         saveDeviceMask();
-        return m_discovered_devices;
+
+        return found_devices;
     }
 
     std::bitset<64> DaliDeviceController::getDiscoveredDevices() const {
@@ -256,8 +280,14 @@ namespace daliMQTT
 
     void DaliDeviceController::saveDeviceMask() const
     {
+        unsigned long long mask_to_save;
+        {
+            std::lock_guard lock(m_devices_mutex);
+            mask_to_save = m_discovered_devices.to_ullong();
+        }
+
         auto& config_manager = ConfigManager::getInstance();
-        config_manager.saveDaliDeviceMask(m_discovered_devices.to_ullong());
+        config_manager.saveDaliDeviceMask(mask_to_save);
         ESP_LOGI(TAG, "Saved DALI device mask to NVS.");
     }
 }// daliMQTT

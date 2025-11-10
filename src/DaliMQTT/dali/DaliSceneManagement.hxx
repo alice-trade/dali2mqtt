@@ -26,8 +26,6 @@ namespace daliMQTT
 
     private:
         DaliSceneManagement() = default;
-
-        std::mutex m_mutex;
     };
 
 } // daliMQTT
