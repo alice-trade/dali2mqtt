@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="PublishConfigData" remoteFilesAllowedToDisappearOnAutoupload="false">
+    <serverData>
+      <paths name="Debian GCC x64 (dac1145e-97a1-4d81-9a6f-c9906df75542)">
+        <serverdata>
+          <mappings>
+            <mapping local="$PROJECT_DIR$" web="/" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="Remote Gateway GCC ESP-IDF (93cd5eb0-3c13-4b0b-b1e8-944b7683a82c)">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/esp/daliMQTT" local="$PROJECT_DIR$" />
+          </mappings>
+          <excludedPaths>
+            <excludedPath local="true" path="$PROJECT_DIR$/tests/cmake-build-test" />
+            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-debug-esp32" />
+            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-release-esp32" />
+            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-debug-esp32s3-gateway" />
+          </excludedPaths>
+        </serverdata>
+      </paths>
+    </serverData>
+  </component>
+</project>
