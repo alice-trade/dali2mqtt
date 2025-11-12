@@ -20,6 +20,12 @@ include(../scripts/build_firmware.cmake)
 include(../scripts/size_components.cmake)
 include(../scripts/make_webui.cmake)
 
+set(SUPPORTED_BUILD_TYPES "Release" "Debug")
+
+if(NOT CMAKE_BUILD_TYPE IN_LIST SUPPORTED_BUILD_TYPES)
+    message(WARNING "You are using an unsupported build type: ${CMAKE_BUILD_TYPE}")
+endif()
+
 option(BUILD_TESTS "Build the unit test executable" OFF)
 
 if(BUILD_TESTS)

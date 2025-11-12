@@ -1,12 +1,11 @@
 # ESP 32 Build Process
 
 include($ENV{IDF_PATH}/tools/cmake/idf.cmake)
-string(TOUPPER "${CMAKE_BUILD_TYPE}" CMAKE_BUILD_TYPEU)
 include(../scripts/fetch_3rdparties.cmake)
 
 
-message("Build for" ${CMAKE_BUILD_TYPEU})
-
+message("Build for: " ${CMAKE_BUILD_TYPE})
+message("Uses Sdkconfig: " ${CMAKE_CURRENT_SOURCE_DIR} "/" ${CMAKE_BUILD_TYPE} "/" sdkconfig)
 set(PLATFORM_MODULES
         freertos
         esptool_py
@@ -29,8 +28,9 @@ if(BUILD_UNITY)
     message("----------UNITY BUILD-------")
     list(APPEND PLATFORM_MODULES unity esp_http_client)
 endif()
-idf_build_component(${ESP_BUILD_UTILS_PATH}/Kconfig)
 
+
+idf_build_component(${ESP_BUILD_UTILS_PATH}/Kconfig)
 idf_build_component(${ESP_PROTO_BASEDIR}/mdns)
 
 
@@ -38,9 +38,9 @@ idf_build_process(esp32s3
         COMPONENTS
             ${PLATFORM_MODULES}
         SDKCONFIG
-            ${CMAKE_CURRENT_SOURCE_DIR}/sdkconfig
+            ${CMAKE_CURRENT_SOURCE_DIR}/${CMAKE_BUILD_TYPE}/sdkconfig
         PROJECT_VER ${CMAKE_PROJECT_VERSION}
         PROJECT_DIR ${CMAKE_CURRENT_SOURCE_DIR}
-        SDKCONFIG_DEFAULTS ${ESP_BUILD_UTILS_PATH}/sdkconfig.default
+        SDKCONFIG_DEFAULTS ${ESP_BUILD_UTILS_PATH}/${CMAKE_BUILD_TYPE}/sdkconfig.default
         BUILD_DIR ${CMAKE_BINARY_DIR}
 )
