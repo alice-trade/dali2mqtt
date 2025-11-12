@@ -45,6 +45,7 @@ if(BUILD_TESTS)
             -DIDF_TARGET=esp32s3
             -DBUILD_UNITY=1
             -DESP_BUILD_UTILS_PATH=${ESP_BUILD_UTILS_PATH}
+            -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
             ${CMAKE_SOURCE_DIR}/tests
 
             BUILD_COMMAND ${CMAKE_MAKE_PROGRAM}
