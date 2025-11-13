@@ -77,9 +77,18 @@ namespace daliMQTT
         getString(nvs_handle.get(), "http_pass", config_cache.http_pass, CONFIG_DALI2MQTT_WEBUI_DEFAULT_PASS);
         getString(nvs_handle.get(), "dali_identif", config_cache.dali_device_identificators, "{}");
         getString(nvs_handle.get(), "dali_groups", config_cache.dali_group_assignments, "{}");
+        getString(nvs_handle.get(), "syslog_srv", config_cache.syslog_server, "");
 
         getU32(nvs_handle.get(), "dali_poll", config_cache.dali_poll_interval_ms, CONFIG_DALI2MQTT_DALI_DEFAULT_POLL_INTERVAL_MS);
         getU64(nvs_handle.get(), "dali_mask", config_cache.dali_devices_mask, 0);
+
+        #ifdef CONFIG_DALI2MQTT_SYSLOG_ENABLED_BY_DEFAULT
+                uint8_t syslog_enabled_flag = 1;
+        #else
+                uint8_t syslog_enabled_flag = 0;
+        #endif
+        nvs_get_u8(nvs_handle.get(), "syslog_en", &syslog_enabled_flag);
+        config_cache.syslog_enabled = (syslog_enabled_flag == 1);
 
         uint8_t configured_flag = 0;
         nvs_get_u8(nvs_handle.get(), "configured", &configured_flag);
@@ -115,6 +124,9 @@ namespace daliMQTT
         SetNVS(setString, "mqtt_base", new_config.mqtt_base_topic);
         SetNVS(setString, "http_user", new_config.http_user);
         SetNVS(setString, "http_pass", new_config.http_pass);
+        SetNVS(setString, "syslog_srv", new_config.syslog_server);
+        SetNVS(nvs_set_u8, "syslog_en", new_config.syslog_enabled ? 1 : 0);
+
         #undef SetNVS
         
         return ensureConfiguredAndCommit(nvs_handle.get());
@@ -186,6 +198,8 @@ namespace daliMQTT
         SetNVS(setString, "dali_groups", config_cache.dali_group_assignments);
         SetNVS(nvs_set_u32, "dali_poll", config_cache.dali_poll_interval_ms);
         SetNVS(nvs_set_u64, "dali_mask", config_cache.dali_devices_mask);
+        SetNVS(setString, "syslog_srv", config_cache.syslog_server);
+        SetNVS(nvs_set_u8, "syslog_en", config_cache.syslog_enabled ? 1 : 0);
 
         #undef SetNVS
 
