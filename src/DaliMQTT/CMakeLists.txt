@@ -44,4 +44,7 @@ target_link_libraries(DaliMQTT-Core PUBLIC
         idf::esp_wifi
         idf::cxx
         idf::esp_http_server
+        idf::esp_http_client
+        idf::app_update
+        idf::esp_https_ota
 )

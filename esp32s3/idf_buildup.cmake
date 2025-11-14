@@ -22,11 +22,14 @@ set(PLATFORM_MODULES
         nvs_flash
         esp_timer
         Kconfig
+        esp_http_client
+        esp_https_ota
+        app_update
 )
 
 if(BUILD_UNITY)
     message("----------UNITY BUILD-------")
-    list(APPEND PLATFORM_MODULES unity esp_http_client)
+    list(APPEND PLATFORM_MODULES unity)
 endif()
 
 
