@@ -86,6 +86,8 @@ namespace daliMQTT {
         }
         if (const cJSON* brightness = cJSON_GetObjectItem(root, "brightness"); brightness && cJSON_IsNumber(brightness)) {
             uint8_t level = static_cast<uint8_t>(std::clamp(brightness->valueint, 0, 254));
+            ESP_LOGD(TAG,"MQTT Light Command issued: addr %u, Change Level: %u", target_id, level);
+            dali.sendDACP(addr_type, target_id, level);
         }
 
         cJSON_Delete(root);
