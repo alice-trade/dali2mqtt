@@ -27,7 +27,7 @@ void SyslogConfig::init(const std::string& server_addr) {
 
     m_original_logger = esp_log_set_vprintf(syslog_vprintf_func);
     m_initialized = true;
-    ESP_LOGI(TAG, "Syslog logger initialized. Redirecting logs.");
+    ESP_LOGI(TAG, "Syslog logger initialized.");
 }
 
 void SyslogConfig::setServer(const std::string& server_addr) {

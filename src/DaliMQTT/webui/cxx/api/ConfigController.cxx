@@ -80,7 +80,7 @@ namespace daliMQTT {
          cJSON_AddStringToObject(root, "mqtt_base_topic", cfg.mqtt_base_topic.c_str());
          cJSON_AddStringToObject(root, "http_user", cfg.http_user.c_str());
          cJSON_AddStringToObject(root, "syslog_server", cfg.syslog_server.c_str());
-        cJSON_AddBoolToObject(root, "syslog_enabled", cfg.syslog_enabled);
+         cJSON_AddBoolToObject(root, "syslog_enabled", cfg.syslog_enabled);
 
          char *json_string = cJSON_Print(root);
          httpd_resp_set_type(req, "application/json");
