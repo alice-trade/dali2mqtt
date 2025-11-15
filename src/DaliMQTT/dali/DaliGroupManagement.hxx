@@ -1,9 +1,10 @@
 #ifndef DALIMQTT_DALIGROUPMANAGEMENT_HXX
 #define DALIMQTT_DALIGROUPMANAGEMENT_HXX
+#include "DaliTypes.hxx"
 
 namespace daliMQTT
 {
-    using GroupAssignments = std::map<uint8_t, std::bitset<16>>;
+    using GroupAssignments = std::map<DaliLongAddress_t, std::bitset<16>>;
 
     class DaliGroupManagement {
     public:
@@ -22,10 +23,10 @@ namespace daliMQTT
         [[nodiscard]] GroupAssignments getAllAssignments() const;
 
         // Получить группы для конкретного устройства
-        [[nodiscard]] std::optional<std::bitset<16>> getGroupsForDevice(uint8_t shortAddress) const;
+        [[nodiscard]] std::optional<std::bitset<16>> getGroupsForDevice(DaliLongAddress_t longAddress) const;
 
         // Установить новое состояние принадлежности устройства к группе
-        esp_err_t setGroupMembership(uint8_t shortAddress, uint8_t group, bool assigned);
+        esp_err_t setGroupMembership(DaliLongAddress_t longAddress, uint8_t group, bool assigned);
 
         // Установить все назначения (например, из WebUI)
         esp_err_t setAllAssignments(const GroupAssignments& newAssignments);
@@ -35,9 +36,6 @@ namespace daliMQTT
 
         void loadFromConfig();
         esp_err_t saveToConfig();
-
-        // Синхронизация одного устройства с шиной DALI
-        void syncDeviceToBus(uint8_t shortAddress, std::bitset<16> newGroups, std::bitset<16> oldGroups);
 
         GroupAssignments m_assignments;
         mutable std::mutex m_mutex;

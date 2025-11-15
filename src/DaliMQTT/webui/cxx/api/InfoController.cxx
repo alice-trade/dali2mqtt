@@ -56,7 +56,7 @@ namespace daliMQTT {
         const auto& dali_api = DaliAPI::getInstance();
         std::string dali_status;
         if (dali_api.isInitialized()) {
-            const auto discovered_devices = DaliDeviceController::getInstance().getDiscoveredDevices().count();
+            const auto discovered_devices = DaliDeviceController::getInstance().getDevices().size();
             dali_status = std::format("Active, {} devices found", discovered_devices);
         } else {
             dali_status = "Inactive (Provisioning Mode)";

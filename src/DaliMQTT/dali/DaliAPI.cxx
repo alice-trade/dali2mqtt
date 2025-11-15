@@ -19,9 +19,8 @@ namespace daliMQTT
         gpio_set_level(static_cast<gpio_num_t>(CONFIG_DALI2MQTT_DALI_TX_PIN), 0);
     }
 
-    static bool IRAM_ATTR dali_timer_isr_callback(gptimer_handle_t timer, const gptimer_alarm_event_data_t *edata, void *user_ctx) {
-        Dali* dali_instance = static_cast<Dali*>(user_ctx);
-        if (dali_instance) {
+    static bool IRAM_ATTR dali_timer_isr_callback([[maybe_unused]] gptimer_handle_t timer, [[maybe_unused]] const gptimer_alarm_event_data_t *edata, void *user_ctx) {
+        if (const auto dali_instance = static_cast<Dali *>(user_ctx)) {
             dali_instance->timer();
         }
         return false;
@@ -197,7 +196,6 @@ namespace daliMQTT
 
         int16_t result = m_dali_impl.cmd(dali_cmd, dali_arg);
         ESP_LOGD(TAG,"Executed Command: %u with code %u", dali_cmd, result);
-        // vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
         return ESP_OK;
     }
 
@@ -280,6 +278,19 @@ namespace daliMQTT
         if (groups_0_7.has_value() && groups_8_15.has_value()) {
             const uint16_t combined = (groups_8_15.value() << 8) | groups_0_7.value();
             return std::bitset<16>(combined);
+        }
+        return std::nullopt;
+    }
+
+    std::optional<DaliLongAddress_t> DaliAPI::getLongAddress(const uint8_t shortAddress) {
+        const auto h_opt = sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddress, DALI_QUERY_RANDOM_ADDRESS_H);
+        vTaskDelay(pdMS_TO_TICKS(5));
+        const auto m_opt = sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddress, DALI_QUERY_RANDOM_ADDRESS_M);
+        vTaskDelay(pdMS_TO_TICKS(5));
+        const auto l_opt = sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddress, DALI_QUERY_RANDOM_ADDRESS_L);
+
+        if (h_opt && m_opt && l_opt) {
+            return (static_cast<DaliLongAddress_t>(h_opt.value()) << 16) | (static_cast<DaliLongAddress_t>(m_opt.value()) << 8) | l_opt.value();
         }
         return std::nullopt;
     }

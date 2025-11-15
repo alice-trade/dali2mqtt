@@ -23,21 +23,28 @@ namespace daliMQTT
 
         std::bitset<64> performFullInitialization();
         std::bitset<64> performScan();
-        [[nodiscard]] std::bitset<64> getDiscoveredDevices() const;
+
+        [[nodiscard]] std::map<DaliLongAddress_t, DaliDevice> getDevices() const;
+        [[nodiscard]] std::optional<uint8_t> getShortAddress(DaliLongAddress_t longAddress) const;
+        [[nodiscard]] std::optional<DaliLongAddress_t> getLongAddress(uint8_t shortAddress) const;
+
+        void updateDeviceLevel(DaliLongAddress_t longAddr, uint8_t level);
 
     private:
         DaliDeviceController() = default;
 
-        void loadDeviceMask();
-        void saveDeviceMask() const;
         void processDaliFrame(const dali_frame_t& frame);
+        void discoverAndMapDevices();
+        bool validateAddressMap();
 
         [[noreturn]] static void daliEventHandlerTask(void* pvParameters);
         [[noreturn]] static void daliSyncTask(void* pvParameters);
 
-        std::bitset<64> m_discovered_devices;
         TaskHandle_t m_event_handler_task{nullptr};
         TaskHandle_t m_sync_task_handle{nullptr};
+        
+        std::map<DaliLongAddress_t, DaliDevice> m_devices;
+        std::map<uint8_t, DaliLongAddress_t> m_short_to_long_map;
         mutable std::mutex m_devices_mutex;
     };
 

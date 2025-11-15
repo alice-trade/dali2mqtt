@@ -34,7 +34,7 @@ namespace daliMQTT {
         mqtt.publish(availability_topic, CONFIG_DALI2MQTT_MQTT_PAYLOAD_ONLINE, 1, true);
 
         // Подписка на команды для светильников
-        std::string light_cmd_topic = std::format("{}{}", config.mqtt_base_topic, "/light/+/+/set");
+        std::string light_cmd_topic = std::format("{}{}", config.mqtt_base_topic, "/light/+/set");
         mqtt.subscribe(light_cmd_topic);
         ESP_LOGI(TAG, "Subscribed to: %s", light_cmd_topic.c_str());
 
@@ -57,33 +57,35 @@ namespace daliMQTT {
 
     // Вспомогательная функция для обработки команд управления светом
     static void handleLightCommand(const std::vector<std::string_view>& parts, const std::string& data) {
-        if (parts.size() != 4 || parts[0] != "light" || parts[3] != "set") return;
+        // topic format: light/{long_addr_hex}/set OR light/group/{id}/set
+        if (parts.size() < 3 || parts[0] != "light" || parts.back() != "set") return;
+        
+        dali_addressType_t addr_type = DALI_ADDRESS_TYPE_SHORT;
+        uint8_t target_id = 0;
 
-        dali_addressType_t addr_type;
-        if (parts[1] == "short") addr_type = DALI_ADDRESS_TYPE_SHORT;
-        else if (parts[1] == "group") addr_type = DALI_ADDRESS_TYPE_GROUP;
-        else return;
-
-        uint8_t id;
-        auto [ptr, ec] = std::from_chars(parts[2].data(), parts[2].data() + parts[2].size(), id);
-        if (ec != std::errc()) return;
-
+        if (parts[1] == "group") {
+            addr_type = DALI_ADDRESS_TYPE_GROUP;
+            if (auto [ptr, ec] = std::from_chars(parts[2].data(), parts[2].data() + parts[2].size(), target_id); ec != std::errc() || target_id > 15) return;
+        } else {
+            const auto long_addr_opt = stringToLongAddress(parts[1]);
+            if (!long_addr_opt) return;
+            const auto short_addr_opt = DaliDeviceController::getInstance().getShortAddress(*long_addr_opt);
+            if (!short_addr_opt) return;
+            target_id = *short_addr_opt;
+        }
+        
         cJSON* root = cJSON_Parse(data.c_str());
         if (!root) return;
 
         auto& dali = DaliAPI::getInstance();
 
         if (cJSON const* state = cJSON_GetObjectItem(root, "state"); state && cJSON_IsString(state)) {
-            if (strcmp(state->valuestring, "OFF") == 0) {
-                ESP_LOGD(TAG,"MQTT Light Command issued: addr %u, OFF", id);
-                dali.sendCommand(addr_type, id, DALI_OFF);
+            if (strcmp(state->valuestring, "OFF") == 0) {                
+                dali.sendCommand(addr_type, target_id, DALI_COMMAND_OFF);
             }
         }
-
-        if (cJSON* brightness = cJSON_GetObjectItem(root, "brightness"); brightness && cJSON_IsNumber(brightness)) {
+        if (const cJSON* brightness = cJSON_GetObjectItem(root, "brightness"); brightness && cJSON_IsNumber(brightness)) {
             uint8_t level = static_cast<uint8_t>(std::clamp(brightness->valueint, 0, 254));
-            ESP_LOGD(TAG,"MQTT Light Command issued: addr %u, Change Level: %u", id, level);
-            dali.sendDACP(addr_type, id, level);
         }
 
         cJSON_Delete(root);
@@ -97,26 +99,28 @@ namespace daliMQTT {
             return;
         }
 
-        cJSON* addr_item = cJSON_GetObjectItem(root, "short_address");
+        cJSON* addr_item = cJSON_GetObjectItem(root, "long_address");
         cJSON* group_item = cJSON_GetObjectItem(root, "group");
         cJSON* state_item = cJSON_GetObjectItem(root, "state");
 
-        if (!cJSON_IsNumber(addr_item) || !cJSON_IsNumber(group_item) || !cJSON_IsString(state_item)) {
+        if (!cJSON_IsString(addr_item) || !cJSON_IsNumber(group_item) || !cJSON_IsString(state_item)) {
             ESP_LOGE(TAG, "Invalid group command JSON structure");
             cJSON_Delete(root);
             return;
         }
 
-        uint8_t addr = addr_item->valueint;
+        auto long_addr_opt = stringToLongAddress(addr_item->valuestring);
+        if (!long_addr_opt) return; // Invalid long address format
+        
         uint8_t group = group_item->valueint;
         bool assign = (strcmp(state_item->valuestring, "add") == 0);
 
-        DaliGroupManagement::getInstance().setGroupMembership(addr, group, assign);
+        DaliGroupManagement::getInstance().setGroupMembership(*long_addr_opt, group, assign);
 
         auto config = ConfigManager::getInstance().getConfig();
         auto const& mqtt = MQTTClient::getInstance();
         std::string result_topic = std::format("{}{}", config.mqtt_base_topic, CONFIG_DALI2MQTT_MQTT_GROUP_RES_SUBTOPIC);
-        std::string payload = std::format(R"({{"status":"success","device":{},"group":{},"action":"{}"}})", addr, group, (assign ? "added" : "removed"));
+        std::string payload = std::format(R"({{"status":"success","device":"{}","group":{},"action":"{}"}})", addr_item->valuestring, group, (assign ? "added" : "removed"));
         mqtt.publish(result_topic, payload);
 
         cJSON_Delete(root);
@@ -159,7 +163,6 @@ namespace daliMQTT {
         if (parts.empty()) return;
 
         if (parts[0] == "light") {
-            ESP_LOGD("MQTTDEBUG", "MQTT Light: %s", data.c_str());
             handleLightCommand(parts, data);
         } else if (parts[0] == "config" && parts.size() > 2 && parts[1] == "group" && parts[2] == "set") {
             handleGroupCommand(data);

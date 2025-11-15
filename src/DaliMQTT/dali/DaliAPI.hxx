@@ -3,7 +3,7 @@
 #include "DaliDriver.hxx"
 #include "dali_commands.h"
 #include "driver/gptimer.h"
-
+#include "DaliTypes.hxx"
 
 
 namespace daliMQTT
@@ -74,6 +74,9 @@ namespace daliMQTT
 
         // Получение маски группы
         [[nodiscard]] std::optional<std::bitset<16>> getDeviceGroups(uint8_t shortAddress);
+
+        // Получение long address устройства по short address
+        [[nodiscard]] std::optional<DaliLongAddress_t> getLongAddress(uint8_t shortAddress);
 
         // Проверка, была ли инициализирована шина DALI
         [[nodiscard]] bool isInitialized() const;
