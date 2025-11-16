@@ -1,28 +1,34 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import { api } from '../api';
 
+interface DaliDevice {
+  long_address: string;
+  short_address: number;
+}
+type DeviceNames = Record<string, string>; // key: long_address
+
 const props = defineProps<{
-  devices: number[],
-  deviceNames: Record<string, string>
+  devices: DaliDevice[],
+  deviceNames: DeviceNames
 }>();
 
 const selectedScene = ref(0);
-const sceneLevels = ref<Record<string, number>>({});
+const sceneLevels = ref<Record<string, number>>({}); // key: long_address
 const actionInProgress = ref(false);
 const message = ref('');
 const isError = ref(false);
 
 const sceneOptions = Array.from({ length: 16 }, (_, i) => i);
 
-const getDeviceDisplayName = (addr: number) => {
-  return props.deviceNames[addr] || `Device ${addr}`;
+const getDeviceDisplayName = (device: DaliDevice) => {
+  return props.deviceNames[device.long_address] || `Device ${device.short_address} (${device.long_address})`;
 };
 
 const initSceneLevels = () => {
   const levels: Record<string, number> = {};
-  props.devices.forEach(addr => {
-    levels[addr] = 254;
+  props.devices.forEach(device => {
+    levels[device.long_address] = 254;
   });
   sceneLevels.value = levels;
 };
@@ -40,6 +46,7 @@ const handleSaveScene = async () => {
   try {
     await api.saveDaliScene(payload);
     message.value = `Scene ${selectedScene.value} saved successfully!`;
+    setTimeout(() => { message.value = ''}, 3000);
   } catch (e) {
     message.value = 'Failed to save scene.';
     isError.value = true;
@@ -49,12 +56,12 @@ const handleSaveScene = async () => {
 };
 
 const setAll = (level: number) => {
-  props.devices.forEach(addr => {
-    sceneLevels.value[addr] = level;
+  props.devices.forEach(device => {
+    sceneLevels.value[device.long_address] = level;
   });
 };
 
-initSceneLevels();
+onMounted(initSceneLevels);
 </script>
 
 <template>
@@ -83,10 +90,10 @@ initSceneLevels();
 
       <h5>Device Levels for Scene {{ selectedScene }}</h5>
       <div class="device-list">
-        <div v-for="addr in devices" :key="addr" class="device-item">
-          <label :for="`level-${addr}`">{{ getDeviceDisplayName(addr) }}</label>
-          <input type="range" min="0" max="254" step="1" :id="`level-${addr}`" v-model.number="sceneLevels[addr]">
-          <span>{{ sceneLevels[addr] }}</span>
+        <div v-for="device in devices" :key="device.long_address" class="device-item">
+          <label :for="`level-${device.long_address}`">{{ getDeviceDisplayName(device) }}</label>
+          <input type="range" min="0" max="254" step="1" :id="`level-${device.long_address}`" v-model.number="sceneLevels[device.long_address]">
+          <span>{{ sceneLevels[device.long_address] }}</span>
         </div>
       </div>
 
@@ -99,7 +106,7 @@ initSceneLevels();
 <style scoped>
 .device-list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 1.5rem;
   margin-block: 1rem;
 }
@@ -112,6 +119,9 @@ initSceneLevels();
 .device-item label {
   grid-column: 1 / 3;
   margin-bottom: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .device-item input[type="range"] {
   margin-bottom: 0;

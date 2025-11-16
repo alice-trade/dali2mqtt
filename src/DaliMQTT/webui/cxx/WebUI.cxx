@@ -19,7 +19,7 @@ namespace daliMQTT
 
         config.lru_purge_enable = true;
         config.uri_match_fn = httpd_uri_match_wildcard;
-        config.max_uri_handlers = 14;
+        config.max_uri_handlers = 15;
 
         ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
         if (httpd_start(&server_handle, &config) != ESP_OK) {
@@ -28,7 +28,7 @@ namespace daliMQTT
         }
 
         // Register handlers
-        const std::array<httpd_uri_t, 13> handlers = {{
+        const std::array<httpd_uri_t, 14> handlers = {{
             { .uri = "/api/config", .method = HTTP_GET,  .handler = api::GetConfigHandler, .user_ctx = this },
             { .uri = "/api/config", .method = HTTP_POST, .handler = api::SetConfigHandler, .user_ctx = this },
             { .uri = "/api/info",   .method = HTTP_GET,  .handler = api::GetInfoHandler,   .user_ctx = this },
@@ -40,6 +40,7 @@ namespace daliMQTT
             { .uri = "/api/dali/names",      .method = HTTP_POST, .handler = api::DaliSetNamesHandler,   .user_ctx = this },
             { .uri = "/api/dali/groups",     .method = HTTP_GET,  .handler = api::DaliGetGroupsHandler,  .user_ctx = nullptr },
             { .uri = "/api/dali/groups",     .method = HTTP_POST, .handler = api::DaliSetGroupsHandler,  .user_ctx = nullptr },
+            { .uri = "/api/dali/groups/refresh", .method = HTTP_POST, .handler = api::DaliRefreshGroupsHandler, .user_ctx = nullptr },
             { .uri = "/api/dali/scenes",     .method = HTTP_POST, .handler = api::DaliSetSceneHandler,   .user_ctx = nullptr },
             { .uri = "/*",          .method = HTTP_GET,  .handler = staticFileGetHandler, .user_ctx = nullptr }
 

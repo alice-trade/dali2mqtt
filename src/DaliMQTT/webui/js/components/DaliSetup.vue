@@ -4,12 +4,17 @@ import { api } from '../api';
 import DaliSceneEditor from './DaliSceneEditor.vue';
 
 // Типы данных
-type GroupAssignments = Record<string, number[]>;
-type GroupMatrix = Record<string, boolean[]>;
-type DeviceNames = Record<string, string>;
+interface DaliDevice {
+  long_address: string;
+  short_address: number;
+}
+
+type GroupAssignments = Record<string, number[]>; // key: long_address
+type GroupMatrix = Record<string, boolean[]>;    // key: long_address
+type DeviceNames = Record<string, string>;       // key: long_address
 
 // Состояние компонента
-const devices = ref<number[]>([]);
+const devices = ref<DaliDevice[]>([]);
 const deviceNames = ref<DeviceNames>({});
 const groupMatrix = ref<GroupMatrix>({});
 
@@ -22,15 +27,15 @@ const message = ref('');
 const isError = ref(false);
 const viewMode = ref<'management' | 'scenes'>('management');
 
-const createGroupMatrix = (devices: number[], assignments: GroupAssignments): GroupMatrix => {
+const createGroupMatrix = (devices: DaliDevice[], assignments: GroupAssignments): GroupMatrix => {
   const matrix: GroupMatrix = {};
-  devices.forEach((addr: number) => {
-    const groupList = assignments[String(addr)] || [];
+  devices.forEach((device) => {
+    const groupList = assignments[device.long_address] || [];
     const boolArray = Array(16).fill(false);
     groupList.forEach(g => {
       if (g >= 0 && g < 16) boolArray[g] = true;
     });
-    matrix[String(addr)] = boolArray;
+    matrix[device.long_address] = boolArray;
   });
   return matrix;
 };
@@ -51,15 +56,15 @@ const loadData = async () => {
       api.getDaliGroups(),
     ]);
 
-    const sortedDevices = devicesRes.data.sort((a: number, b: number) => a - b);
+    const sortedDevices: DaliDevice[] = devicesRes.data.sort((a: DaliDevice, b: DaliDevice) => a.short_address - b.short_address);
     devices.value = sortedDevices;
 
     const names: DeviceNames = namesRes.data;
     const groups: GroupAssignments = groupsRes.data;
 
-    sortedDevices.forEach((addr: number) => {
-      if (!names[addr]) names[addr] = "";
-      if (!groups[addr]) groups[addr] = [];
+    sortedDevices.forEach((device: DaliDevice) => {
+      if (!names[device.long_address]) names[device.long_address] = "";
+      if (!groups[device.long_address]) groups[device.long_address] = [];
     });
 
     const matrix = createGroupMatrix(sortedDevices, groups);
@@ -80,7 +85,7 @@ const loadData = async () => {
   }
 };
 
-const pollStatus = (action: 'scan' | 'init', successMessage: string) => {
+const pollStatus = (action: 'scan' | 'init' | 'refresh', successMessage: string) => {
   const intervalId = setInterval(async () => {
     try {
       const res = await api.getDaliStatus();
@@ -90,6 +95,12 @@ const pollStatus = (action: 'scan' | 'init', successMessage: string) => {
         await loadData();
         actionInProgress.value = '';
         setTimeout(() => { if (message.value === successMessage) message.value = ''; }, 3000);
+      } else {
+        let statusText = res.data.status;
+        if (statusText === 'scanning') statusText = 'сканирование';
+        else if (statusText === 'initializing') statusText = 'инициализация';
+        else if (statusText === 'refreshing_groups') statusText = 'обновление групп';
+        message.value = `Выполняется: ${statusText}...`;
       }
     } catch (e) {
       clearInterval(intervalId);
@@ -100,7 +111,7 @@ const pollStatus = (action: 'scan' | 'init', successMessage: string) => {
   }, 2000);
 };
 
-const runAction = async (action: 'scan' | 'init' | 'save', asyncFn: () => Promise<any>, successMessage: string, isAsyncDali: boolean = false) => {
+const runAction = async (action: 'scan' | 'init' | 'save' | 'refresh', asyncFn: () => Promise<any>, successMessage: string, isAsyncDali: boolean = false) => {
   actionInProgress.value = action;
   message.value = `Выполняется: ${action}...`;
   isError.value = false;
@@ -110,18 +121,19 @@ const runAction = async (action: 'scan' | 'init' | 'save', asyncFn: () => Promis
     message.value = `Произошла ошибка во время выполнения: ${action}.`;
     isError.value = true;
   } finally {
-    actionInProgress.value = '';
     if (!isError.value) {
-        if(isAsyncDali) {
-            actionInProgress.value = action; // Keep busy indicator on
-            pollStatus(action as 'scan' | 'init', successMessage);
-        } else {
-            message.value = successMessage;
-            actionInProgress.value = '';
-            setTimeout(() => {
-                if (message.value === successMessage) message.value = '';
-            }, 3000);
-        }
+      if(isAsyncDali) {
+        actionInProgress.value = action;
+        pollStatus(action as 'scan' | 'init' | 'refresh', successMessage);
+      } else {
+        message.value = successMessage;
+        actionInProgress.value = '';
+        setTimeout(() => {
+          if (message.value === successMessage) message.value = '';
+        }, 3000);
+      }
+    } else {
+      actionInProgress.value = '';
     }
   }
 };
@@ -137,6 +149,10 @@ const handleInitialize = () => {
   runAction('init', api.daliInitialize, 'Инициализация завершена!', true);
 };
 
+const handleRefreshGroups = () => {
+  runAction('refresh', api.daliRefreshGroups, 'Состояния групп успешно обновлены!', true);
+};
+
 const handleSaveChanges = () => {
   const savePromises: Promise<any>[] = [];
 
@@ -146,12 +162,12 @@ const handleSaveChanges = () => {
 
   if (JSON.stringify(groupMatrix.value) !== JSON.stringify(pristineGroupMatrix.value)) {
     const payload: GroupAssignments = {};
-    for(const addr in groupMatrix.value) {
+    for(const long_addr in groupMatrix.value) {
       const groups: number[] = [];
-      groupMatrix.value[addr].forEach((isMember, index) => {
+      groupMatrix.value[long_addr].forEach((isMember, index) => {
         if (isMember) groups.push(index);
       });
-      payload[addr] = groups;
+      payload[long_addr] = groups;
     }
     savePromises.push(api.saveDaliGroups(payload));
   }
@@ -214,21 +230,29 @@ onMounted(loadData);
           </div>
         </div>
 
-        <h4>Найдено устройств: ({{ devices.length }}/64)</h4>
+        <div class="management-header">
+          <h4>Найдено устройств: ({{ devices.length }}/64)</h4>
+          <button @click="handleRefreshGroups" :disabled="!!actionInProgress" :aria-busy="actionInProgress === 'refresh'" class="secondary outline">
+                      Обновить членство в группах
+          </button>
+        </div>
         <div class="devices-grid">
-          <div v-for="addr in devices" :key="addr" class="device-card">
+          <div v-for="device in devices" :key="device.long_address" class="device-card">
             <header class="card-header">
-              <strong>Устройство {{ addr }}</strong>
+              <div>
+                <strong>Устройство {{ device.short_address }}</strong>
+                <small class="long-address-text">{{ device.long_address }}</small>
+              </div>
             </header>
             <div class="card-body">
-              <label :for="`name-${addr}`">Имя устройства</label>
-              <input type="text" :id="`name-${addr}`" v-model="deviceNames[addr]" placeholder="например, Свет в офисе 1" />
+              <label :for="`name-${device.long_address}`">Имя устройства</label>
+              <input type="text" :id="`name-${device.long_address}`" v-model="deviceNames[device.long_address]" placeholder="например, Свет в офисе 1" />
 
               <label>Членство в группах</label>
               <div class="group-chips">
                 <template v-for="i in 16" :key="i">
-                  <label :for="`check-${addr}-${i-1}`" class="chip" :class="{ 'active': groupMatrix[addr] && groupMatrix[addr][i-1] }">
-                    <input type="checkbox" role="switch" :id="`check-${addr}-${i-1}`" v-model="groupMatrix[addr][i-1]" />
+                  <label :for="`check-${device.long_address}-${i-1}`" class="chip" :class="{ 'active': groupMatrix[device.long_address] && groupMatrix[device.long_address][i-1] }">
+                    <input type="checkbox" role="switch" :id="`check-${device.long_address}-${i-1}`" v-model="groupMatrix[device.long_address][i-1]" />
                     G{{ i-1 }}
                   </label>
                 </template>
@@ -244,6 +268,13 @@ onMounted(loadData);
 </template>
 
 <style scoped>
+.long-address-text {
+  color: var(--pico-muted-color);
+  font-family: monospace;
+  font-size: 0.8em;
+  display: block;
+  margin-top: 0.2rem;
+}
 .empty-state {
   text-align: center;
   padding: 2rem;

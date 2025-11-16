@@ -79,7 +79,6 @@ namespace daliMQTT
         getString(nvs_handle.get(), "dali_groups", config_cache.dali_group_assignments, "{}");
 
         getU32(nvs_handle.get(), "dali_poll", config_cache.dali_poll_interval_ms, CONFIG_DALI2MQTT_DALI_DEFAULT_POLL_INTERVAL_MS);
-        getU64(nvs_handle.get(), "dali_mask", config_cache.dali_devices_mask, 0);
 
         uint8_t configured_flag = 0;
         nvs_get_u8(nvs_handle.get(), "configured", &configured_flag);
@@ -117,19 +116,6 @@ namespace daliMQTT
         SetNVS(setString, "http_pass", new_config.http_pass);
         #undef SetNVS
         
-        return ensureConfiguredAndCommit(nvs_handle.get());
-    }
-
-    esp_err_t ConfigManager::saveDaliDeviceMask(uint64_t mask) {
-        std::lock_guard lock(config_mutex);
-        config_cache.dali_devices_mask = mask;
-
-        NvsHandle nvs_handle(NVS_NAMESPACE, NVS_READWRITE);
-        if (!nvs_handle) return ESP_FAIL;
-
-        esp_err_t err = nvs_set_u64(nvs_handle.get(), "dali_mask", mask);
-        if (err != ESP_OK) return err;
-
         return ensureConfiguredAndCommit(nvs_handle.get());
     }
 
@@ -185,7 +171,6 @@ namespace daliMQTT
         SetNVS(setString, "dali_identif", config_cache.dali_device_identificators);
         SetNVS(setString, "dali_groups", config_cache.dali_group_assignments);
         SetNVS(nvs_set_u32, "dali_poll", config_cache.dali_poll_interval_ms);
-        SetNVS(nvs_set_u64, "dali_mask", config_cache.dali_devices_mask);
 
         #undef SetNVS
 
@@ -264,17 +249,7 @@ namespace daliMQTT
 
 
     esp_err_t ConfigManager::getU32(nvs_handle_t handle, const char* key, uint32_t& out_value, uint32_t default_value) {
-        esp_err_t err = nvs_get_u32(handle, key, &out_value);
-        if (err == ESP_ERR_NVS_NOT_FOUND) {
-            out_value = default_value;
-            ESP_LOGW(TAG, "%s", std::format("Key '{}' not found in NVS, using default value: {}", key, default_value).c_str());
-            return ESP_OK;
-        }
-        return err;
-    }
-
-    esp_err_t ConfigManager::getU64(nvs_handle_t handle, const char* key, uint64_t& out_value, uint64_t default_value) {
-        esp_err_t err = nvs_get_u64(handle, key, &out_value);
+        const esp_err_t err = nvs_get_u32(handle, key, &out_value);
         if (err == ESP_ERR_NVS_NOT_FOUND) {
             out_value = default_value;
             ESP_LOGW(TAG, "%s", std::format("Key '{}' not found in NVS, using default value: {}", key, default_value).c_str());
