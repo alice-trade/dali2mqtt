@@ -8,7 +8,6 @@
 
 namespace daliMQTT
 {
-
     static constexpr char  TAG[] = "WifiManager";
 
     esp_err_t Wifi::init() {

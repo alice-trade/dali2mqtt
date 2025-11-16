@@ -77,7 +77,7 @@ namespace daliMQTT {
                 case DALI_COMMAND_STEP_DOWN_AND_OFF:
                     known_level = 0;
                     break;
-                    // Should be recalled
+                // Should be recalled
                 case DALI_COMMAND_UP:
                 case DALI_COMMAND_DOWN:
                 case DALI_COMMAND_STEP_UP:

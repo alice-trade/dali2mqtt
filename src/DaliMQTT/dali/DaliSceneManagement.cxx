@@ -1,7 +1,6 @@
 #include "DaliSceneManagement.hxx"
 #include "DaliAPI.hxx"
 
-
 namespace daliMQTT
 {
     static constexpr char TAG[] = "DaliSceneManagement";

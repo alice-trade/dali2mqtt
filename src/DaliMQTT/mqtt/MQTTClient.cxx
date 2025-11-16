@@ -4,7 +4,6 @@ namespace daliMQTT
 {
     static constexpr char  TAG[] = "MQTTClient";
 
-
     void MQTTClient::init(const std::string& uri, const std::string& client_id, const std::string& availability_topic, const std::string& username, const std::string& password) {
 
         esp_mqtt_client_config_t mqtt_cfg = {};

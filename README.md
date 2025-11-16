@@ -48,7 +48,7 @@ cd daliMQTT
 . $HOME/esp/esp-idf/export.sh
 
 # Запустите menuconfig
-cmake -B build -DCMAKE_TOOLCHAIN_FILE=/path/to/esp-idf/tools/cmake/toolchain-esp<chip>.cmake -DTARGET=esp<chip> -GNinja .
+cmake -B build -DCMAKE_TOOLCHAIN_FILE=/path/to/esp-idf/tools/cmake/toolchain-esp<chip>.cmake -GNinja .
 cmake --build build --target menuconfig
 ```
 Основные настройки находятся в разделе `DALI MQTT Bridge Settings`.
