@@ -31,6 +31,8 @@ namespace daliMQTT
         // Установить все назначения (например, из WebUI)
         esp_err_t setAllAssignments(const GroupAssignments& newAssignments);
 
+        // Обновить назначения групп, опросив все устройства на шине
+        esp_err_t refreshAssignmentsFromBus();
     private:
         DaliGroupManagement() = default;
 

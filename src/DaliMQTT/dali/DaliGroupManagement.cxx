@@ -170,4 +170,42 @@ namespace daliMQTT
         }
         return saveToConfig();
     }
+
+    esp_err_t DaliGroupManagement::refreshAssignmentsFromBus() {
+        ESP_LOGI(TAG, "Refreshing group assignments from DALI bus...");
+
+        auto& device_controller = DaliDeviceController::getInstance();
+        auto devices = device_controller.getDevices();
+        if (devices.empty()) {
+            ESP_LOGW(TAG, "No devices found to refresh group assignments.");
+            return ESP_OK;
+        }
+
+        GroupAssignments new_assignments;
+        auto& dali = DaliAPI::getInstance();
+
+        for (const auto& [long_addr, device] : devices) {
+            if (!device.is_present) continue;
+
+            auto groups_opt = dali.getDeviceGroups(device.short_address);
+            if (groups_opt) {
+                new_assignments[long_addr] = *groups_opt;
+                ESP_LOGD(TAG, "Device %s (SA %d) has group mask: %s",
+                         longAddressToString(long_addr).data(),
+                         device.short_address,
+                         groups_opt->to_string().c_str());
+            } else {
+                ESP_LOGW(TAG, "Failed to get group info for device %s (SA %d)",
+                         longAddressToString(long_addr).data(),
+                         device.short_address);
+            }
+            vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
+        }
+        {
+            std::lock_guard lock(m_mutex);
+            m_assignments = new_assignments;
+            ESP_LOGI(TAG, "Finished refreshing group assignments. Found assignments for %zu devices.", m_assignments.size());
+        }
+        return saveToConfig();
+    }
 }

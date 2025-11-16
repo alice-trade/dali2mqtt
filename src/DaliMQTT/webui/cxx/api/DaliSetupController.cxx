@@ -7,8 +7,8 @@
 
 
 namespace daliMQTT {
-    enum class DaliTaskStatus { IDLE, SCANNING, INITIALIZING };
-    static std::atomic<DaliTaskStatus> g_dali_task_status = DaliTaskStatus::IDLE;
+    enum class DaliTaskStatus { IDLE, SCANNING, INITIALIZING, REFRESHING_GROUPS };
+    static std::atomic<DaliTaskStatus> g_dali_task_status{DaliTaskStatus::IDLE};
 
     static constexpr char  TAG[] = "WebUIDali";
 
@@ -93,9 +93,22 @@ namespace daliMQTT {
     }
 
     esp_err_t WebUI::api::DaliGetStatusHandler(httpd_req_t *req) {
-        const char *status_str = (g_dali_task_status == DaliTaskStatus::IDLE)
-                                     ? "idle"
-                                     : ((g_dali_task_status == DaliTaskStatus::SCANNING) ? "scanning" : "initializing");
+        const char *status_str;
+        switch(g_dali_task_status.load()) {
+            using enum DaliTaskStatus;
+            case IDLE:
+                status_str = "idle";
+                break;
+            case SCANNING:
+                status_str = "scanning";
+                break;
+            case INITIALIZING:
+                status_str = "initializing";
+                break;
+            case REFRESHING_GROUPS:
+                status_str = "refreshing_groups";
+                break;
+        }
         const std::string response = std::format(R"({{"status":"{}"}})", status_str);
         httpd_resp_set_type(req, "application/json");
         httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
@@ -236,8 +249,8 @@ namespace daliMQTT {
                 return ESP_FAIL;
         }
 
-        cJSON* scene_id_item = cJSON_GetObjectItem(root, "scene_id");
-        cJSON* levels_item = cJSON_GetObjectItem(root, "levels");
+        const cJSON* scene_id_item = cJSON_GetObjectItem(root, "scene_id");
+        const cJSON* levels_item = cJSON_GetObjectItem(root, "levels");
 
         if (!cJSON_IsNumber(scene_id_item) || !cJSON_IsObject(levels_item)) {
             httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON: 'scene_id' or 'levels' are missing/invalid");
@@ -245,11 +258,11 @@ namespace daliMQTT {
             return ESP_FAIL;
         }
 
-        uint8_t scene_id = scene_id_item->valueint;
+        const uint8_t scene_id = scene_id_item->valueint;
         SceneDeviceLevels levels; // This is map<short_addr, level>
-        auto& controller = DaliDeviceController::getInstance();
+        const auto& controller = DaliDeviceController::getInstance();
 
-        cJSON* level_item = nullptr;
+        const cJSON* level_item = nullptr;
         cJSON_ArrayForEach(level_item, levels_item) {
             auto long_addr_opt = stringToLongAddress(level_item->string);
             if (!long_addr_opt) continue;
@@ -266,6 +279,33 @@ namespace daliMQTT {
         DaliSceneManagement::getInstance().saveScene(scene_id, levels);
 
         httpd_resp_send(req, R"({"status":"ok", "message":"Scene configuration saved to devices."})", -1);
+        return ESP_OK;
+    }
+
+    static void dali_refresh_groups_task(void*) {
+        ESP_LOGI(TAG, "Starting background DALI group refresh...");
+        DaliGroupManagement::getInstance().refreshAssignmentsFromBus();
+        ESP_LOGI(TAG, "Background DALI group refresh finished.");
+        g_dali_task_status = DaliTaskStatus::IDLE;
+        vTaskDelete(nullptr);
+    }
+
+    esp_err_t WebUI::api::DaliRefreshGroupsHandler(httpd_req_t *req) {
+        if (checkAuth(req) != ESP_OK) return ESP_FAIL;
+        if (g_dali_task_status != DaliTaskStatus::IDLE) {
+            httpd_resp_set_status(req, "409 Conflict");
+            httpd_resp_send(req, "Another DALI operation is already in progress.", HTTPD_RESP_USE_STRLEN);
+            return ESP_OK;
+        }
+        g_dali_task_status = DaliTaskStatus::REFRESHING_GROUPS;
+        if (xTaskCreate(dali_refresh_groups_task, "dali_refresh_groups_task", 4096, nullptr, 4, nullptr) != pdPASS) {
+            g_dali_task_status = DaliTaskStatus::IDLE;
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to create refresh task");
+            return ESP_FAIL;
+        }
+        ESP_LOGI(TAG, "Triggering DALI group refresh from WebUI.");
+        httpd_resp_set_status(req, "202 Accepted");
+        httpd_resp_send(req, R"({"status":"ok", "message":"Group refresh initiated."})", -1);
         return ESP_OK;
     }
 }

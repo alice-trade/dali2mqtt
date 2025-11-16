@@ -85,7 +85,7 @@ const loadData = async () => {
   }
 };
 
-const pollStatus = (action: 'scan' | 'init', successMessage: string) => {
+const pollStatus = (action: 'scan' | 'init' | 'refresh', successMessage: string) => {
   const intervalId = setInterval(async () => {
     try {
       const res = await api.getDaliStatus();
@@ -95,6 +95,12 @@ const pollStatus = (action: 'scan' | 'init', successMessage: string) => {
         await loadData();
         actionInProgress.value = '';
         setTimeout(() => { if (message.value === successMessage) message.value = ''; }, 3000);
+      } else {
+        let statusText = res.data.status;
+        if (statusText === 'scanning') statusText = 'сканирование';
+        else if (statusText === 'initializing') statusText = 'инициализация';
+        else if (statusText === 'refreshing_groups') statusText = 'обновление групп';
+        message.value = `Выполняется: ${statusText}...`;
       }
     } catch (e) {
       clearInterval(intervalId);
@@ -105,7 +111,7 @@ const pollStatus = (action: 'scan' | 'init', successMessage: string) => {
   }, 2000);
 };
 
-const runAction = async (action: 'scan' | 'init' | 'save', asyncFn: () => Promise<any>, successMessage: string, isAsyncDali: boolean = false) => {
+const runAction = async (action: 'scan' | 'init' | 'save' | 'refresh', asyncFn: () => Promise<any>, successMessage: string, isAsyncDali: boolean = false) => {
   actionInProgress.value = action;
   message.value = `Выполняется: ${action}...`;
   isError.value = false;
@@ -118,7 +124,7 @@ const runAction = async (action: 'scan' | 'init' | 'save', asyncFn: () => Promis
     if (!isError.value) {
       if(isAsyncDali) {
         actionInProgress.value = action;
-        pollStatus(action as 'scan' | 'init', successMessage);
+        pollStatus(action as 'scan' | 'init' | 'refresh', successMessage);
       } else {
         message.value = successMessage;
         actionInProgress.value = '';
@@ -141,6 +147,10 @@ const handleInitialize = () => {
     return;
   }
   runAction('init', api.daliInitialize, 'Инициализация завершена!', true);
+};
+
+const handleRefreshGroups = () => {
+  runAction('refresh', api.daliRefreshGroups, 'Состояния групп успешно обновлены!', true);
 };
 
 const handleSaveChanges = () => {
@@ -220,7 +230,12 @@ onMounted(loadData);
           </div>
         </div>
 
-        <h4>Найдено устройств: ({{ devices.length }}/64)</h4>
+        <div class="management-header">
+          <h4>Найдено устройств: ({{ devices.length }}/64)</h4>
+          <button @click="handleRefreshGroups" :disabled="!!actionInProgress" :aria-busy="actionInProgress === 'refresh'" class="secondary outline">
+                      Обновить членство в группах
+          </button>
+        </div>
         <div class="devices-grid">
           <div v-for="device in devices" :key="device.long_address" class="device-card">
             <header class="card-header">

@@ -70,6 +70,9 @@ export const api = {
     async saveDaliGroups(assignments: Record<string, number[]>) {
         return await apiClient.post('/api/dali/groups', assignments);
     },
+    async daliRefreshGroups() {
+        return await apiClient.post('/api/dali/groups/refresh');
+    },
     async saveDaliScene(payload: { scene_id: number, levels: Record<string, number> }) {
         return await apiClient.post('/api/dali/scenes', payload);
     }
