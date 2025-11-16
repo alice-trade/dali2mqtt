@@ -1,4 +1,4 @@
-# ESP 32 Build Process
+# idf v5.x common build
 
 include($ENV{IDF_PATH}/tools/cmake/idf.cmake)
 include(../scripts/fetch_3rdparties.cmake)
@@ -17,6 +17,7 @@ set(PLATFORM_MODULES
         esp_wifi
         mdns
         esp_http_server
+        esp_http_client
         driver
         esp_netif
         nvs_flash
@@ -26,19 +27,18 @@ set(PLATFORM_MODULES
 
 if(BUILD_UNITY)
     message("----------UNITY BUILD-------")
-    list(APPEND PLATFORM_MODULES unity esp_http_client)
+    list(APPEND PLATFORM_MODULES unity)
 endif()
 
 
-idf_build_component(${ESP_BUILD_UTILS_PATH}/Kconfig)
+idf_build_component(${ESP_BUILD_UTILS_PATH}/../Kconfig)
 idf_build_component(${ESP_PROTO_BASEDIR}/mdns)
 
-
-idf_build_process(esp32s3
+idf_build_process(${TARGET}
         COMPONENTS
-            ${PLATFORM_MODULES}
+        ${PLATFORM_MODULES}
         SDKCONFIG
-            ${ESP_BUILD_UTILS_PATH}/${CMAKE_BUILD_TYPE}/sdkconfig
+        ${ESP_BUILD_UTILS_PATH}/${CMAKE_BUILD_TYPE}/sdkconfig
         PROJECT_VER ${CMAKE_PROJECT_VERSION}
         PROJECT_DIR ${CMAKE_SOURCE_DIR}
         SDKCONFIG_DEFAULTS ${ESP_BUILD_UTILS_PATH}/${CMAKE_BUILD_TYPE}/sdkconfig.default

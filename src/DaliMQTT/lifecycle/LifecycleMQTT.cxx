@@ -1,7 +1,6 @@
 #include "sdkconfig.h"
 #include "ConfigManager.hxx"
 #include "MQTTClient.hxx"
-#include "DaliAPI.hxx"
 #include "DaliDeviceController.hxx"
 #include "WebUI.hxx"
 #include "MQTTDiscovery.hxx"
