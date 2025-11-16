@@ -41,56 +41,33 @@ namespace daliMQTT
             ESP_LOGE(TAG, "Cannot start DALI tasks: DaliAPI not initialized.");
         }
     }
-    static void publishState(DaliLongAddress_t long_addr, uint8_t level) {
+    static void publishState(const DaliLongAddress_t long_addr, uint8_t level) {
         auto const& mqtt = MQTTClient::getInstance();
         auto config = ConfigManager::getInstance().getConfig();
 
         const auto addr_str = longAddressToString(long_addr);
-        std::string state_topic = std::format("{}/light/{}/state", config.mqtt_base_topic, addr_str.data());
-        std::string payload = std::format(R"({{"state":"{}","brightness":{}}})", (level > 0 ? "ON" : "OFF"), level);
+        const std::string state_topic = std::format("{}/light/{}/state", config.mqtt_base_topic, addr_str.data());
+        if (level == 255) return;
+
+        const std::string payload = std::format(R"({{"state":"{}","brightness":{}}})", (level > 0 ? "ON" : "OFF"), level);
 
         ESP_LOGD(TAG, "Publishing to %s: %s", state_topic.c_str(), payload.c_str());
         mqtt.publish(state_topic, payload);
     }
 
 
-    void DaliDeviceController::updateDeviceLevel(DaliLongAddress_t longAddr, uint8_t level) {
+    void DaliDeviceController::updateDeviceState(DaliLongAddress_t longAddr, uint8_t level) {
         std::lock_guard lock(m_devices_mutex);
-        if (m_devices.contains(longAddr)) {
-            m_devices.at(longAddr).current_level = level;
-        }
-    }
-
-    static void processGroupCommand(uint8_t group_addr, std::optional<uint8_t> known_level, DaliDeviceController* self) {
-        auto& dali = DaliAPI::getInstance();
-        auto const& group_manager = DaliGroupManagement::getInstance();
-        auto all_assignments = group_manager.getAllAssignments();
-
-        for (const auto& [long_addr, groups] : all_assignments) {
-            if (groups.test(group_addr)) {
-                if (auto short_addr_opt = self->getShortAddress(long_addr)) {
-                     if (known_level.has_value()) {
-                        publishState(long_addr, *known_level);
-                     } else if (auto level_opt = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, *short_addr_opt, DALI_COMMAND_QUERY_ACTUAL_LEVEL); level_opt) {
-                         publishState(long_addr, level_opt.value());
-                     }
-                }
+        const auto it = m_devices.find(longAddr);
+        if (it != m_devices.end()) {
+            if (it->second.current_level != level) {
+                ESP_LOGI(TAG, "State change detected for %s. Old: %d, New: %d",
+                         longAddressToString(longAddr).data(), it->second.current_level, level);
+                it->second.current_level = level;
+                publishState(longAddr, level);
             }
         }
     }
-
-    static void processBroadcastCommand(const std::optional<uint8_t> known_level, const DaliDeviceController* self) {
-        auto& dali = DaliAPI::getInstance();
-        auto devices = self->getDevices();
-        
-        for(const auto& [long_addr, device] : devices) {
-                if (known_level.has_value()) {
-                    publishState(long_addr, *known_level);
-                } else if (auto level_opt = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, device.short_address, DALI_COMMAND_QUERY_ACTUAL_LEVEL); level_opt) {
-                     publishState(long_addr, level_opt.value());
-                }
-            }
-        }
 
     bool DaliDeviceController::validateAddressMap() {
         ESP_LOGI(TAG, "Validating cached DALI address map...");
@@ -139,114 +116,6 @@ namespace daliMQTT
         return true;
     }
 
-     void DaliDeviceController::processDaliFrame(const dali_frame_t& frame) {
-        if (frame.is_backward_frame) {
-            ESP_LOGD(TAG, "Process sniffed backward frame 0x%02X", frame.data & 0xFF);
-            return;
-        }
-
-        ESP_LOGD(TAG, "Process sniffed forward frame 0x%04X", frame.data);
-
-        uint8_t addr_byte = (frame.data >> 8) & 0xFF;
-        uint8_t cmd_byte = frame.data & 0xFF;
-
-        if ((addr_byte & 0x01) == 0) {
-            uint8_t level = cmd_byte;
-            if ((addr_byte & 0x80) == 0) {
-                uint8_t short_addr = (addr_byte >> 1) & 0x3F;
-                if (auto long_addr_opt = getLongAddress(short_addr)) {
-                    ESP_LOGD(TAG,"Found direct change of short address %u (long: %lX) state to %u", short_addr, *long_addr_opt, level);
-                    publishState(*long_addr_opt, level);
-                }
-            }
-            // Групповой адрес
-            else if ((addr_byte & 0xE0) == 0x80) {
-                uint8_t group_addr = (addr_byte >> 1) & 0x0F;
-                ESP_LOGD(TAG,"Found direct change of group address state: %u, %u", group_addr, level);
-                processGroupCommand(group_addr, level, this);
-            }
-            // Broadcast
-            else if (addr_byte == 0xFE) {
-                ESP_LOGD(TAG,"Found direct change of broadcast address state: %u", level);
-                processBroadcastCommand(level, this);
-            }
-            return;
-        }
-
-        switch (cmd_byte) {
-            case DALI_COMMAND_OFF:
-            case DALI_COMMAND_RECALL_MIN_LEVEL:
-            case DALI_COMMAND_STEP_DOWN_AND_OFF: {
-                std::optional<uint8_t> known_level = (cmd_byte == DALI_COMMAND_OFF) ? std::optional(0) : std::nullopt;
-                if ((addr_byte & 0x80) == 0) {
-                    uint8_t short_addr = (addr_byte >> 1) & 0x3F;
-                    if(auto long_addr_opt = getLongAddress(short_addr)) {
-                        ESP_LOGD(TAG,"Found OFF command for short address %u (long: %lX)", short_addr, *long_addr_opt);
-                        publishState(*long_addr_opt, 0);
-                    }
-                } else if ((addr_byte & 0xE0) == 0x80) {
-                    ESP_LOGD(TAG,"Found OFF command of group address state: %u", (addr_byte >> 1) & 0x0F);
-                    processGroupCommand((addr_byte >> 1) & 0x0F, known_level, this);
-                } else if ((addr_byte & 0xFE) == 0xFE) {
-                     processBroadcastCommand(known_level, this);
-                }
-                break;
-            }
-            case DALI_COMMAND_ON_AND_STEP_UP:
-            case DALI_COMMAND_RECALL_MAX_LEVEL: {
-                if ((addr_byte & 0x80) == 0) {
-                    uint8_t short_addr = (addr_byte >> 1) & 0x3F;
-                     if (auto long_addr_opt = getLongAddress(short_addr)) {
-                        ESP_LOGD(TAG,"Found ON command for short address %u (long: %lX)", short_addr, *long_addr_opt);
-                        if (auto level_opt = DaliAPI::getInstance().sendQuery(DALI_ADDRESS_TYPE_SHORT, short_addr, DALI_COMMAND_QUERY_ACTUAL_LEVEL); level_opt) {
-                           publishState(*long_addr_opt, level_opt.value());
-                        }
-                    }
-                }
-                else if ((addr_byte & 0xE0) == 0x80) {
-                    uint8_t group_addr = (addr_byte >> 1) & 0x0F;
-                    ESP_LOGD(TAG,"Found ON command of group address: %u", group_addr);
-                    processGroupCommand(group_addr, std::nullopt, this);
-                }
-                else if ((addr_byte & 0xFE) == 0xFE) {
-                    ESP_LOGD(TAG,"Found ON command of broadcast: %u");
-                    processBroadcastCommand(std::nullopt, this);
-                }
-                break;
-            }
-
-            case DALI_COMMAND_GO_TO_SCENE_0:
-            case DALI_COMMAND_GO_TO_SCENE_1:
-            case DALI_COMMAND_GO_TO_SCENE_2:
-            case DALI_COMMAND_GO_TO_SCENE_3:
-            case DALI_COMMAND_GO_TO_SCENE_4:
-            case DALI_COMMAND_GO_TO_SCENE_5:
-            case DALI_COMMAND_GO_TO_SCENE_6:
-            case DALI_COMMAND_GO_TO_SCENE_7:
-            case DALI_COMMAND_GO_TO_SCENE_8:
-            case DALI_COMMAND_GO_TO_SCENE_9:
-            case DALI_COMMAND_GO_TO_SCENE_10:
-            case DALI_COMMAND_GO_TO_SCENE_11:
-            case DALI_COMMAND_GO_TO_SCENE_12:
-            case DALI_COMMAND_GO_TO_SCENE_13:
-            case DALI_COMMAND_GO_TO_SCENE_14:
-            case DALI_COMMAND_GO_TO_SCENE_15: {
-                uint8_t scene_id = cmd_byte - DALI_COMMAND_GO_TO_SCENE_0;
-                ESP_LOGI(TAG, "Sniffed GO TO SCENE %d", scene_id);
-
-                // TODO: fix scene change levels on devices
-                auto const& mqtt = MQTTClient::getInstance();
-                auto config = ConfigManager::getInstance().getConfig();
-                mqtt.publish(std::format("{}/scene/state", config.mqtt_base_topic), std::to_string(scene_id));
-                break;
-            }
-
-            default:
-                ESP_LOGD(TAG, "Sniffed unhandled command 0x%02X for address byte 0x%02X", cmd_byte, addr_byte);
-                break;
-        }
-    }
-
     [[noreturn]] void DaliDeviceController::daliEventHandlerTask(void* pvParameters) {
         auto* self = static_cast<DaliDeviceController*>(pvParameters);
         const auto& dali_api = DaliAPI::getInstance();
@@ -287,10 +156,9 @@ namespace daliMQTT
                     if (!device.is_present) continue;
 
                     if (auto level_opt = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, device.short_address, DALI_COMMAND_QUERY_ACTUAL_LEVEL); level_opt && level_opt.value() != 255) {
-                        uint8_t level = level_opt.value();
-                        publishState(long_addr, level);
+                        self->updateDeviceState(long_addr, level_opt.value());
                     } else if (!level_opt.has_value()) {
-                        ESP_LOGD(TAG, "No reply from DALI device with short addr %d", device.short_address);
+                        ESP_LOGD(TAG, "No reply from DALI device with short addr %d during sync", device.short_address);
                     }
                     vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_POLL_DELAY_MS));
                 }

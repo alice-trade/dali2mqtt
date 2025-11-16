@@ -3,11 +3,10 @@
 #include "MQTTClient.hxx"
 #include "DaliAPI.hxx"
 #include "DaliDeviceController.hxx"
-#include "DaliGroupManagement.hxx"
-#include "DaliSceneManagement.hxx"
 #include "WebUI.hxx"
 #include "MQTTDiscovery.hxx"
 #include "Lifecycle.hxx"
+#include "MQTTCommandHandler.hxx"
 
 namespace daliMQTT {
 
@@ -55,129 +54,7 @@ namespace daliMQTT {
         DaliDeviceController::getInstance().start();
     }
 
-    // Вспомогательная функция для обработки команд управления светом
-    static void handleLightCommand(const std::vector<std::string_view>& parts, const std::string& data) {
-        // topic format: light/{long_addr_hex}/set OR light/group/{id}/set
-        if (parts.size() < 3 || parts[0] != "light" || parts.back() != "set") return;
-        
-        dali_addressType_t addr_type = DALI_ADDRESS_TYPE_SHORT;
-        uint8_t target_id = 0;
-
-        if (parts[1] == "group") {
-            addr_type = DALI_ADDRESS_TYPE_GROUP;
-            if (auto [ptr, ec] = std::from_chars(parts[2].data(), parts[2].data() + parts[2].size(), target_id); ec != std::errc() || target_id > 15) return;
-        } else {
-            const auto long_addr_opt = stringToLongAddress(parts[1]);
-            if (!long_addr_opt) return;
-            const auto short_addr_opt = DaliDeviceController::getInstance().getShortAddress(*long_addr_opt);
-            if (!short_addr_opt) return;
-            target_id = *short_addr_opt;
-        }
-        
-        cJSON* root = cJSON_Parse(data.c_str());
-        if (!root) return;
-
-        auto& dali = DaliAPI::getInstance();
-
-        if (cJSON const* state = cJSON_GetObjectItem(root, "state"); state && cJSON_IsString(state)) {
-            if (strcmp(state->valuestring, "OFF") == 0) {                
-                dali.sendCommand(addr_type, target_id, DALI_COMMAND_OFF);
-            }
-        }
-        if (const cJSON* brightness = cJSON_GetObjectItem(root, "brightness"); brightness && cJSON_IsNumber(brightness)) {
-            uint8_t level = static_cast<uint8_t>(std::clamp(brightness->valueint, 0, 254));
-            ESP_LOGD(TAG,"MQTT Light Command issued: addr %u, Change Level: %u", target_id, level);
-            dali.sendDACP(addr_type, target_id, level);
-        }
-
-        cJSON_Delete(root);
-    }
-
-    // Вспомогательная функция для обработки команд управления группами
-    static void handleGroupCommand(const std::string& data) {
-        cJSON* root = cJSON_Parse(data.c_str());
-        if (!root) {
-            ESP_LOGE(TAG, "Failed to parse group command JSON");
-            return;
-        }
-
-        cJSON* addr_item = cJSON_GetObjectItem(root, "long_address");
-        cJSON* group_item = cJSON_GetObjectItem(root, "group");
-        cJSON* state_item = cJSON_GetObjectItem(root, "state");
-
-        if (!cJSON_IsString(addr_item) || !cJSON_IsNumber(group_item) || !cJSON_IsString(state_item)) {
-            ESP_LOGE(TAG, "Invalid group command JSON structure");
-            cJSON_Delete(root);
-            return;
-        }
-
-        auto long_addr_opt = stringToLongAddress(addr_item->valuestring);
-        if (!long_addr_opt) return; // Invalid long address format
-        
-        uint8_t group = group_item->valueint;
-        bool assign = (strcmp(state_item->valuestring, "add") == 0);
-
-        DaliGroupManagement::getInstance().setGroupMembership(*long_addr_opt, group, assign);
-
-        auto config = ConfigManager::getInstance().getConfig();
-        auto const& mqtt = MQTTClient::getInstance();
-        std::string result_topic = std::format("{}{}", config.mqtt_base_topic, CONFIG_DALI2MQTT_MQTT_GROUP_RES_SUBTOPIC);
-        std::string payload = std::format(R"({{"status":"success","device":"{}","group":{},"action":"{}"}})", addr_item->valuestring, group, (assign ? "added" : "removed"));
-        mqtt.publish(result_topic, payload);
-
-        cJSON_Delete(root);
-    }
-
-    // Вспомогательная функция для обработки команд сцен
-    static void handleSceneCommand(const std::string& data) {
-        cJSON* root = cJSON_Parse(data.c_str());
-        if (!root) {
-            ESP_LOGE(TAG, "Failed to parse scene command JSON");
-            return;
-        }
-
-        cJSON* scene_item = cJSON_GetObjectItem(root, "scene");
-        if (!cJSON_IsNumber(scene_item)) {
-             ESP_LOGE(TAG, "Invalid scene command JSON structure, 'scene' field is missing or not a number");
-             cJSON_Delete(root);
-             return;
-        }
-        uint8_t scene_id = scene_item->valueint;
-        DaliSceneManagement::getInstance().activateScene(scene_id);
-
-        cJSON_Delete(root);
-    }
-
     void Lifecycle::onMqttData(const std::string& topic, const std::string& data) {
-        ESP_LOGD(TAG, "MQTT Rx: %s -> %s", topic.c_str(), data.c_str());
-
-        const auto config = ConfigManager::getInstance().getConfig();
-        std::string_view topic_sv(topic);
-
-        if (!topic_sv.starts_with(config.mqtt_base_topic)) return;
-        topic_sv.remove_prefix(config.mqtt_base_topic.length());
-
-        std::vector<std::string_view> parts;
-        for (const auto part : std::views::split(topic_sv, '/')) {
-             if (!part.empty()) parts.emplace_back(part.begin(), part.end());
-        }
-
-        if (parts.empty()) return;
-
-        if (parts[0] == "light") {
-            handleLightCommand(parts, data);
-        } else if (parts[0] == "config" && parts.size() > 2 && parts[1] == "group" && parts[2] == "set") {
-            handleGroupCommand(data);
-        } else if (parts[0] == "scene" && parts.size() > 1 && parts[1] == "set") {
-             std::string scene_str = data;
-             // HASS Scene Select
-             if (scene_str.starts_with("Scene ")) {
-                 scene_str.erase(0, 6); // "Scene "
-                 int scene_id = std::stoi(scene_str);
-                 DaliSceneManagement::getInstance().activateScene(scene_id);
-             } else {
-                 handleSceneCommand(data);
-             }
-        }
+        MQTTCommandHandler::getInstance().handle(topic, data);
     }
 }
