@@ -57,7 +57,7 @@ const orderedInfo = computed(() => {
       .map(key => ({
         key: formatKey(key),
         value: key === 'uptime_seconds' ? formatUptime(currentInfo[key]) :
-              key === 'log_level' ? formatLogLevel(currentInfo[key]) : currentInfo[key]
+              key === 'firmware_verbosity_level' ? formatLogLevel(currentInfo[key]) : currentInfo[key]
       }));
 
   const remaining = Object.entries(currentInfo)
