@@ -9,7 +9,7 @@
 
 static constexpr char  TAG[] = "daliMQTT";
 extern "C" void app_main(void) {
-    ESP_LOGI("", "DALI-to-MQTT Bridge v.%s", DALIMQTT_VERSION);
+    ESP_LOGI("", "DALI-to-MQTT Bridge v.%s (configured at: %s)", DALIMQTT_VERSION, DALIMQTT_CONFIGURED_TIMESTAMP);
     ESP_LOGI(TAG, "DALI-to-MQTT Bridge starting...");
 
     auto& config = daliMQTT::ConfigManager::getInstance();

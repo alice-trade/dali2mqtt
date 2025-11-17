@@ -1,6 +1,8 @@
 #include <esp_chip_info.h>
 
 #include <esp_system.h>
+#include <esp_timer.h>
+
 #include "DaliAPI.hxx"
 #include "DaliDeviceController.hxx"
 #include "WebUI.hxx"
@@ -52,6 +54,8 @@ namespace daliMQTT {
         esp_chip_info_t chip_info;
         esp_chip_info(&chip_info);
 
+        const std::string firmware_version = std::format("{} (built at: {})", DALIMQTT_VERSION, DALIMQTT_CONFIGURED_TIMESTAMP);
+
         // Get DALI status
         const auto& dali_api = DaliAPI::getInstance();
         std::string dali_status;
@@ -62,6 +66,10 @@ namespace daliMQTT {
             dali_status = "Inactive (Provisioning Mode)";
         }
 
+        // Get ESP uptime status
+        const int64_t uptime_us = esp_timer_get_time();
+        const int64_t uptime_seconds = uptime_us / 1000000;
+
         // Get MQTT status
         const auto mqtt_status = MQTTClient::getInstance().getStatus();
         const char* mqtt_status_str = get_mqtt_status_string(mqtt_status);
@@ -71,10 +79,12 @@ namespace daliMQTT {
         const std::string wifi_status_str = std::format("{} ({})", get_wifi_status_string(wifi.getStatus()), wifi.getIpAddress());
 
         cJSON *root = cJSON_CreateObject();
-        cJSON_AddStringToObject(root, "version", DALIMQTT_VERSION);
+        cJSON_AddStringToObject(root, "version",  firmware_version.c_str());
         cJSON_AddStringToObject(root, "chip_model", get_chip_model_name(chip_info.model));
         cJSON_AddNumberToObject(root, "chip_cores", chip_info.cores);
         cJSON_AddNumberToObject(root, "free_heap", esp_get_free_heap_size());
+        cJSON_AddNumberToObject(root, "uptime_seconds", static_cast<double>(uptime_seconds));
+        cJSON_AddNumberToObject(root, "firmware_verbosity_level", CONFIG_LOG_MAXIMUM_LEVEL);
         cJSON_AddStringToObject(root, "dali_status", dali_status.c_str());
         cJSON_AddStringToObject(root, "mqtt_status", mqtt_status_str);
         cJSON_AddStringToObject(root, "wifi_status", wifi_status_str.c_str());

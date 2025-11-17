@@ -4,7 +4,8 @@ add_library(DaliMQTT-Core STATIC)
 
 target_precompile_headers(DaliMQTT-Core PRIVATE pch.hxx)
 
-target_compile_definitions(DaliMQTT-Core PUBLIC DALIMQTT_VERSION=\"${PROJVER}\")
+string(TIMESTAMP PROJ_BUILD_TIMESTAMP "%Y-%m-%dT%H:%M:%SZ")
+target_compile_definitions(DaliMQTT-Core PUBLIC DALIMQTT_VERSION=\"${PROJVER}\" DALIMQTT_CONFIGURED_TIMESTAMP=\"${PROJ_BUILD_TIMESTAMP}\")
 
 set(MODULE_DIRS
         config
