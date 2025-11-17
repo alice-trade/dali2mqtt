@@ -24,10 +24,6 @@ namespace daliMQTT
         std::string dali_device_identificators;
         std::string dali_group_assignments;
 
-        // Syslog
-        std::string syslog_server;
-        bool syslog_enabled{false};
-
         bool configured{false};
     };
 

@@ -34,9 +34,6 @@ namespace daliMQTT
         wifi.init();
         wifi.onConnected = [this, config]() {
             ESP_LOGI(TAG, "WiFi connected, starting MQTT...");
-            if (config.syslog_enabled && !config.syslog_server.empty()) {
-                SyslogConfig::getInstance().init(config.syslog_server);
-            }
             this->setupAndRunMqtt();
         };
         wifi.onDisconnected = []() {
