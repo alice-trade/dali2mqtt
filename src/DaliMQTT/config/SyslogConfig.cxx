@@ -8,119 +8,185 @@
 
 namespace daliMQTT {
 
-static constexpr char TAG[] = "SyslogService";
-static constexpr int SYSLOG_PORT = 514; // TO BE REWRITTEN TO DYNAMIC PORT
+    static constexpr char TAG[] = "SyslogService";
+    static constexpr int SYSLOG_PORT = 514; // TO BE REWRITTEN TO DYNAMIC PORT
 
-static SyslogConfig* g_syslog_instance = nullptr;
+    static constexpr int LOG_QUEUE_LENGTH = 30;
+    static constexpr int MAX_LOG_MESSAGE_SIZE = 256;
 
-void SyslogConfig::init(const std::string& server_addr) {
-    if (m_initialized) {
-        setServer(server_addr);
-        return;
-    }
+    static SyslogConfig* g_syslog_instance = nullptr;
 
-    if (!g_syslog_instance) {
-        g_syslog_instance = this;
-    }
-
-    setServer(server_addr);
-
-    m_original_logger = esp_log_set_vprintf(syslog_vprintf_func);
-    m_initialized = true;
-    ESP_LOGI(TAG, "Syslog logger initialized.");
-}
-
-void SyslogConfig::setServer(const std::string& server_addr) {
-    std::lock_guard<std::recursive_mutex> lock(m_mutex);
-
-    if (m_sock >= 0) {
-        close(m_sock);
-        m_sock = -1;
-    }
-    m_server_addr = server_addr;
-
-    if (m_server_addr.empty()) {
-        ESP_LOGI(TAG, "Syslog server address is empty, disabling remote logging.");
-        if (m_initialized && m_original_logger) {
-             esp_log_set_vprintf(m_original_logger);
-             m_original_logger = nullptr;
-             m_initialized = false;
-             ESP_LOGI(TAG, "Restored default logger.");
+    void SyslogConfig::init(const std::string& server_addr) {
+        if (m_initialized || server_addr.empty()) {
+            if (server_addr.empty()) {
+                stop_service();
+            }
+            return;
         }
-        return;
-    }
 
-    if (!m_initialized) {
-        init(server_addr);
-        return;
-    }
 
-    struct addrinfo hints = {};
-    hints.ai_family = AF_INET;
-    hints.ai_socktype = SOCK_DGRAM;
-    struct addrinfo *res;
+        m_log_queue = xQueueCreate(LOG_QUEUE_LENGTH, sizeof(char*));
+        if (!m_log_queue) {
+            ESP_LOGE(TAG, "Failed to create log queue.");
+            return;
+        }
 
-    int err = getaddrinfo(m_server_addr.c_str(), std::to_string(SYSLOG_PORT).c_str(), &hints, &res);
-    if (err != 0 || res == nullptr) {
-        ESP_LOGE(TAG, "DNS lookup failed for syslog server '%s': err=%d", m_server_addr.c_str(), err);
-        return;
-    }
+        xTaskCreate(
+            syslog_sender_task,
+            "syslog_sender",
+            3072,
+            this,
+            5,
+            &m_log_task_handle
+        );
+        if (!m_log_task_handle) {
+            ESP_LOGE(TAG, "Failed to create syslog sender task.");
+            vQueueDelete(m_log_queue);
+            m_log_queue = nullptr;
+            return;
+        }
 
-    m_sock = socket(res->ai_family, res->ai_socktype, 0);
-    if (m_sock < 0) {
-        ESP_LOGE(TAG, "Failed to create socket for syslog.");
+        m_server_addr = server_addr;
+        struct addrinfo hints = {};
+        hints.ai_family = AF_INET;
+        hints.ai_socktype = SOCK_DGRAM;
+        struct addrinfo *res;
+
+        int err = getaddrinfo(m_server_addr.c_str(), std::to_string(SYSLOG_PORT).c_str(), &hints, &res);
+        if (err != 0 || res == nullptr) {
+            vTaskDelete(m_log_task_handle);
+            m_log_task_handle = nullptr;
+            vQueueDelete(m_log_queue);
+            m_log_queue = nullptr;
+            return;
+        }
+
+        m_sock = socket(res->ai_family, res->ai_socktype, 0);
+        if (m_sock >= 0) {
+            connect(m_sock, res->ai_addr, res->ai_addrlen);
+        }
         freeaddrinfo(res);
-        return;
+
+        g_syslog_instance = this;
+        m_initialized = true;
+        m_original_logger = esp_log_set_vprintf(syslog_vprintf_func);
+
+        ESP_LOGI(TAG, "Syslog service initialized for server %s", m_server_addr.c_str());
     }
 
-    if (connect(m_sock, res->ai_addr, res->ai_addrlen) != 0) {
-        ESP_LOGE(TAG, "Failed to connect to syslog server.");
-        close(m_sock);
-        m_sock = -1;
+    void SyslogConfig::start_service() {
+        if (m_initialized) return;
+
+        m_log_queue = xQueueCreate(LOG_QUEUE_LENGTH, sizeof(char*));
+        if (!m_log_queue) {
+            ESP_LOGE(TAG, "Failed to create log queue.");
+            return;
+        }
+
+        g_syslog_instance = this;
+        m_original_logger = esp_log_set_vprintf(syslog_vprintf_func);
+
+        xTaskCreate(
+            syslog_sender_task,
+            "syslog_sender",
+            3072,
+            this,
+            5,
+            &m_log_task_handle
+        );
+
+        m_initialized = true;
+        ESP_LOGI(TAG, "Syslog logger task and queue created.");
     }
 
-    freeaddrinfo(res);
-    ESP_LOGI(TAG, "Syslog server set to %s", m_server_addr.c_str());
-}
+    void SyslogConfig::stop_service() {
+        if (!m_initialized) return;
 
-void SyslogConfig::udp_log_write(const char *message) {
-    std::lock_guard<std::recursive_mutex> lock(m_mutex);
-    if (m_sock < 0 || m_server_addr.empty()) {
-        return;
+        std::lock_guard<std::recursive_mutex> lock(m_mutex);
+
+        if (m_original_logger) {
+            esp_log_set_vprintf(m_original_logger);
+            m_original_logger = nullptr;
+        }
+
+        if (m_log_task_handle) {
+            vTaskDelete(m_log_task_handle);
+            m_log_task_handle = nullptr;
+        }
+
+        if (m_log_queue) {
+            char* msg_ptr;
+            while(xQueueReceive(m_log_queue, &msg_ptr, 0) == pdTRUE) {
+                free(msg_ptr);
+            }
+            vQueueDelete(m_log_queue);
+            m_log_queue = nullptr;
+        }
+
+        // Закрываем сокет
+        if (m_sock >= 0) {
+            close(m_sock);
+            m_sock = -1;
+        }
+
+        m_initialized = false;
+        ESP_LOGI(TAG, "Syslog service stopped.\n");
     }
 
-    // Формат RFC 3164: <PRI>HOSTNAME TAG: MESSAGE
-    // PRI 14 = facility 1 (user-level), severity 6 (informational)
-    char syslog_buf[512];
-    int len = snprintf(syslog_buf, sizeof(syslog_buf), "<14>dalimqtt: %s", message);
 
-    if (send(m_sock, syslog_buf, len, 0) < 0) {
-    }
-}
+    void SyslogConfig::udp_log_write(const char *message) {
+        std::lock_guard<std::recursive_mutex> lock(m_mutex);
+        if (m_sock < 0 || m_server_addr.empty()) {
+            return;
+        }
 
-int SyslogConfig::syslog_vprintf_func(const char *format, va_list args) {
-    if (!g_syslog_instance || !g_syslog_instance->m_original_logger) {
-        return vprintf(format, args);
-    }
+        char syslog_buf[MAX_LOG_MESSAGE_SIZE + 50];
+        const int len = snprintf(syslog_buf, sizeof(syslog_buf), "<14>dalimqtt: %s", message);
 
-    va_list args_for_serial;
-    va_list args_for_syslog;
-    va_copy(args_for_serial, args);
-    va_copy(args_for_syslog, args);
-
-    const int ret = g_syslog_instance->m_original_logger(format, args_for_serial);
-    va_end(args_for_serial);
-
-    char buffer[256];
-    vsnprintf(buffer, sizeof(buffer), format, args_for_syslog);
-    va_end(args_for_syslog);
-
-    if (char* end = strstr(buffer, "\r\n")) {
-        *end = '\0';
+        send(m_sock, syslog_buf, len, 0);
     }
 
-    g_syslog_instance->udp_log_write(buffer);
-    return ret;
-}
+    int SyslogConfig::syslog_vprintf_func(const char *format, va_list args) {
+        const int ret = g_syslog_instance->m_original_logger(format, args);
+
+        va_list args_for_syslog;
+        va_copy(args_for_syslog, args);
+
+        char buffer[MAX_LOG_MESSAGE_SIZE];
+        vsnprintf(buffer, sizeof(buffer), format, args_for_syslog);
+        va_end(args_for_syslog);
+
+        char* end = strstr(buffer, "\r\n");
+        if (end) {
+            *end = '\0';
+        }
+
+        char* message_copy = strdup(buffer);
+        if (!message_copy) {
+            return ret;
+        }
+
+
+        if (xQueueSend(g_syslog_instance->m_log_queue, &message_copy, 0) != pdTRUE) {
+            free(message_copy);
+        }
+
+        return ret;
+    }
+
+    void SyslogConfig::syslog_sender_task(void *pvParameters) {
+        SyslogConfig *self = static_cast<SyslogConfig*>(pvParameters);
+        char *log_message = nullptr;
+
+        while (true) {
+            if (xQueueReceive(self->m_log_queue, &log_message, portMAX_DELAY) == pdTRUE) {
+                if (log_message) {
+                    self->udp_log_write(log_message);
+                    free(log_message);
+                }
+            }
+        }
+    }
 
 } // namespace daliMQTT
+

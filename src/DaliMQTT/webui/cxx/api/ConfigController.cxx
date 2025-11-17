@@ -43,12 +43,6 @@ namespace daliMQTT {
             #undef JsonSetStrConfig
 
             cJSON_Delete(root);
-
-        if (current_cfg.syslog_enabled) {
-            daliMQTT::SyslogConfig::getInstance().setServer(current_cfg.syslog_server);
-        } else {
-            SyslogConfig::getInstance().setServer("");
-        }
             if(current_cfg.wifi_ssid.empty() || current_cfg.mqtt_uri.empty()) {
                 httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "SSID and MQTT URI cannot be empty");
                 return ESP_FAIL;
