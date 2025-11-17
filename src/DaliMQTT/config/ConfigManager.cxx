@@ -78,7 +78,11 @@ namespace daliMQTT
         getString(nvs_handle.get(), "dali_identif", config_cache.dali_device_identificators, "{}");
         getString(nvs_handle.get(), "dali_groups", config_cache.dali_group_assignments, "{}");
         getString(nvs_handle.get(), "syslog_srv", config_cache.syslog_server, "");
-
+        #ifdef CONFIG_DALI2MQTT_SYSLOG_ENABLED_BY_DEFAULT
+        if (config_cache.syslog_server.empty() && strlen(CONFIG_DALI2MQTT_SYSLOG_DEFAULT_SERVER) > 0) {
+            config_cache.syslog_server = CONFIG_DALI2MQTT_SYSLOG_DEFAULT_SERVER;
+        }
+        #endif
         getU32(nvs_handle.get(), "dali_poll", config_cache.dali_poll_interval_ms, CONFIG_DALI2MQTT_DALI_DEFAULT_POLL_INTERVAL_MS);
         getU64(nvs_handle.get(), "dali_mask", config_cache.dali_devices_mask, 0);
 

@@ -1,6 +1,8 @@
 #ifndef DALIMQTT_SYSLOGCONFIG_HXX
 #define DALIMQTT_SYSLOGCONFIG_HXX
 
+#include <mutex>
+
 namespace daliMQTT {
     class SyslogConfig {
         public:
@@ -23,7 +25,7 @@ namespace daliMQTT {
             std::string m_server_addr;
             int m_sock {-1};
             vprintf_like_t m_original_logger {nullptr};
-            std::mutex m_mutex;
+            std::recursive_mutex m_mutex;
             bool m_initialized {false};
     };
 } // daliMQTT

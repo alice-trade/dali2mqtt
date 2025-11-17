@@ -8,8 +8,8 @@
 
 namespace daliMQTT {
 
-static constexpr char TAG[] = "Syslog";
-static constexpr int SYSLOG_PORT = 514;
+static constexpr char TAG[] = "SyslogService";
+static constexpr int SYSLOG_PORT = 514; // TO BE REWRITTEN TO DYNAMIC PORT
 
 static SyslogConfig* g_syslog_instance = nullptr;
 
@@ -31,7 +31,7 @@ void SyslogConfig::init(const std::string& server_addr) {
 }
 
 void SyslogConfig::setServer(const std::string& server_addr) {
-    std::lock_guard<std::mutex> lock(m_mutex);
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
 
     if (m_sock >= 0) {
         close(m_sock);
@@ -84,7 +84,7 @@ void SyslogConfig::setServer(const std::string& server_addr) {
 }
 
 void SyslogConfig::udp_log_write(const char *message) {
-    std::lock_guard<std::mutex> lock(m_mutex);
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
     if (m_sock < 0 || m_server_addr.empty()) {
         return;
     }
@@ -108,15 +108,14 @@ int SyslogConfig::syslog_vprintf_func(const char *format, va_list args) {
     va_copy(args_for_serial, args);
     va_copy(args_for_syslog, args);
 
-    int ret = g_syslog_instance->m_original_logger(format, args_for_serial);
+    const int ret = g_syslog_instance->m_original_logger(format, args_for_serial);
     va_end(args_for_serial);
 
     char buffer[256];
     vsnprintf(buffer, sizeof(buffer), format, args_for_syslog);
     va_end(args_for_syslog);
 
-    char* end = strstr(buffer, "\r\n");
-    if (end) {
+    if (char* end = strstr(buffer, "\r\n")) {
         *end = '\0';
     }
 

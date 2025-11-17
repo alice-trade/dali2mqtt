@@ -213,6 +213,7 @@ menu "DALI MQTT Bridge Settings"
 
             config DALI2MQTT_SYSLOG_DEFAULT_SERVER
                     string "Default Syslog Server IP Address"
+                    depends on DALI2MQTT_SYSLOG_ENABLED_BY_DEFAULT
                     default ""
                     help
                         The default IP address or hostname of the syslog server.

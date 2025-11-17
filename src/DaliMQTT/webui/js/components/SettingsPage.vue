@@ -46,6 +46,9 @@ const loadConfig = async () => {
 };
 
 const saveConfig = async () => {
+  if (!confirm('Сохранить настройки и перезагрузить устройство?')) {
+        return;
+  }
   loading.value = true;
   message.value = '';
 
@@ -79,7 +82,7 @@ onMounted(loadConfig);
 
 <template>
   <article :aria-busy="loading">
-    <h3>Configuration</h3>
+    <h3>Settings</h3>
     <form @submit.prevent="saveConfig">
       <fieldset>
         <legend>WiFi Settings</legend>
@@ -121,14 +124,14 @@ onMounted(loadConfig);
         <legend>Logging</legend>
         <label for="syslog_enabled">
           <input type="checkbox" id="syslog_enabled" role="switch" v-model="config.syslog_enabled" />
-          Enable Remote Syslog
+                  Enable Remote Syslog
         </label>
         <label for="syslog_server">Syslog Server Address</label>
         <input type="text" id="syslog_server" v-model="config.syslog_server" placeholder="e.g., 192.168.1.100" :disabled="!config.syslog_enabled">
-        <small>Logs will be sent to this server over UDP (port 514). Changes are applied immediately after saving.</small>
+        <small>Logs will be sent to this server over UDP (port 514).</small>
       </fieldset>
 
-      <button type="submit" :disabled="loading">Save and Restart</button>
+      <button type="submit" :disabled="loading">Save and Reboot</button>
     </form>
     <p v-if="message" :style="{ color: isError ? 'var(--pico-color-red-500)' : 'var(--pico-color-green-500)' }">{{ message }}</p>
   </article>

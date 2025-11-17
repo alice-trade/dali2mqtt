@@ -34,14 +34,8 @@ namespace daliMQTT
         wifi.init();
         wifi.onConnected = [this, config]() {
             ESP_LOGI(TAG, "WiFi connected, starting MQTT...");
-            if (config.syslog_enabled) {
-                std::string syslog_server = config.syslog_server;
-                if (syslog_server.empty()) {
-                    syslog_server = CONFIG_DALI2MQTT_SYSLOG_DEFAULT_SERVER;
-                }
-                if (!syslog_server.empty()) {
-                    SyslogConfig::getInstance().init(syslog_server);
-                }
+            if (config.syslog_enabled && !config.syslog_server.empty()) {
+                SyslogConfig::getInstance().init(config.syslog_server);
             }
             this->setupAndRunMqtt();
         };

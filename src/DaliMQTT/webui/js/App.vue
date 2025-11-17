@@ -3,7 +3,7 @@ import { ref, onMounted } from 'vue';
 import { api, setAuth, setAuthToken, clearAuth } from './api';
 import SettingsPage from './components/SettingsPage.vue';
 import DaliSetup from './components/DaliSetup.vue';
-import InfoPage from './components/InfoPage.vue';
+import StatusPage from './components/StatusPage.vue';
 
 // Состояния
 const loggedIn = ref(false);
@@ -11,7 +11,7 @@ const username = ref('admin');
 const password = ref('');
 const error = ref('');
 const loading = ref(false);
-const currentView = ref('settings');
+const currentView = ref('status');
 
 const handleLogin = async () => {
   error.value = '';
@@ -88,17 +88,17 @@ onMounted(checkLogin);
             <li><strong>DALI-MQTT Bridge</strong></li>
           </ul>
           <ul>
+            <li><a href="#" :class="{ 'secondary': currentView !== 'status' }" @click.prevent="currentView = 'status'">Status</a></li>
             <li><a href="#" :class="{ 'secondary': currentView !== 'settings' }" @click.prevent="currentView = 'settings'">Settings</a></li>
             <li><a href="#" :class="{ 'secondary': currentView !== 'dali' }" @click.prevent="currentView = 'dali'">DALI Control</a></li>
-            <li><a href="#" :class="{ 'secondary': currentView !== 'info' }" @click.prevent="currentView = 'info'">Info</a></li>
             <li><a href="#" role="button" class="contrast outline" @click.prevent="handleLogout">Logout</a></li>
           </ul>
         </nav>
       </header>
 
+      <StatusPage v-if="currentView === 'status'" />
       <SettingsPage v-if="currentView === 'settings'" />
       <DaliSetup v-if="currentView === 'dali'" />
-      <InfoPage v-if="currentView === 'info'" />
     </div>
   </main>
 </template>
