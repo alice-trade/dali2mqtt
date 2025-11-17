@@ -7,6 +7,7 @@
 #include "DaliDeviceController.hxx"
 #include "WebUI.hxx"
 #include "Wifi.hxx"
+#include "SyslogConfig.hxx"
 
 
 namespace daliMQTT
@@ -27,11 +28,15 @@ namespace daliMQTT
 
     void Lifecycle::startNormalMode() {
         ESP_LOGI(TAG, "Starting in normal mode...");
+        auto config = ConfigManager::getInstance().getConfig();
 
         auto& wifi = Wifi::getInstance();
         wifi.init();
-        wifi.onConnected = [this]() {
+        wifi.onConnected = [this, config]() {
             ESP_LOGI(TAG, "WiFi connected, starting MQTT...");
+            if (config.syslog_enabled && !config.syslog_server.empty()) {
+                SyslogConfig::getInstance().init(config.syslog_server);
+            }
             this->setupAndRunMqtt();
         };
         wifi.onDisconnected = []() {
@@ -54,7 +59,6 @@ namespace daliMQTT
         auto& web = WebUI::getInstance();
         web.start();
 
-        auto config = ConfigManager::getInstance().getConfig();
         wifi.connectToAP(config.wifi_ssid, config.wifi_password);
     }
 } // daliMQTT

@@ -200,4 +200,24 @@ menu "DALI MQTT Bridge Settings"
             help
                 Default password for Web UI HTTP Basic Authentication. Used if not in NVS.
         endmenu
+
+        menu "Syslog Configuration"
+
+            config DALI2MQTT_SYSLOG_ENABLED_BY_DEFAULT
+                    bool "Enable Syslog logging by default"
+                    default n
+                    help
+                        Enable sending ESP-IDF logs to a remote syslog server by default on first boot.
+                        This can be changed later in the WebUI.
+
+
+            config DALI2MQTT_SYSLOG_DEFAULT_SERVER
+                    string "Default Syslog Server IP Address"
+                    depends on DALI2MQTT_SYSLOG_ENABLED_BY_DEFAULT
+                    default ""
+                    help
+                        The default IP address or hostname of the syslog server.
+                        This can be overridden in the WebUI.
+
+        endmenu
 endmenu

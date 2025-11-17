@@ -49,7 +49,7 @@ onMounted(loadInfo);
 
 <template>
   <article :aria-busy="loading">
-    <h3>System Information</h3>
+    <h3>Status</h3>
     <div v-if="info">
       <table>
         <tbody>
