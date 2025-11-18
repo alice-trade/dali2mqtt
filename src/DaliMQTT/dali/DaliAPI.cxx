@@ -58,7 +58,7 @@ namespace daliMQTT
                     xQueueSend(queue, &frame, 0);
                 }
             }
-            vTaskDelay(pdMS_TO_TICKS(20));
+            vTaskDelay(pdMS_TO_TICKS(5));
         }
     }
 
@@ -135,8 +135,7 @@ namespace daliMQTT
             return ESP_OK;
         }
         ESP_LOGI(TAG, "Starting DALI sniffer task...");
-        xTaskCreate(DaliAPI::dali_sniffer_task, "dali_sniffer_task", 4096, this, 5, &m_sniffer_task_handle);
-        return ESP_OK;
+        xTaskCreate(DaliAPI::dali_sniffer_task, "dali_sniffer_task", 4096, this, 5, &m_sniffer_task_handle);        return ESP_OK;
     }
 
     esp_err_t DaliAPI::stopSniffer() {
