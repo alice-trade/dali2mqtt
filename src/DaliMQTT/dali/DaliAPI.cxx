@@ -58,7 +58,7 @@ namespace daliMQTT
                     xQueueSend(queue, &frame, 0);
                 }
             }
-            vTaskDelay(pdMS_TO_TICKS(5));
+            vTaskDelay(pdMS_TO_TICKS(20));
         }
     }
 

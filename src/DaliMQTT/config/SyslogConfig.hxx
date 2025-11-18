@@ -20,13 +20,16 @@ namespace daliMQTT {
         private:
             SyslogConfig() = default;
             static int syslog_vprintf_func(const char *format, va_list args);
-            void udp_log_write(const char *message);
-
+            static void syslog_task_entry(void* arg);
+            [[noreturn]] void syslog_task_runner();
+            void send_log_udp(const char* message);
             std::string m_server_addr;
             int m_sock {-1};
             vprintf_like_t m_original_logger {nullptr};
             std::recursive_mutex m_mutex;
             bool m_initialized {false};
+            QueueHandle_t m_log_queue {nullptr};
+            TaskHandle_t m_task_handle {nullptr};
     };
 } // daliMQTT
 
