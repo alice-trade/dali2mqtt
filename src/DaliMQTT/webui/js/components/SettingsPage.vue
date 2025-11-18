@@ -12,6 +12,8 @@ interface ConfigData {
   mqtt_base_topic: string;
   http_user: string;
   http_pass?: string;
+  syslog_server?: string;
+  syslog_enabled?: boolean;
 }
 
 const config = ref<ConfigData>({
@@ -20,7 +22,9 @@ const config = ref<ConfigData>({
   mqtt_user: '',
   mqtt_client_id: '',
   mqtt_base_topic: '',
-  http_user: ''
+  http_user: '',
+  syslog_server: '',
+  syslog_enabled: false,
 });
 
 const loading = ref(true);
@@ -114,6 +118,17 @@ onMounted(loadConfig);
         <input type="text" id="http_user" v-model="config.http_user" required>
         <label for="http_pass">New Password</label>
         <input type="password" id="http_pass" v-model="config.http_pass" placeholder="Leave blank to keep unchanged">
+      </fieldset>
+
+      <fieldset>
+        <legend>Logging</legend>
+        <label for="syslog_enabled">
+          <input type="checkbox" id="syslog_enabled" role="switch" v-model="config.syslog_enabled" />
+                  Enable Remote Syslog
+        </label>
+        <label for="syslog_server">Syslog Server Address</label>
+        <input type="text" id="syslog_server" v-model="config.syslog_server" placeholder="e.g., 192.168.1.100" :disabled="!config.syslog_enabled">
+        <small>Logs will be sent to this server over UDP (port 514).</small>
       </fieldset>
 
       <button type="submit" :disabled="loading">Save and Reboot</button>

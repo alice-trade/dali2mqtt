@@ -36,9 +36,19 @@ namespace daliMQTT {
             JsonSetStrConfig(mqtt_base_topic);
             JsonSetStrConfig(http_user);
             JsonSetStrConfig(http_pass);
+            JsonSetStrConfig(syslog_server);
+            if (cJSON* item = cJSON_GetObjectItem(root, "syslog_enabled"); cJSON_IsBool(item)) {
+                current_cfg.syslog_enabled = cJSON_IsTrue(item);
+            }
             #undef JsonSetStrConfig
 
             cJSON_Delete(root);
+
+        if (current_cfg.syslog_enabled) {
+            daliMQTT::SyslogConfig::getInstance().setServer(current_cfg.syslog_server);
+        } else {
+            SyslogConfig::getInstance().setServer("");
+        }
             if(current_cfg.wifi_ssid.empty() || current_cfg.mqtt_uri.empty()) {
                 httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "SSID and MQTT URI cannot be empty");
                 return ESP_FAIL;
@@ -69,6 +79,8 @@ namespace daliMQTT {
          cJSON_AddStringToObject(root, "mqtt_client_id", cfg.mqtt_client_id.c_str());
          cJSON_AddStringToObject(root, "mqtt_base_topic", cfg.mqtt_base_topic.c_str());
          cJSON_AddStringToObject(root, "http_user", cfg.http_user.c_str());
+         cJSON_AddStringToObject(root, "syslog_server", cfg.syslog_server.c_str());
+         cJSON_AddBoolToObject(root, "syslog_enabled", cfg.syslog_enabled);
 
          char *json_string = cJSON_Print(root);
          httpd_resp_set_type(req, "application/json");
