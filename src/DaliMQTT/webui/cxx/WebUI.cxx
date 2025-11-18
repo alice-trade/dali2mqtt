@@ -20,7 +20,8 @@ namespace daliMQTT
         config.lru_purge_enable = true;
         config.uri_match_fn = httpd_uri_match_wildcard;
         config.max_uri_handlers = 15;
-
+        config.max_open_sockets = 4;
+        config.backlog_conn = 4;
         ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
         if (httpd_start(&server_handle, &config) != ESP_OK) {
             ESP_LOGE(TAG, "Error starting server!");
@@ -93,6 +94,7 @@ namespace daliMQTT
         }
 
         set_content_type_from_file(req, filepath.c_str());
+        httpd_resp_set_hdr(req, "Connection", "close");
 
         std::vector<char> chunk(SCRATCH_BUFSIZE);
         size_t read_bytes;
