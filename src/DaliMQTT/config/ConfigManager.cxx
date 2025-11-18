@@ -73,6 +73,7 @@ namespace daliMQTT
         getString(nvs_handle.get(), "mqtt_pass", config_cache.mqtt_pass, "");
         getString(nvs_handle.get(), "mqtt_cid", config_cache.mqtt_client_id, "");
         getString(nvs_handle.get(), "mqtt_base", config_cache.mqtt_base_topic, CONFIG_DALI2MQTT_MQTT_BASE_TOPIC);
+        getString(nvs_handle.get(), "http_domain", config_cache.http_domain, CONFIG_DALI2MQTT_WEBUI_DEFAULT_MDNS_DOMAIN);
         getString(nvs_handle.get(), "http_user", config_cache.http_user, CONFIG_DALI2MQTT_WEBUI_DEFAULT_USER);
         getString(nvs_handle.get(), "http_pass", config_cache.http_pass, CONFIG_DALI2MQTT_WEBUI_DEFAULT_PASS);
         getString(nvs_handle.get(), "dali_identif", config_cache.dali_device_identificators, "{}");
@@ -125,6 +126,7 @@ namespace daliMQTT
         SetNVS(setString, "mqtt_pass", new_config.mqtt_pass);
         SetNVS(setString, "mqtt_cid", new_config.mqtt_client_id);
         SetNVS(setString, "mqtt_base", new_config.mqtt_base_topic);
+        SetNVS(setString, "http_domain", new_config.http_domain);
         SetNVS(setString, "http_user", new_config.http_user);
         SetNVS(setString, "http_pass", new_config.http_pass);
         SetNVS(setString, "syslog_srv", new_config.syslog_server);
@@ -139,10 +141,10 @@ namespace daliMQTT
         std::lock_guard lock(config_mutex);
         config_cache.dali_device_identificators = identificators;
 
-        NvsHandle nvs_handle(NVS_NAMESPACE, NVS_READWRITE);
+        const NvsHandle nvs_handle(NVS_NAMESPACE, NVS_READWRITE);
         if (!nvs_handle) return ESP_FAIL;
 
-        esp_err_t err = setString(nvs_handle.get(), "dali_identif", identificators);
+        const esp_err_t err = setString(nvs_handle.get(), "dali_identif", identificators);
         if (err != ESP_OK) return err;
 
         return ensureConfiguredAndCommit(nvs_handle.get());
@@ -152,10 +154,10 @@ namespace daliMQTT
         std::lock_guard lock(config_mutex);
         config_cache.dali_group_assignments = assignments;
 
-        NvsHandle nvs_handle(NVS_NAMESPACE, NVS_READWRITE);
+        const NvsHandle nvs_handle(NVS_NAMESPACE, NVS_READWRITE);
         if (!nvs_handle) return ESP_FAIL;
 
-        esp_err_t err = setString(nvs_handle.get(), "dali_groups", assignments);
+        const esp_err_t err = setString(nvs_handle.get(), "dali_groups", assignments);
         if (err != ESP_OK) return err;
 
         return ensureConfiguredAndCommit(nvs_handle.get());
@@ -164,7 +166,7 @@ namespace daliMQTT
     esp_err_t ConfigManager::save() {
         std::lock_guard lock(config_mutex);
 
-        NvsHandle nvs_handle(NVS_NAMESPACE, NVS_READWRITE);
+        const NvsHandle nvs_handle(NVS_NAMESPACE, NVS_READWRITE);
         if (!nvs_handle) {
             return ESP_FAIL;
         }
@@ -182,6 +184,7 @@ namespace daliMQTT
         SetNVS(setString, "mqtt_pass", config_cache.mqtt_pass);
         SetNVS(setString, "mqtt_cid", config_cache.mqtt_client_id);
         SetNVS(setString, "mqtt_base", config_cache.mqtt_base_topic);
+        SetNVS(setString, "http_domain", config_cache.http_domain);
         SetNVS(setString, "http_user", config_cache.http_user);
         SetNVS(setString, "http_pass", config_cache.http_pass);
         SetNVS(setString, "dali_identif", config_cache.dali_device_identificators);

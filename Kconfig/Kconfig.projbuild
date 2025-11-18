@@ -194,6 +194,12 @@ menu "DALI MQTT Bridge Settings"
             help
                 Default username for Web UI HTTP Basic Authentication. Used if not in NVS.
 
+        config DALI2MQTT_WEBUI_DEFAULT_MDNS_DOMAIN
+            string "Default Web UI mDNS Domain Prefix"
+            default "dalimqtt"
+            help
+                Default domain prefix for Web UI mDNS hostname. Will be published as <addr>.local
+
         config DALI2MQTT_WEBUI_DEFAULT_PASS
             string "Default Web UI Password"
             default "admin"

@@ -3,6 +3,7 @@
 #include <lwip/ip4_addr.h>
 #include <mdns.h>
 #include "Wifi.hxx"
+#include <ConfigManager.hxx>
 #include "utils/NvsHandle.hxx"
 #include "sdkconfig.h"
 
@@ -110,15 +111,17 @@ namespace daliMQTT
             ESP_LOGE(TAG, "mDNS Init failed: %s", esp_err_to_name(err));
             return;
         }
+        auto config = ConfigManager::getInstance().getConfig();
+        std::string hostname = config.http_domain;
 
-        ESP_ERROR_CHECK(mdns_hostname_set("dalimqtt"));
+        ESP_ERROR_CHECK(mdns_hostname_set(hostname.c_str()));
         ESP_ERROR_CHECK(mdns_instance_name_set("DALI to MQTT Bridge"));
 
         static std::array<mdns_txt_item_t, 1> serviceTxtData = {{
             {"path", "/"}
         }};
         ESP_ERROR_CHECK(mdns_service_add("DALI-to-MQTT Bridge Web UI", "_http", "_tcp", 80, serviceTxtData.data(), serviceTxtData.size()));
-        ESP_LOGI(TAG, "mDNS service started, advertising http://dalimqtt.local");
+        ESP_LOGI(TAG, "mDNS service started, advertising %s.local", hostname.c_str());
         mdns_started = true;
     }
 

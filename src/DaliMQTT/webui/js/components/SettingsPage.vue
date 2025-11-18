@@ -10,6 +10,7 @@ interface ConfigData {
   mqtt_pass?: string;
   mqtt_client_id: string;
   mqtt_base_topic: string;
+  http_domain: string;
   http_user: string;
   http_pass?: string;
   syslog_server?: string;
@@ -22,6 +23,7 @@ const config = ref<ConfigData>({
   mqtt_user: '',
   mqtt_client_id: '',
   mqtt_base_topic: '',
+  http_domain: '',
   http_user: '',
   syslog_server: '',
   syslog_enabled: false,
@@ -84,6 +86,13 @@ onMounted(loadConfig);
   <article :aria-busy="loading">
     <h3>Settings</h3>
     <form @submit.prevent="saveConfig">
+      <fieldset>
+        <legend>General Settings</legend>
+        <label for="cid">WebUI mDNS Domain</label>
+        <input type="text" id="cid" v-model="config.http_domain">
+        <small>This value is used as the mDNS address (http://{{ config.http_domain }}.local).</small>
+
+      </fieldset>
       <fieldset>
         <legend>WiFi Settings</legend>
         <label for="ssid">SSID</label>

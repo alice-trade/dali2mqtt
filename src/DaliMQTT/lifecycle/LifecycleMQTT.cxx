@@ -2,7 +2,6 @@
 #include "ConfigManager.hxx"
 #include "MQTTClient.hxx"
 #include "DaliDeviceController.hxx"
-#include "WebUI.hxx"
 #include "MQTTDiscovery.hxx"
 #include "Lifecycle.hxx"
 #include "MQTTCommandHandler.hxx"

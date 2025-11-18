@@ -34,6 +34,7 @@ namespace daliMQTT {
             JsonSetStrConfig(mqtt_pass);
             JsonSetStrConfig(mqtt_client_id);
             JsonSetStrConfig(mqtt_base_topic);
+            JsonSetStrConfig(http_domain);
             JsonSetStrConfig(http_user);
             JsonSetStrConfig(http_pass);
             JsonSetStrConfig(syslog_server);
@@ -73,6 +74,7 @@ namespace daliMQTT {
          cJSON_AddStringToObject(root, "mqtt_user", cfg.mqtt_user.c_str());
          cJSON_AddStringToObject(root, "mqtt_client_id", cfg.mqtt_client_id.c_str());
          cJSON_AddStringToObject(root, "mqtt_base_topic", cfg.mqtt_base_topic.c_str());
+         cJSON_AddStringToObject(root, "http_domain", cfg.http_domain.c_str());
          cJSON_AddStringToObject(root, "http_user", cfg.http_user.c_str());
          cJSON_AddStringToObject(root, "syslog_server", cfg.syslog_server.c_str());
          cJSON_AddBoolToObject(root, "syslog_enabled", cfg.syslog_enabled);
