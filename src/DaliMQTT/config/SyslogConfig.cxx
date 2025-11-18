@@ -13,7 +13,7 @@ namespace daliMQTT {
     static SyslogConfig* g_syslog_instance = nullptr;
 
     void SyslogConfig::init(const std::string& server_addr) {
-    #if CONFIG_LOG_DEFAULT_LEVEL > ESP_LOG_INFO
+    #if CONFIG_LOG_DEFAULT_LEVEL > 3
         ESP_LOGW(TAG, "IDF log level is set to DEBUG or VERBOSE. Syslog is disabled to prevent instability.");
         return;
     #endif
