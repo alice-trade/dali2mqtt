@@ -112,15 +112,18 @@ namespace daliMQTT
             return;
         }
         auto config = ConfigManager::getInstance().getConfig();
-        std::string hostname = config.http_domain;
 
+        std::string hostname = config.http_domain;
         ESP_ERROR_CHECK(mdns_hostname_set(hostname.c_str()));
-        ESP_ERROR_CHECK(mdns_instance_name_set("DALI to MQTT Bridge"));
 
         static std::array<mdns_txt_item_t, 1> serviceTxtData = {{
             {"path", "/"}
         }};
-        ESP_ERROR_CHECK(mdns_service_add("DALI-to-MQTT Bridge Web UI", "_http", "_tcp", 80, serviceTxtData.data(), serviceTxtData.size()));
+
+        std::string instance_name = std::format("DALI Bridge ({})", config.mqtt_client_id);
+        ESP_ERROR_CHECK(mdns_instance_name_set(instance_name.c_str()));
+
+        ESP_ERROR_CHECK(mdns_service_add(nullptr, "_http", "_tcp", 80, serviceTxtData.data(), serviceTxtData.size()));
         ESP_LOGI(TAG, "mDNS service started, advertising %s.local", hostname.c_str());
         mdns_started = true;
     }
