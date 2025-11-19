@@ -229,9 +229,9 @@ namespace daliMQTT
         std::lock_guard lock(bus_mutex);
         std::bitset<64> found_devices;
         ESP_LOGI(TAG, "Starting DALI bus scan...");
-        sendCommand(DALI_ADDRESS_TYPE_SHORT, 0, DALI_ON_AND_STEP_UP);
+        sendCommand(DALI_ADDRESS_TYPE_SHORT, 0, DALI_COMMAND_ON_AND_STEP_UP);
         for (uint8_t i = 0; i < 64; ++i) {
-            int16_t rv = m_dali_impl.cmd(DALI_QUERY_STATUS, i);
+            int16_t rv = m_dali_impl.cmd(DALI_COMMAND_QUERY_STATUS, i);
             if (rv >= 0) {
                 ESP_LOGI(TAG, "Device found at short address %d (Status: 0x%02X)", i, rv);
                 found_devices.set(i);
@@ -271,9 +271,9 @@ namespace daliMQTT
     }
 
     std::optional<std::bitset<16>> DaliAPI::getDeviceGroups(const uint8_t shortAddress) {
-        const auto groups_0_7 = sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddress, DALI_QUERY_GROUPS_0_7);
+        const auto groups_0_7 = sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddress, DALI_COMMAND_QUERY_GROUPS_0_7);
         vTaskDelay(pdMS_TO_TICKS(5));
-        const auto groups_8_15 = sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddress, DALI_QUERY_GROUPS_8_15);
+        const auto groups_8_15 = sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddress, DALI_COMMAND_QUERY_GROUPS_8_15);
 
         if (groups_0_7.has_value() && groups_8_15.has_value()) {
             const uint16_t combined = (groups_8_15.value() << 8) | groups_0_7.value();
@@ -283,11 +283,11 @@ namespace daliMQTT
     }
 
     std::optional<DaliLongAddress_t> DaliAPI::getLongAddress(const uint8_t shortAddress) {
-        const auto h_opt = sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddress, DALI_QUERY_RANDOM_ADDRESS_H);
+        const auto h_opt = sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddress, DALI_COMMAND_QUERY_RANDOM_ADDRESS_H);
         vTaskDelay(pdMS_TO_TICKS(5));
-        const auto m_opt = sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddress, DALI_QUERY_RANDOM_ADDRESS_M);
+        const auto m_opt = sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddress, DALI_COMMAND_QUERY_RANDOM_ADDRESS_M);
         vTaskDelay(pdMS_TO_TICKS(5));
-        const auto l_opt = sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddress, DALI_QUERY_RANDOM_ADDRESS_L);
+        const auto l_opt = sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddress, DALI_COMMAND_QUERY_RANDOM_ADDRESS_L);
 
         if (h_opt && m_opt && l_opt) {
             return (static_cast<DaliLongAddress_t>(h_opt.value()) << 16) | (static_cast<DaliLongAddress_t>(m_opt.value()) << 8) | l_opt.value();

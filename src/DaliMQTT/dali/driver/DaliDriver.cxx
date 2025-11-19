@@ -98,7 +98,7 @@ void IRAM_ATTR Dali::timer()
     case IDLE:
         if (busishigh) {
             if (idlecnt != 0xff)
-                idlecnt++;
+                idlecnt = idlecnt + 1;
             break;
         }
         // set busstate = RX
@@ -111,20 +111,20 @@ void IRAM_ATTR Dali::timer()
     case RX:
         // store sample
         rxbyte = (rxbyte << 1) | busishigh;
-        rxbitcnt++;
+        rxbitcnt = rxbitcnt + 1;
         if (rxbitcnt == 8) {
             rxdata[rxpos] = rxbyte;
-            rxpos++;
+            rxpos = rxpos + 1;
             if (rxpos > DALI_RX_BUF_SIZE - 1)
                 rxpos = DALI_RX_BUF_SIZE - 1;
             rxbitcnt = 0;
         }
         // check for reception of 2 stop bits
         if (busishigh) {
-            rxidle++;
+            rxidle = rxidle + 1;
             if (rxidle >= 16) {
                 rxdata[rxpos] = 0xFF;
-                rxpos++;
+                rxpos = rxpos + 1;
                 rxstate = COMPLETED;
                 _set_busstate_idle();
                 break;
@@ -148,7 +148,7 @@ void IRAM_ATTR Dali::timer()
             {
                 ESP_DRAM_LOGE("DALI_COLLISION", "txh: %d, bus_is_h: %d, spcnt: %d", txhigh, busishigh, txspcnt);
                 if (txcollision != 0xFF)
-                    txcollision++;
+                    txcollision = txcollision + 1;
                 txspcnt = 0;
                 busstate = COLLISION_TX;
                 return;
@@ -167,17 +167,17 @@ void IRAM_ATTR Dali::timer()
                     txhigh = 1;
                 }
                 // update half bit counter
-                txhbcnt++;
+                txhbcnt = txhbcnt + 1;
                 // next transmit in 4 sample times
                 txspcnt = 4;
             }
-            txspcnt--;
+            txspcnt = txspcnt - 1;
         }
         break;
     case COLLISION_TX:
         // keep bus low for 16 samples = 4 TE
         bus_set_low();
-        txspcnt++;
+        txspcnt = txspcnt + 1;
         if (txspcnt >= 16)
             _set_busstate_idle();
         break;

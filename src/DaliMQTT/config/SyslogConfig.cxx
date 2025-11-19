@@ -11,7 +11,6 @@ namespace daliMQTT {
     static constexpr int MAX_LOG_MSG_SIZE = 256;
 
     static SyslogConfig* g_syslog_instance = nullptr;
-
     void SyslogConfig::init(const std::string& server_addr) {
     #if CONFIG_LOG_DEFAULT_LEVEL > 3
         ESP_LOGW(TAG, "IDF log level is set to DEBUG or VERBOSE. Syslog is disabled to prevent instability.");
