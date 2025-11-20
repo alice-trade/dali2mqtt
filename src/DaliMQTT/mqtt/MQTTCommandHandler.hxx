@@ -16,22 +16,22 @@ namespace daliMQTT {
         }
 
         /**
-         * @brief Обрабатывает входящее MQTT-сообщение.
-         * @param topic Тема сообщения.
-         * @param data Данные сообщения.
+         * @brief Handle mqtt message
+         * @param topic
+         * @param data
          */
         void handle(const std::string& topic, const std::string& data);
 
     private:
         MQTTCommandHandler() = default;
 
-        // Приватные методы для обработки конкретных команд
+        // MQTT handlers
         static void handleLightCommand(const std::vector<std::string_view>& parts, const std::string& data);
         static void handleGroupCommand(const std::string& data);
         static void handleSceneCommand(const std::string& data);
 
-        // Вспомогательная функция для публикации состояния
-        static void publishLightState(dali_addressType_t addr_type, uint8_t target_id, const std::string& state, uint8_t brightness);
+        // Publishing Light state
+        static void publishLightState(dali_addressType_t addr_type, uint8_t target_id, const std::string& state, std::optional<uint8_t> brightness);
     };
 
 } // namespace daliMQTT

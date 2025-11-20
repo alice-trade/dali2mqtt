@@ -135,7 +135,7 @@ namespace daliMQTT
         std::vector<CommandToSend> commands_to_send;
         {
             std::lock_guard lock(m_mutex);
-            std::set<uint8_t> all_addresses;
+            std::set<DaliLongAddress_t> all_addresses;
             for(const auto& long_addr : m_assignments | std::views::keys) all_addresses.insert(long_addr);
             for(const auto& long_addr : newAssignments | std::views::keys) all_addresses.insert(long_addr);
 

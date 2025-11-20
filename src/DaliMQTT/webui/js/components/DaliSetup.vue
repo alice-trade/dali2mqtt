@@ -233,7 +233,7 @@ onMounted(loadData);
         <div class="management-header">
           <h4>Найдено устройств: ({{ devices.length }}/64)</h4>
           <button @click="handleRefreshGroups" :disabled="!!actionInProgress" :aria-busy="actionInProgress === 'refresh'" class="secondary outline">
-                      Обновить членство в группах
+                      Обновить статус групп
           </button>
         </div>
         <div class="devices-grid">

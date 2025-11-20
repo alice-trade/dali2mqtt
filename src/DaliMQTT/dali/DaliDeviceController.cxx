@@ -60,6 +60,9 @@ namespace daliMQTT
         std::lock_guard lock(m_devices_mutex);
         const auto it = m_devices.find(longAddr);
         if (it != m_devices.end()) {
+            if (level > 0) {
+                it->second.last_level = level;
+            }
             if (it->second.current_level != level) {
                 ESP_LOGI(TAG, "State change detected for %s. Old: %d, New: %d",
                          longAddressToString(longAddr).data(), it->second.current_level, level);
@@ -67,6 +70,14 @@ namespace daliMQTT
                 publishState(longAddr, level);
             }
         }
+    }
+
+    std::optional<uint8_t> DaliDeviceController::getLastLevel(const DaliLongAddress_t longAddress) const {
+        std::lock_guard lock(m_devices_mutex);
+        if (const auto it = m_devices.find(longAddress); it != m_devices.end()) {
+            return it->second.last_level;
+        }
+        return std::nullopt;
     }
 
     bool DaliDeviceController::validateAddressMap() {
@@ -206,6 +217,7 @@ namespace daliMQTT
                         .long_address = long_addr,
                         .short_address = sa,
                         .current_level = 0,
+                        .last_level = 254,
                         .is_present = true
                     };
                     new_short_to_long_map[sa] = long_addr;

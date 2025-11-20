@@ -8,7 +8,7 @@ interface ConfigData {
   mqtt_uri: string;
   mqtt_user?: string;
   mqtt_pass?: string;
-  mqtt_client_id: string;
+  client_id: string;
   mqtt_base_topic: string;
   http_domain: string;
   http_user: string;
@@ -21,7 +21,7 @@ const config = ref<ConfigData>({
   wifi_ssid: '',
   mqtt_uri: '',
   mqtt_user: '',
-  mqtt_client_id: '',
+  client_id: '',
   mqtt_base_topic: '',
   http_domain: '',
   http_user: '',
@@ -91,7 +91,9 @@ onMounted(loadConfig);
         <label for="cid">WebUI mDNS Domain</label>
         <input type="text" id="cid" v-model="config.http_domain">
         <small>This value is used as the mDNS address (http://{{ config.http_domain }}.local).</small>
-
+        <label for="cid">Client ID</label>
+        <input type="text" id="cid" v-model="config.client_id" required>
+        <small>Used as ID for MQTT Client ID, Home Assistant Discovery, mDNS Device Name</small>
       </fieldset>
       <fieldset>
         <legend>WiFi Settings</legend>
@@ -115,8 +117,6 @@ onMounted(loadConfig);
             <input type="password" id="mqtt_pass" v-model="config.mqtt_pass" placeholder="Leave blank to keep unchanged">
           </div>
         </div>
-        <label for="mqtt_cid">Client ID</label>
-        <input type="text" id="mqtt_cid" v-model="config.mqtt_client_id">
         <label for="mqtt_base">Base Topic</label>
         <input type="text" id="mqtt_base" v-model="config.mqtt_base_topic">
       </fieldset>

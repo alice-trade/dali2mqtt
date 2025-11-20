@@ -12,7 +12,6 @@ namespace daliMQTT
         std::string mqtt_uri;
         std::string mqtt_user;
         std::string mqtt_pass;
-        std::string mqtt_client_id;
         std::string mqtt_base_topic;
 
         // WebUI
@@ -28,6 +27,9 @@ namespace daliMQTT
         // Syslog
         std::string syslog_server;
         bool syslog_enabled{false};
+
+        // General
+        std::string client_id;
 
         bool configured{false};
     };

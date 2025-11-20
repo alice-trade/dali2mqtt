@@ -120,7 +120,7 @@ namespace daliMQTT
             {"path", "/"}
         }};
 
-        std::string instance_name = std::format("DALI Bridge ({})", config.mqtt_client_id);
+        std::string instance_name = std::format("DALI Bridge ({})", config.client_id);
         ESP_ERROR_CHECK(mdns_instance_name_set(instance_name.c_str()));
 
         ESP_ERROR_CHECK(mdns_service_add(nullptr, "_http", "_tcp", 80, serviceTxtData.data(), serviceTxtData.size()));

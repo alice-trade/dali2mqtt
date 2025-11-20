@@ -29,6 +29,7 @@ namespace daliMQTT
         [[nodiscard]] std::optional<DaliLongAddress_t> getLongAddress(uint8_t shortAddress) const;
 
         void updateDeviceState(DaliLongAddress_t longAddr, uint8_t level);
+        [[nodiscard]] std::optional<uint8_t> getLastLevel(DaliLongAddress_t longAddress) const;
 
     private:
         DaliDeviceController() = default;

@@ -8,23 +8,22 @@
 namespace daliMQTT
 {
       MQTTDiscovery::MQTTDiscovery() {
-        const auto config = ConfigManager::getInstance().getConfig();
-        base_topic = config.mqtt_base_topic;
-        availability_topic = std::format("{}{}", base_topic, CONFIG_DALI2MQTT_MQTT_AVAILABILITY_TOPIC);
-        bridge_public_name = "DALI-MQTT Bridge";
-
-        cJSON* names_root = cJSON_Parse(config.dali_device_identificators.c_str());
-        if (cJSON_IsObject(names_root)) {
-            const cJSON* current_name = nullptr;
-            const auto addr_str = longAddressToString(0);
-            cJSON_ArrayForEach(current_name, names_root) {
-                if (cJSON_IsString(current_name) && current_name->valuestring != nullptr) {
-                    std::string key(current_name->string, strnlen(current_name->string, addr_str.size()));
-                    device_identification[key] = current_name->valuestring;
-                }
-            }
-        }
-        cJSON_Delete(names_root);
+          const auto config = ConfigManager::getInstance().getConfig();
+          base_topic = config.mqtt_base_topic;
+          availability_topic = std::format("{}{}", base_topic, CONFIG_DALI2MQTT_MQTT_AVAILABILITY_TOPIC);
+          bridge_public_name = std::format("DALI-MQTT Bridge ({})", config.client_id);
+          cJSON* names_root = cJSON_Parse(config.dali_device_identificators.c_str());
+          if (cJSON_IsObject(names_root)) {
+              const cJSON* current_name = nullptr;
+              const auto addr_str = longAddressToString(0);
+              cJSON_ArrayForEach(current_name, names_root) {
+                  if (cJSON_IsString(current_name) && current_name->valuestring != nullptr) {
+                      std::string key(current_name->string, strnlen(current_name->string, addr_str.size()));
+                      device_identification[key] = current_name->valuestring;
+                  }
+              }
+          }
+          cJSON_Delete(names_root);
     }
     void MQTTDiscovery::publishAllDevices() {
         auto devices = DaliDeviceController::getInstance().getDevices();
@@ -89,8 +88,8 @@ namespace daliMQTT
 
     void MQTTDiscovery::publishGroup(uint8_t group_id) {
         const auto& mqtt = MQTTClient::getInstance();
-
-        const std::string object_id = std::format("dali_group_{}", group_id);
+        const auto config = ConfigManager::getInstance().getConfig();
+        const std::string object_id = std::format("dali_group_{}_{}", config.client_id, group_id);
         const std::string discovery_topic = std::format("homeassistant/light/{}/config", object_id);
         const std::string readable_name = std::format("DALI Group {}", group_id);
 
@@ -124,7 +123,8 @@ namespace daliMQTT
 
     void MQTTDiscovery::publishSceneSelector() {
         const auto& mqtt = MQTTClient::getInstance();
-        const std::string object_id = "dali_scenes";
+        const auto config = ConfigManager::getInstance().getConfig();
+        const std::string object_id = std::format("dali_scenes_{}", config.client_id);
         const std::string discovery_topic = std::format("homeassistant/select/{}/config", object_id);
 
         cJSON *root = cJSON_CreateObject();

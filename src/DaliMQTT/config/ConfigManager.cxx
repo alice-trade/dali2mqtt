@@ -3,6 +3,7 @@
 #include "sdkconfig.h"
 #include <esp_spiffs.h>
 #include <dirent.h>
+#include <esp_mac.h>
 
 namespace daliMQTT
 {
@@ -71,7 +72,7 @@ namespace daliMQTT
         getString(nvs_handle.get(), "mqtt_uri", config_cache.mqtt_uri, "");
         getString(nvs_handle.get(), "mqtt_user", config_cache.mqtt_user, "");
         getString(nvs_handle.get(), "mqtt_pass", config_cache.mqtt_pass, "");
-        getString(nvs_handle.get(), "mqtt_cid", config_cache.mqtt_client_id, "");
+        getString(nvs_handle.get(), "cid", config_cache.client_id, "");
         getString(nvs_handle.get(), "mqtt_base", config_cache.mqtt_base_topic, CONFIG_DALI2MQTT_MQTT_BASE_TOPIC);
         getString(nvs_handle.get(), "http_domain", config_cache.http_domain, CONFIG_DALI2MQTT_WEBUI_DEFAULT_MDNS_DOMAIN);
         getString(nvs_handle.get(), "http_user", config_cache.http_user, CONFIG_DALI2MQTT_WEBUI_DEFAULT_USER);
@@ -93,6 +94,12 @@ namespace daliMQTT
         #endif
         nvs_get_u8(nvs_handle.get(), "syslog_en", &syslog_enabled_flag);
         config_cache.syslog_enabled = (syslog_enabled_flag == 1);
+
+        if (config_cache.client_id.empty()) {
+          uint8_t mac[6];
+          esp_read_mac(mac, ESP_MAC_WIFI_STA);
+          config_cache.client_id = std::format("dali_{:02x}{:02x}{:02x}", mac[3], mac[4], mac[5]);
+        }
 
         uint8_t configured_flag = 0;
         nvs_get_u8(nvs_handle.get(), "configured", &configured_flag);
@@ -124,7 +131,7 @@ namespace daliMQTT
         SetNVS(setString, "mqtt_uri", new_config.mqtt_uri);
         SetNVS(setString, "mqtt_user", new_config.mqtt_user);
         SetNVS(setString, "mqtt_pass", new_config.mqtt_pass);
-        SetNVS(setString, "mqtt_cid", new_config.mqtt_client_id);
+        SetNVS(setString, "cid", new_config.client_id);
         SetNVS(setString, "mqtt_base", new_config.mqtt_base_topic);
         SetNVS(setString, "http_domain", new_config.http_domain);
         SetNVS(setString, "http_user", new_config.http_user);
@@ -182,7 +189,7 @@ namespace daliMQTT
         SetNVS(setString, "mqtt_uri", config_cache.mqtt_uri);
         SetNVS(setString, "mqtt_user", config_cache.mqtt_user);
         SetNVS(setString, "mqtt_pass", config_cache.mqtt_pass);
-        SetNVS(setString, "mqtt_cid", config_cache.mqtt_client_id);
+        SetNVS(setString, "cid", config_cache.client_id);
         SetNVS(setString, "mqtt_base", config_cache.mqtt_base_topic);
         SetNVS(setString, "http_domain", config_cache.http_domain);
         SetNVS(setString, "http_user", config_cache.http_user);

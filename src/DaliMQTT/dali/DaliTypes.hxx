@@ -3,18 +3,17 @@
 
 namespace daliMQTT
 {
-    // 24-битный уникальный адрес DALI
+    // 24bit long dali addr type
     using DaliLongAddress_t = uint32_t;
 
-    // Структура для представления DALI устройства в системе
     struct DaliDevice {
-        DaliLongAddress_t long_address;
-        uint8_t short_address;
-        uint8_t current_level;
-        bool is_present; // Флаг, что устройство ответило при последнем сканировании
+        DaliLongAddress_t long_address; // 24-bit DALI Long (random) Address
+        uint8_t short_address; // Short addr
+        uint8_t current_level; // Current Level
+        uint8_t last_level{254}; // Last Level
+        bool is_present; // Presence flag
     };
 
-    // Представление long address в виде строки без аллокаций
     using LongAddrStr = std::array<char, 7>; // 6 hex chars + null
 
     /**
