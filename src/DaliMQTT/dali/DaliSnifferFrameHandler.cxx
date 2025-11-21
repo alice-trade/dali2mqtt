@@ -72,11 +72,42 @@ namespace daliMQTT {
         if ((addr_byte & 0x01) == 0) { // DACP
             known_level = cmd_byte;
         } else { // Command
-            switch (cmd_byte) {
-                case DALI_COMMAND_OFF:
-                case DALI_COMMAND_STEP_DOWN_AND_OFF:
-                    known_level = 0;
+            switch (cmd_byte)
+            {
+            case DALI_COMMAND_OFF:
+            case DALI_COMMAND_STEP_DOWN_AND_OFF:
+                known_level = 0;
+                break;
+            case DALI_COMMAND_ON_AND_STEP_UP:
+                {
+                    std::vector<std::pair<DaliLongAddress_t, uint8_t>> optimistic_updates;
+                    bool any_requires_query = false;
+
+                    {
+                        std::lock_guard lock(m_devices_mutex);
+                        for (const auto& long_addr : affected_devices) {
+                            if (auto it = m_devices.find(long_addr); it != m_devices.end()) {
+                                if (it->second.current_level == 0) {
+                                    uint8_t target = (it->second.last_level > 0) ? it->second.last_level : 254;
+                                    optimistic_updates.emplace_back(long_addr, target);
+                                } else {
+                                    any_requires_query = true;
+                                }
+                            }
+                        }
+                    }
+
+                    for (const auto& [addr, lvl] : optimistic_updates) {
+                        ESP_LOGD(TAG, "Sniffer: Optimistic ON_AND_STEP_UP for %s to level %d",
+                                 longAddressToString(addr).data(), lvl);
+                        updateDeviceState(addr, lvl);
+                    }
+
+                    if (any_requires_query) {
+                        needs_query = true;
+                    }
                     break;
+                }
                 // Should be recalled
                 case DALI_COMMAND_UP:
                 case DALI_COMMAND_DOWN:
@@ -84,7 +115,6 @@ namespace daliMQTT {
                 case DALI_COMMAND_STEP_DOWN:
                 case DALI_COMMAND_RECALL_MAX_LEVEL:
                 case DALI_COMMAND_RECALL_MIN_LEVEL:
-                case DALI_COMMAND_ON_AND_STEP_UP:
                 case DALI_COMMAND_GO_TO_SCENE_0:
                 case DALI_COMMAND_GO_TO_SCENE_1:
                 case DALI_COMMAND_GO_TO_SCENE_2:
