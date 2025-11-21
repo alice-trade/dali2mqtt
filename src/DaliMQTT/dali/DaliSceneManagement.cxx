@@ -1,4 +1,5 @@
 #include "DaliSceneManagement.hxx"
+#include "DaliDeviceController.hxx"
 #include "DaliAPI.hxx"
 
 namespace daliMQTT
@@ -30,8 +31,8 @@ namespace daliMQTT
 
             esp_err_t res = dali.sendCommand(
                 DALI_ADDRESS_TYPE_SPECIAL_CMD,
-                DALI_SPECIAL_COMMAND_DATA_TRANSFER_REGISTER,
-                level
+                level,
+                DALI_SPECIAL_COMMAND_DATA_TRANSFER_REGISTER
             );
             if (res != ESP_OK) {
                 ESP_LOGE(TAG, "Failed to set DTR for device %d", addr);
@@ -55,6 +56,33 @@ namespace daliMQTT
 
         ESP_LOGI(TAG, "Finished saving configuration for Scene %d", sceneId);
         return ESP_OK;
+    }
+    SceneDeviceLevels DaliSceneManagement::getSceneLevels(uint8_t sceneId) {
+        SceneDeviceLevels results;
+        if (sceneId >= 16) return results;
+
+        auto& dali = DaliAPI::getInstance();
+        auto devices = DaliDeviceController::getInstance().getDevices();
+
+        ESP_LOGI(TAG, "Querying levels for Scene %d...", sceneId);
+
+        for (const auto& device : devices | std::views::values) {
+            if (!device.is_present) continue;
+
+            auto level_opt = dali.sendQuery(
+                DALI_ADDRESS_TYPE_SHORT,
+                device.short_address,
+                DALI_COMMAND_QUERY_SCENE_LEVEL_0 + sceneId
+            );
+
+            if (level_opt.has_value()) {
+                results[device.short_address] = level_opt.value();
+            } else {
+                results[device.short_address] = 255;
+            }
+            vTaskDelay(pdMS_TO_TICKS(10));
+        }
+        return results;
     }
 
 } // namespace daliMQTT

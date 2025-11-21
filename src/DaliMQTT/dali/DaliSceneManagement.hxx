@@ -18,11 +18,9 @@ namespace daliMQTT
 
         void init();
 
-        // Активировать сцену на шине (широковещательная команда)
         esp_err_t activateScene(uint8_t sceneId);
-
-        // Сохранить конфигурацию сцены в балластах
         esp_err_t saveScene(uint8_t sceneId, const SceneDeviceLevels& levels);
+        [[nodiscard]] SceneDeviceLevels getSceneLevels(uint8_t sceneId);
 
     private:
         DaliSceneManagement() = default;

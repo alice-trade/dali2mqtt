@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import {ref, onMounted, watch} from 'vue';
 import { api } from '../api';
 
 interface DaliDevice {
@@ -24,14 +24,37 @@ const sceneOptions = Array.from({ length: 16 }, (_, i) => i);
 const getDeviceDisplayName = (device: DaliDevice) => {
   return props.deviceNames[device.long_address] || `Device ${device.short_address} (${device.long_address})`;
 };
+const loadSceneData = async () => {
+  actionInProgress.value = true;
+  try {
+    const levels: Record<string, number> = {};
+    props.devices.forEach(device => {
+      levels[device.long_address] = 255;
+    });
 
-const initSceneLevels = () => {
-  const levels: Record<string, number> = {};
-  props.devices.forEach(device => {
-    levels[device.long_address] = 254;
-  });
-  sceneLevels.value = levels;
+    const res = await api.getDaliScene(selectedScene.value);
+    if (res.data && res.data.levels) {
+      for (const [longAddr, val] of Object.entries(res.data.levels)) {
+        levels[longAddr] = Number(val);
+      }
+    }
+    sceneLevels.value = levels;
+  } catch (e) {
+    console.error("Failed to load scene data", e);
+    message.value = "Failed to load current scene levels.";
+    isError.value = true;
+  } finally {
+    actionInProgress.value = false;
+  }
 };
+
+watch(selectedScene, () => {
+  loadSceneData();
+});
+
+onMounted(() => {
+  loadSceneData();
+});
 
 const handleSaveScene = async () => {
   actionInProgress.value = true;
@@ -61,7 +84,6 @@ const setAll = (level: number) => {
   });
 };
 
-onMounted(initSceneLevels);
 </script>
 
 <template>

@@ -75,5 +75,8 @@ export const api = {
     },
     async saveDaliScene(payload: { scene_id: number, levels: Record<string, number> }) {
         return await apiClient.post('/api/dali/scenes', payload);
+    },
+    async getDaliScene(sceneId: number) {
+        return await apiClient.get(`/api/dali/scenes?id=${sceneId}`);
     }
 };

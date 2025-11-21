@@ -308,4 +308,47 @@ namespace daliMQTT {
         httpd_resp_send(req, R"({"status":"ok", "message":"Group refresh initiated."})", -1);
         return ESP_OK;
     }
+    esp_err_t WebUI::api::DaliGetSceneHandler(httpd_req_t *req) {
+        if (checkAuth(req) != ESP_OK) return ESP_FAIL;
+
+        char buf[32];
+        constexpr size_t buf_len = sizeof(buf);
+        int scene_id = 0;
+
+        if (httpd_req_get_url_query_str(req, buf, buf_len) == ESP_OK) {
+            char param[8];
+            if (httpd_query_key_value(buf, "id", param, sizeof(param)) == ESP_OK) {
+                scene_id = atoi(param);
+            }
+        }
+
+        if (scene_id < 0 || scene_id > 15) {
+            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid scene ID");
+            return ESP_FAIL;
+        }
+
+        auto levels = DaliSceneManagement::getInstance().getSceneLevels(static_cast<uint8_t>(scene_id));
+
+        cJSON *root = cJSON_CreateObject();
+        cJSON_AddNumberToObject(root, "scene_id", scene_id);
+
+        cJSON *levels_obj = cJSON_CreateObject();
+        const auto& controller = DaliDeviceController::getInstance();
+
+        for (const auto& [short_addr, level] : levels) {
+            auto long_addr_opt = controller.getLongAddress(short_addr);
+            if (long_addr_opt) {
+                cJSON_AddNumberToObject(levels_obj, longAddressToString(*long_addr_opt).data(), level);
+            }
+        }
+        cJSON_AddItemToObject(root, "levels", levels_obj);
+
+        char *json_string = cJSON_PrintUnformatted(root);
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_send(req, json_string, HTTPD_RESP_USE_STRLEN);
+        cJSON_Delete(root);
+        free(json_string);
+
+        return ESP_OK;
+    }
 }
