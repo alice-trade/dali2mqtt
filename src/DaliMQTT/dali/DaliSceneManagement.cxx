@@ -10,7 +10,8 @@ namespace daliMQTT
         ESP_LOGI(TAG, "DALI Scene Manager initialized.");
     }
 
-    esp_err_t DaliSceneManagement::activateScene(uint8_t sceneId) {
+    esp_err_t DaliSceneManagement::activateScene(const uint8_t sceneId) const
+    {
         if (sceneId >= 16) {
             return ESP_ERR_INVALID_ARG;
         }
@@ -19,7 +20,8 @@ namespace daliMQTT
         return dali.sendCommand(DALI_ADDRESS_TYPE_BROADCAST, 0, DALI_COMMAND_GO_TO_SCENE_0 + sceneId);
     }
 
-    esp_err_t DaliSceneManagement::saveScene(uint8_t sceneId, const SceneDeviceLevels& levels) {
+    esp_err_t DaliSceneManagement::saveScene(uint8_t sceneId, const SceneDeviceLevels& levels) const
+    {
         if (sceneId >= 16) {
             return ESP_ERR_INVALID_ARG;
         }
@@ -57,7 +59,8 @@ namespace daliMQTT
         ESP_LOGI(TAG, "Finished saving configuration for Scene %d", sceneId);
         return ESP_OK;
     }
-    SceneDeviceLevels DaliSceneManagement::getSceneLevels(uint8_t sceneId) {
+    SceneDeviceLevels DaliSceneManagement::getSceneLevels(uint8_t sceneId) const
+    {
         SceneDeviceLevels results;
         if (sceneId >= 16) return results;
 

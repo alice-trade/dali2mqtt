@@ -201,7 +201,8 @@ namespace daliMQTT {
     }
 
 
-    void MQTTCommandHandler::handle(const std::string& topic, const std::string& data) {
+    void MQTTCommandHandler::handle(const std::string& topic, const std::string& data) const
+    {
         ESP_LOGD(TAG, "MQTT Rx: %s -> %s", topic.c_str(), data.c_str());
 
         const auto config = ConfigManager::getInstance().getConfig();

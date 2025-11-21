@@ -151,7 +151,7 @@ namespace daliMQTT
         return m_dali_event_queue;
     }
 
-    esp_err_t DaliAPI::sendDACP(dali_addressType_t addr_type, uint8_t addr, uint8_t level) {
+    esp_err_t DaliAPI::sendDACP(const dali_addressType_t addr_type, const uint8_t addr, const uint8_t level) {
         std::lock_guard lock(bus_mutex);
         uint8_t dali_addr;
         switch (addr_type) {
@@ -199,7 +199,7 @@ namespace daliMQTT
         return ESP_OK;
     }
 
-    std::optional<uint8_t> DaliAPI::sendQuery(dali_addressType_t addr_type, uint8_t addr, uint8_t command) {
+    std::optional<uint8_t> DaliAPI::sendQuery(const dali_addressType_t addr_type, const uint8_t addr, const uint8_t command) {
         std::lock_guard lock(bus_mutex);
         uint8_t dali_arg;
         uint16_t dali_cmd = command;
@@ -259,13 +259,13 @@ namespace daliMQTT
         return scanBus();
     }
 
-    esp_err_t DaliAPI::assignToGroup(uint8_t shortAddress, uint8_t group) {
+    esp_err_t DaliAPI::assignToGroup(const uint8_t shortAddress, const uint8_t group) {
         if (group >= 16) return ESP_ERR_INVALID_ARG;
         ESP_LOGD(TAG, "Process group addition of %u to %u", shortAddress, group);
         return sendCommand(DALI_ADDRESS_TYPE_SHORT, shortAddress, DALI_COMMAND_ADD_TO_GROUP_0 + group, true);
     }
 
-    esp_err_t DaliAPI::removeFromGroup(uint8_t shortAddress, uint8_t group) {
+    esp_err_t DaliAPI::removeFromGroup(const uint8_t shortAddress, const uint8_t group) {
         if (group >= 16) return ESP_ERR_INVALID_ARG;
         return sendCommand(DALI_ADDRESS_TYPE_SHORT, shortAddress, DALI_COMMAND_REMOVE_FROM_GROUP_0 + group, true);
     }

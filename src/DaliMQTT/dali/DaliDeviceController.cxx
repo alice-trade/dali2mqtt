@@ -130,7 +130,7 @@ namespace daliMQTT
     [[noreturn]] void DaliDeviceController::daliEventHandlerTask(void* pvParameters) {
         auto* self = static_cast<DaliDeviceController*>(pvParameters);
         const auto& dali_api = DaliAPI::getInstance();
-        QueueHandle_t queue = dali_api.getEventQueue();
+        const QueueHandle_t queue = dali_api.getEventQueue();
         dali_frame_t frame;
 
         while (true) {
@@ -247,7 +247,7 @@ namespace daliMQTT
 
     std::optional<uint8_t> DaliDeviceController::getShortAddress(DaliLongAddress_t longAddress) const {
         std::lock_guard lock(m_devices_mutex);
-        if (auto it = m_devices.find(longAddress); it != m_devices.end()) {
+        if (const auto it = m_devices.find(longAddress); it != m_devices.end()) {
             return it->second.short_address;
         }
         return std::nullopt;

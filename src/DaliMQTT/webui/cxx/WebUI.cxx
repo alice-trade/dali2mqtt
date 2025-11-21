@@ -64,7 +64,7 @@ namespace daliMQTT
 
     // --- Static File and Auth ---
     void WebUI::set_content_type_from_file(httpd_req_t *req, const char *filepath) {
-        std::string_view fp(filepath);
+        const std::string_view fp(filepath);
         if (fp.ends_with(".html")) httpd_resp_set_type(req, "text/html");
         else if (fp.ends_with(".js")) httpd_resp_set_type(req, "application/javascript");
         else if (fp.ends_with(".css")) httpd_resp_set_type(req, "text/css");

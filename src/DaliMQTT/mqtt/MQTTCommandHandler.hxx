@@ -20,7 +20,7 @@ namespace daliMQTT {
          * @param topic
          * @param data
          */
-        void handle(const std::string& topic, const std::string& data);
+        void handle(const std::string& topic, const std::string& data) const;
 
     private:
         MQTTCommandHandler() = default;

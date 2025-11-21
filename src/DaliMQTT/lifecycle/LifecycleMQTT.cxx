@@ -22,7 +22,8 @@ namespace daliMQTT {
         mqtt.connect();
     }
 
-    void Lifecycle::onMqttConnected() {
+    void Lifecycle::onMqttConnected() const
+    {
         ESP_LOGI(TAG, "MQTT connected successfully.");
         auto config = ConfigManager::getInstance().getConfig();
         auto const& mqtt = MQTTClient::getInstance();
@@ -62,7 +63,8 @@ namespace daliMQTT {
         DaliDeviceController::getInstance().start();
     }
 
-    void Lifecycle::onMqttData(const std::string& topic, const std::string& data) {
+    void Lifecycle::onMqttData(const std::string& topic, const std::string& data) const
+    {
         MQTTCommandHandler::getInstance().handle(topic, data);
     }
 }

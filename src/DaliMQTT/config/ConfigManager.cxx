@@ -271,12 +271,12 @@ namespace daliMQTT
         return err;
     }
 
-    esp_err_t ConfigManager::setString(nvs_handle_t handle, const char* key, const std::string& value) {
+    esp_err_t ConfigManager::setString(const nvs_handle_t handle, const char* key, const std::string& value) {
         return nvs_set_str(handle, key, value.c_str());
     }
 
 
-    esp_err_t ConfigManager::getU32(nvs_handle_t handle, const char* key, uint32_t& out_value, uint32_t default_value) {
+    esp_err_t ConfigManager::getU32(const nvs_handle_t handle, const char* key, uint32_t& out_value, uint32_t default_value) {
         const esp_err_t err = nvs_get_u32(handle, key, &out_value);
         if (err == ESP_ERR_NVS_NOT_FOUND) {
             out_value = default_value;

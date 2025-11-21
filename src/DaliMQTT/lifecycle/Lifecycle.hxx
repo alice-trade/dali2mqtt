@@ -23,8 +23,8 @@ namespace daliMQTT
             Lifecycle() = default;
 
             void setupAndRunMqtt();
-            void onMqttConnected();
-            void onMqttData(const std::string& topic, const std::string& data);
+            void onMqttConnected() const;
+            void onMqttData(const std::string& topic, const std::string& data) const;
     };
 } // daliMQTT
 

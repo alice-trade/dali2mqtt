@@ -158,13 +158,13 @@ namespace daliMQTT
         }
 
         auto& dali = DaliAPI::getInstance();
-        for (const auto& cmd : commands_to_send) {
-            if (cmd.assign) {
-                ESP_LOGI(TAG, "Sync: Adding device %d to group %d", cmd.short_address, cmd.group);
-                dali.assignToGroup(cmd.short_address, cmd.group);
+        for (const auto& [short_address, group, assign] : commands_to_send) {
+            if (assign) {
+                ESP_LOGI(TAG, "Sync: Adding device %d to group %d", short_address, group);
+                dali.assignToGroup(short_address, group);
             } else {
-                ESP_LOGI(TAG, "Sync: Removing device %d from group %d", cmd.short_address, cmd.group);
-                dali.removeFromGroup(cmd.short_address, cmd.group);
+                ESP_LOGI(TAG, "Sync: Removing device %d from group %d", short_address, group);
+                dali.removeFromGroup(short_address, group);
             }
             vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
         }
