@@ -7,15 +7,16 @@ namespace daliMQTT {
 
     static constexpr char TAG[] = "SyslogService";
     static constexpr int SYSLOG_PORT = 514;
-    static constexpr int LOG_QUEUE_LENGTH = 32;
-    static constexpr int MAX_LOG_MSG_SIZE = 256;
+    static constexpr size_t MESSAGE_BUFFER_SIZE = 4096;
+    static constexpr size_t MAX_LOG_MSG_SIZE = 256;
 
     static SyslogConfig* g_syslog_instance = nullptr;
+
     void SyslogConfig::init(const std::string& server_addr) {
-    #if CONFIG_LOG_DEFAULT_LEVEL > 3
-        ESP_LOGW(TAG, "IDF log level is set to DEBUG or VERBOSE. Syslog is disabled to prevent instability.");
-        return;
-    #endif
+        #if CONFIG_LOG_DEFAULT_LEVEL > 3
+            ESP_LOGW(TAG, "IDF log level is set to DEBUG or VERBOSE. Syslog is disabled to prevent instability.");
+            return;
+        #endif
 
         if (m_initialized) {
             setServer(server_addr);
@@ -26,9 +27,9 @@ namespace daliMQTT {
             g_syslog_instance = this;
         }
 
-        m_log_queue = xQueueCreate(LOG_QUEUE_LENGTH, sizeof(char*));
-        if (!m_log_queue) {
-            ESP_LOGE(TAG, "Failed to create log queue. Syslog disabled.");
+        m_log_buffer = xMessageBufferCreate(MESSAGE_BUFFER_SIZE);
+        if (!m_log_buffer) {
+            ESP_LOGE(TAG, "Failed to create message buffer. Syslog disabled.");
             return;
         }
 
@@ -43,20 +44,20 @@ namespace daliMQTT {
 
         if (task_created != pdPASS) {
             ESP_LOGE(TAG, "Failed to create syslog task. Syslog disabled.");
-            vQueueDelete(m_log_queue);
-            m_log_queue = nullptr;
+            vMessageBufferDelete(m_log_buffer);
+            m_log_buffer = nullptr;
             return;
         }
 
         m_original_logger = esp_log_set_vprintf(syslog_vprintf_func);
         m_initialized = true;
-        ESP_LOGI(TAG, "Syslog logger initialized with a background task.");
 
         setServer(server_addr);
+        ESP_LOGI(TAG, "Syslog logger initialized with a background task.");
     }
 
     void SyslogConfig::setServer(const std::string& server_addr) {
-        std::lock_guard<std::recursive_mutex> lock(m_mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_sock_mutex);
 
         if (m_sock >= 0) {
             close(m_sock);
@@ -90,36 +91,37 @@ namespace daliMQTT {
         }
 
         freeaddrinfo(res);
-        if (m_sock >= 0) {
-            ESP_LOGI(TAG, "Syslog server set to %s", m_server_addr.c_str());
-        }
     }
 
 
     int SyslogConfig::syslog_vprintf_func(const char *format, va_list args) {
-        va_list args_copy;
-        va_copy(args_copy, args);
-        int ret = g_syslog_instance->m_original_logger(format, args_copy);
-        va_end(args_copy);
+        int ret = 0;
+        if (g_syslog_instance && g_syslog_instance->m_original_logger) {
+            va_list args_copy;
+            va_copy(args_copy, args);
+            ret = g_syslog_instance->m_original_logger(format, args_copy);
+            va_end(args_copy);
+        }
 
-        if (!g_syslog_instance || !g_syslog_instance->m_log_queue) {
+        if (!g_syslog_instance || !g_syslog_instance->m_log_buffer) {
+            return ret;
+        }
+        if (xPortInIsrContext()) {
+            return ret;
+        }
+        if (xTaskGetCurrentTaskHandle() == g_syslog_instance->m_task_handle) {
             return ret;
         }
 
-        char* msg_buffer = static_cast<char*>(malloc(MAX_LOG_MSG_SIZE));
-        if (!msg_buffer) {
-            return ret;
+        char msg_buffer[192];
+
+        const int len = vsnprintf(msg_buffer, sizeof(msg_buffer), format, args);
+
+        if (len > 0) {
+            const size_t actual_len = (len < sizeof(msg_buffer)) ? len : (sizeof(msg_buffer) - 1);
+            xMessageBufferSend(g_syslog_instance->m_log_buffer, msg_buffer, actual_len, 0);
         }
 
-        vsnprintf(msg_buffer, MAX_LOG_MSG_SIZE, format, args);
-
-        if (char* end = strstr(msg_buffer, "\r\n")) {
-            *end = '\0';
-        }
-
-        if (xQueueSend(g_syslog_instance->m_log_queue, &msg_buffer, 0) != pdPASS) {
-            free(msg_buffer);
-        }
         return ret;
     }
 
@@ -129,28 +131,47 @@ namespace daliMQTT {
     }
 
     void SyslogConfig::syslog_task_runner() {
-        char* message_buffer = nullptr;
+        std::array<char, MAX_LOG_MSG_SIZE + 1> recv_buffer;
+
         while (true) {
-            if (xQueueReceive(m_log_queue, &message_buffer, portMAX_DELAY) == pdPASS) {
-                if (message_buffer) {
-                    send_log_udp(message_buffer);
-                    free(message_buffer);
-                }
+            size_t received_bytes = xMessageBufferReceive(
+                m_log_buffer,
+                recv_buffer.data(),
+                recv_buffer.size() - 1,
+                portMAX_DELAY
+            );
+
+            if (received_bytes > 0) {
+                recv_buffer[received_bytes] = '\0';
+                send_log_udp(recv_buffer.data(), received_bytes);
             }
         }
     }
 
-    void SyslogConfig::send_log_udp(const char* message) {
-        std::lock_guard<std::recursive_mutex> lock(m_mutex);
+    void SyslogConfig::send_log_udp(const char* message, size_t msg_len) {
+        std::lock_guard<std::recursive_mutex> lock(m_sock_mutex);
 
         if (m_sock < 0 || m_server_addr.empty()) {
             return;
         }
 
-        char syslog_buf[MAX_LOG_MSG_SIZE + 32];
-        int len = snprintf(syslog_buf, sizeof(syslog_buf), "<14>dalimqtt: %s", message);
+        while (msg_len > 0 && (message[msg_len - 1] == '\n' || message[msg_len - 1] == '\r')) {
+            msg_len--;
+        }
+        if (msg_len == 0) return;
 
-        send(m_sock, syslog_buf, len, 0);
+        char packet_buf[MAX_LOG_MSG_SIZE + 32];
+
+        const int header_len = snprintf(packet_buf, sizeof(packet_buf), "<14>dalimqtt: ");
+        if (header_len < 0) return;
+
+        const size_t max_msg_payload = sizeof(packet_buf) - header_len - 1;
+        size_t copy_len = (msg_len < max_msg_payload) ? msg_len : max_msg_payload;
+
+        memcpy(packet_buf + header_len, message, copy_len);
+        packet_buf[header_len + copy_len] = '\0';
+
+        send(m_sock, packet_buf, header_len + copy_len, 0);
     }
 
 } // namespace daliMQTT
