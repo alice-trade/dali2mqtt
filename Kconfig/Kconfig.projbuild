@@ -20,7 +20,7 @@ menu "DALI MQTT Bridge Settings"
     config DALI2MQTT_DALI_DEFAULT_POLL_INTERVAL_MS
         int "Default DALI Sync Poll Interval (ms)"
         default 600000
-        range 300000 3600000
+        range 100000 3600000
         help
             Default interval for syncronizing (polling) DALI status for all devices
 
