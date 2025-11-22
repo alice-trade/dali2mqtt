@@ -238,7 +238,6 @@ namespace daliMQTT
         std::lock_guard lock(bus_mutex);
         std::bitset<64> found_devices;
         ESP_LOGI(TAG, "Starting DALI bus scan...");
-        sendCommand(DALI_ADDRESS_TYPE_SHORT, 0, DALI_COMMAND_ON_AND_STEP_UP);
         for (uint8_t i = 0; i < 64; ++i) {
             int16_t rv = m_dali_impl.cmd(DALI_COMMAND_QUERY_STATUS, i);
             if (rv >= 0) {
