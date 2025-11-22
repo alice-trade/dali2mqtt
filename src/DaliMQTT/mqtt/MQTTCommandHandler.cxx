@@ -126,9 +126,27 @@ namespace daliMQTT {
                 dali.sendDACP(addr_type, target_id, *target_brightness);
                 publishLightState(addr_type, target_id, "ON", *target_brightness);
             } else { // ON (Restore)
-                ESP_LOGD(TAG, "MQTT Command: ON (to max level) for target %u (type %d)", target_id, addr_type);
-                dali.sendCommand(addr_type, target_id, DALI_COMMAND_RECALL_MAX_LEVEL);
-                publishLightState(addr_type, target_id, "ON", std::nullopt);
+                std::optional<uint8_t> restore_level;
+                if (addr_type == DALI_ADDRESS_TYPE_SHORT) {
+                    auto& controller = DaliDeviceController::getInstance();
+                    if (auto long_addr = controller.getLongAddress(target_id)) {
+                        auto saved = controller.getLastLevel(*long_addr);
+                        if (saved.has_value() && *saved > 0) {
+                            restore_level = saved;
+                        }
+                    }
+                }
+
+                if (restore_level.has_value()) {
+                    uint8_t level = *restore_level;
+                    ESP_LOGD(TAG, "MQTT Command: ON (Restore) -> restoring level %d for target %u", level, target_id);
+                    dali.sendDACP(addr_type, target_id, level);
+                    publishLightState(addr_type, target_id, "ON", level);
+                } else {
+                    ESP_LOGD(TAG, "MQTT Command: ON (Default) -> RECALL_MAX_LEVEL for target %u (type %d)", target_id, addr_type);
+                    dali.sendCommand(addr_type, target_id, DALI_COMMAND_RECALL_MAX_LEVEL);
+                    publishLightState(addr_type, target_id, "ON", 254);
+                }
             }
         }
         else if (target_brightness.has_value()) { // Level Direct Change
