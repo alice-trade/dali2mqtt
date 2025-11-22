@@ -244,11 +244,6 @@ namespace daliMQTT
             if (rv >= 0) {
                 ESP_LOGI(TAG, "Device found at short address %d (Status: 0x%02X)", i, rv);
                 found_devices.set(i);
-
-
-                m_dali_impl.set_level(254, i);
-                vTaskDelay(pdMS_TO_TICKS(500));
-                m_dali_impl.set_level(0, i);
             } else if (-rv != DALI_RESULT_NO_REPLY) {
                 ESP_LOGW(TAG, "Scan error at address %d: code %d", i, -rv);
             }
