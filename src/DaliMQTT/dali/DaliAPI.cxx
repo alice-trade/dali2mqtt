@@ -42,6 +42,8 @@ namespace daliMQTT
 
             if (bit_len > 2) {
                 dali_frame_t frame = {};
+                frame.length = bit_len;
+
                 if (bit_len == 8) {
                     frame.is_backward_frame = true;
                     frame.data = decoded_data[0];
@@ -50,6 +52,12 @@ namespace daliMQTT
                     frame.is_backward_frame = false;
                     frame.data = (decoded_data[0] << 8) | decoded_data[1];
                     ESP_LOGD(TAG, "Sniffed Forward Frame: 0x%04X", frame.data);
+                } else if (bit_len == 24) {
+                    frame.is_backward_frame = false;
+                    frame.data = (static_cast<uint32_t>(decoded_data[0]) << 16) |
+                                 (static_cast<uint32_t>(decoded_data[1]) << 8) |
+                                 decoded_data[2];
+                    ESP_LOGD(TAG, "Sniffed Forward Frame (24): 0x%06lX", frame.data);
                 } else {
                     ESP_LOGW(TAG, "Sniffed frame with unusual bit length: %d", bit_len);
                     continue;

@@ -285,4 +285,9 @@ namespace daliMQTT
         }
         return err;
     }
+
+    std::string ConfigManager::getMqttBaseTopic() const {
+        std::lock_guard lock(config_mutex);
+        return config_cache.mqtt_base_topic;
+    }
 }

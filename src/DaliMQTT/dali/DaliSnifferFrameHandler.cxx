@@ -1,9 +1,52 @@
+#include <ConfigManager.hxx>
 #include "DaliDeviceController.hxx"
 #include <DaliGroupManagement.hxx>
+#include <MQTTClient.hxx>
 
 namespace daliMQTT {
     static constexpr char TAG[] = "DaliSnifferFrameHandler";
     void DaliDeviceController::processDaliFrame(const dali_frame_t& frame) {
+        #ifdef DALIMQTT_MQTTPUB_SNIFFER
+            {
+                auto const& mqtt = MQTTClient::getInstance();
+                if (mqtt.getStatus() == MqttStatus::CONNECTED) {
+                    static std::string cached_topic_prefix;
+                    if (cached_topic_prefix.empty()) {
+                        cached_topic_prefix = ConfigManager::getInstance().getMqttBaseTopic();
+                    }
+                    std::string topic = cached_topic_prefix + "/sniffer/raw";
+
+                    std::string payload;
+                    uint32_t timestamp = esp_log_timestamp();
+
+                    if (frame.length == 8) {
+                        payload = std::format(
+                            R"({{"type":"backward","len":8,"data":{},"hex":"{:02X}","ts":{}}})",
+                            frame.data, frame.data & 0xFF, timestamp
+                        );
+                    } else if (frame.length == 24) {
+                        payload = std::format(
+                            R"({{"type":"forward","len":24,"data":{},"hex":"{:06X}","ts":{}}})",
+                            frame.data, frame.data & 0xFFFFFF, timestamp
+                        );
+                    } else {
+                        payload = std::format(
+                            R"({{"type":"forward","len":{},"data":{},"hex":"{:04X}","ts":{}}})",
+                            frame.length, frame.data, frame.data & 0xFFFF, timestamp
+                        );
+                    }
+                    mqtt.publish(topic, payload, 0, false);
+                }
+            }
+        #endif
+
+        if (frame.length != 16) {
+            if (frame.length == 24) {
+                ESP_LOGD(TAG, "Ignored 24-bit frame 0x%06lX in device controller (input device event)", frame.data);
+            }
+            return;
+        }
+
         if (frame.is_backward_frame) {
             ESP_LOGD(TAG, "Process sniffed backward frame 0x%02X", frame.data & 0xFF);
             return;

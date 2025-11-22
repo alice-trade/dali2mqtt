@@ -61,6 +61,8 @@ namespace daliMQTT
             // Получение текущей конфигурации
             [[nodiscard]] AppConfig getConfig() const;
 
+            [[nodiscard]] std::string getMqttBaseTopic() const;
+
             // Установка новой конфигурации
             void setConfig(const AppConfig& new_config);
 

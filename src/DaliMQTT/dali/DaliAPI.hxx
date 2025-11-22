@@ -16,7 +16,8 @@ namespace daliMQTT
     } dali_addressType_t;
 
     struct dali_frame_t {
-        uint16_t data;
+        uint32_t data;
+        uint8_t length;
         bool is_backward_frame;
     };
 
