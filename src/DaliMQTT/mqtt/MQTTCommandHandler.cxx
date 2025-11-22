@@ -199,6 +199,37 @@ namespace daliMQTT {
 
         cJSON_Delete(root);
     }
+    #ifdef CONFIG_DALI2MQTT_DEBUG_COMMAND_INTERFACE_TOPIC
+        static void LOCAL_processDebugSendDALICommand(const std::string& data) {
+             cJSON* root = cJSON_Parse(data.c_str());
+             if (!root) {
+                 return;
+             }
+
+             cJSON* type_item = cJSON_GetObjectItem(root, "type");
+             cJSON* addr_item = cJSON_GetObjectItem(root, "addr");
+             cJSON* cmd_item = cJSON_GetObjectItem(root, "cmd");
+             cJSON* twice_item = cJSON_GetObjectItem(root, "twice");
+
+             if (cJSON_IsNumber(type_item) && cJSON_IsNumber(addr_item) && cJSON_IsNumber(cmd_item)) {
+                 dali_addressType_t addr_type = static_cast<dali_addressType_t>(type_item->valueint);
+                 uint8_t addr = static_cast<uint8_t>(addr_item->valueint);
+                 uint8_t cmd = static_cast<uint8_t>(cmd_item->valueint);
+                 bool send_twice = cJSON_IsTrue(twice_item);
+
+                 ESP_LOGD(TAG, "Debug Command: Type=%d, Addr=%d, Cmd=%d, Twice=%d", addr_type, addr, cmd, send_twice);
+
+                 esp_err_t err = DaliAPI::getInstance().sendCommand(addr_type, addr, cmd, send_twice);
+                 if (err != ESP_OK) {
+                     ESP_LOGE(TAG, "Debug Command Failed: %s", esp_err_to_name(err));
+                 }
+             } else {
+                 ESP_LOGW(TAG, "Debug: Invalid JSON structure. Expected {type, addr, cmd}");
+             }
+
+             cJSON_Delete(root);
+         }
+    #endif
 
 
     void MQTTCommandHandler::handle(const std::string& topic, const std::string& data) const
@@ -233,6 +264,11 @@ namespace daliMQTT {
                  handleSceneCommand(data);
              }
         }
+        #ifdef CONFIG_DALI2MQTT_DEBUG_COMMAND_INTERFACE_TOPIC
+            else if (parts[0] == "debug" && parts.size() > 1 && parts[1] == "pub") {
+                LOCAL_processDebugSendDALICommand(data);
+            }
+        #endif
     }
 
 } // namespace daliMQTT

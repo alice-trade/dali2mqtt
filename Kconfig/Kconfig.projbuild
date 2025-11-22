@@ -44,6 +44,16 @@ menu "DALI MQTT Bridge Settings"
         range 10 200
         help
             Delay between polling different DALI addresses within one poll cycle.
+    config DALI2MQTT_SNIFFER_DEBUG_PUBLISH_MQTT
+                        bool "Enable Sniffer debug messages publish to MQTT"
+                        default n
+                        help
+                            Enable sending messages by sniffer to mqtt topic base/debug/sniffer_raw
+    config DALI2MQTT_DEBUG_COMMAND_INTERFACE_TOPIC
+                        bool "Enable debug MQTT topic to sending DALI commands"
+                        default n
+                        help
+                            Enable debug mqtt topic (base/debug/pub) to sending DALI commands to be executed
      # --- Настройки Задач ---
     comment "Task Configuration"
 

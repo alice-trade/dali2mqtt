@@ -6,7 +6,7 @@
 namespace daliMQTT {
     static constexpr char TAG[] = "DaliSnifferFrameHandler";
     void DaliDeviceController::processDaliFrame(const dali_frame_t& frame) {
-        #ifdef DALIMQTT_MQTTPUB_SNIFFER
+        #ifdef CONFIG_DALI2MQTT_SNIFFER_DEBUG_PUBLISH_MQTT
             {
                 auto const& mqtt = MQTTClient::getInstance();
                 if (mqtt.getStatus() == MqttStatus::CONNECTED) {
@@ -14,7 +14,7 @@ namespace daliMQTT {
                     if (cached_topic_prefix.empty()) {
                         cached_topic_prefix = ConfigManager::getInstance().getMqttBaseTopic();
                     }
-                    std::string topic = cached_topic_prefix + "/sniffer/raw";
+                    std::string topic = cached_topic_prefix + "/debug/sniffer_raw";
 
                     std::string payload;
                     uint32_t timestamp = esp_log_timestamp();

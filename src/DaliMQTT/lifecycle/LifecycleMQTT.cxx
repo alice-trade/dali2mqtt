@@ -56,6 +56,13 @@ namespace daliMQTT {
         mqtt.subscribe(scene_cmd_topic);
         ESP_LOGI(TAG, "Subscribed to scenes: %s", scene_cmd_topic.c_str());
 
+        #ifdef CONFIG_DALI2MQTT_DEBUG_COMMAND_INTERFACE_TOPIC // Debug command interface
+            // base/debug/pub
+            std::string debug_topic = std::format("{}/debug/pub", config.mqtt_base_topic);
+            mqtt.subscribe(debug_topic);
+            ESP_LOGW(TAG, "DEBUG INTERFACE ENABLED. Subscribed to: %s", debug_topic.c_str());
+        #endif
+
         MQTTDiscovery mqtt_discovery;
         mqtt_discovery.publishAllDevices();
         ESP_LOGI(TAG, "MQTT discovery messages published.");

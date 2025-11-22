@@ -9,11 +9,6 @@ string(TIMESTAMP PROJ_BUILD_TIMESTAMP "%Y-%m-%dT%H:%M:%SZ")
 # Target definitions
 target_compile_definitions(DaliMQTT-Core PUBLIC  $<$<CONFIG:Debug>:_DEBUG_DALIMQTT_> DALIMQTT_VERSION=\"${PROJVER}\" DALIMQTT_CONFIGURED_TIMESTAMP=\"${PROJ_BUILD_TIMESTAMP}\")
 
-if(DALIMQTT_MQTTPUB_SNIFFER)
-    message(STATUS "Enable (DALIMQTT_MQTTPUB_SNIFFER define)")
-    target_compile_definitions(DaliMQTT-Core PUBLIC DALIMQTT_MQTTPUB_SNIFFER)
-endif()
-
 set(MODULE_DIRS
         config
         wifi
