@@ -1,6 +1,5 @@
-#include "DaliAPI.hxx"
 #include "sdkconfig.h"
-#include "driver/gpio.h"
+#include "DaliAPI.hxx"
 
 namespace daliMQTT
 {
@@ -290,6 +289,9 @@ namespace daliMQTT
         if (self->m_sniffer_task_handle) {
             vTaskNotifyGiveFromISR(self->m_sniffer_task_handle, &xHigherPriorityTaskWoken);
         }
+        #ifndef traceISR_EXIT_TO_SCHEDULER // underlying macro define
+            #define traceISR_EXIT_TO_SCHEDULER()
+        #endif
         portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
     }
 
