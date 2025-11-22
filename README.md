@@ -74,7 +74,7 @@ cmake --build build --target monitor
 
 1.  **Подключитесь к Wi-Fi сети**: Устройство создаст точку доступа с SSID `DALI-MQTT-Bridge` и паролем `bridge123` (можно изменить в `menuconfig`).
 2.  **Откройте Web-интерфейс**: В браузере перейдите по адресу `http://dalimqtt.local`.
-3.  **Введите учетные данные**: По умолчанию `admin`/`admin`.
+3.  **Введите учетные данные**: По умолчанию `admin`/`dalimqttbrg12321`.
 4.  **Заполните поля**:
     *   **WiFi Settings**: SSID и пароль вашей домашней Wi-Fi сети.
     *   **MQTT Settings**: URI вашего брокера (например, `mqtt://user:pass@192.168.1.100`), Client ID и базовый топик.
