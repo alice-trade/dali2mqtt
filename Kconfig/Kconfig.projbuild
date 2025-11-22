@@ -1,7 +1,7 @@
 menu "DALI MQTT Bridge Settings"
 
-    # --- Настройки DALI ---
-    menu "DALI Interface Configuration"
+    menu "DALI Configuration"
+    comment "Protocol Configuration"
 
     config DALI2MQTT_DALI_RX_PIN
         int "DALI RX GPIO Pin"
@@ -44,17 +44,45 @@ menu "DALI MQTT Bridge Settings"
         range 10 200
         help
             Delay between polling different DALI addresses within one poll cycle.
+
+    comment "Debug Options"
+
     config DALI2MQTT_SNIFFER_DEBUG_PUBLISH_MQTT
                         bool "Enable Sniffer debug messages publish to MQTT"
                         default n
                         help
-                            Enable sending messages by sniffer to mqtt topic base/debug/sniffer_raw
+                             Enable sending raw DALI frames captured by the sniffer to MQTT.
+                                        Topic: <mqtt_base>/debug/sniffer_raw
+
+                                        Payload Schema (JSON):
+                                        {
+                                            "type": "forward" | "backward",  // Frame direction
+                                            "len":  <int>,                   // Bit length (8, 16, 24)
+                                            "data": <uint32>,                // Raw integer value
+                                            "hex":  "<HEX_STRING>",          // Hexadecimal representation
+                                            "ts":   <uint32>                 // ESP log timestamp (ms)
+                                        }
     config DALI2MQTT_DEBUG_COMMAND_INTERFACE_TOPIC
                         bool "Enable debug MQTT topic to sending DALI commands"
                         default n
                         help
-                            Enable debug mqtt topic (base/debug/pub) to sending DALI commands to be executed
-     # --- Настройки Задач ---
+                             Enable debug mqtt topic to send arbitrary raw DALI commands.
+                                        Topic: <mqtt_base>/debug/pub
+
+                                        Payload Schema (JSON):
+                                        {
+                                            "type":  <int>,   // Address Type Enum
+                                            "addr":  <int>,   // Target Address
+                                            "cmd":   <int>,   // Command ID or DACP Level (0-255)
+                                            "twice": <bool>   // Send twice
+                                        }
+
+                                        Address Types (type):
+                                        0 = Short Address (addr: 0-63)
+                                        1 = Group Address (addr: 0-15)
+                                        2 = Broadcast     (addr: ignored)
+                                        3 = Special Cmd   (addr: special command arg)
+
     comment "Task Configuration"
 
     config DALI2MQTT_DALI_POLL_TASK_STACK_SIZE
@@ -73,7 +101,6 @@ menu "DALI MQTT Bridge Settings"
 
     endmenu
 
-    # --- Настройки MQTT ---
     menu "MQTT Client Configuration"
 
     config DALI2MQTT_MQTT_BASE_TOPIC
@@ -149,7 +176,6 @@ menu "DALI MQTT Bridge Settings"
             Payload for offline availability status (LWT).
     endmenu
 
-    # --- Настройки WiFi по умолчанию ---
     menu "WiFi AP Credentials"
 
     config DALI2MQTT_WIFI_AP_SSID
@@ -180,7 +206,6 @@ menu "DALI MQTT Bridge Settings"
 
     endmenu
 
-    # --- Настройки NVS ---
     menu "NVS Configuration"
 
     config DALI2MQTT_NVS_NAMESPACE
@@ -190,7 +215,7 @@ menu "DALI MQTT Bridge Settings"
             Namespace used for storing configuration in NVS.
     endmenu
 
-     menu "Web UI Configuration"
+    menu "Web UI Configuration"
 
         config DALI2MQTT_WEBUI_SPIFFS_PARTITION_LABEL
             string "SPIFFS Partition Label"

@@ -281,7 +281,7 @@ namespace daliMQTT
 
     std::optional<std::bitset<16>> DaliAPI::getDeviceGroups(const uint8_t shortAddress) {
         const auto groups_0_7 = sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddress, DALI_COMMAND_QUERY_GROUPS_0_7);
-        vTaskDelay(pdMS_TO_TICKS(5));
+        vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
         const auto groups_8_15 = sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddress, DALI_COMMAND_QUERY_GROUPS_8_15);
 
         if (groups_0_7.has_value() && groups_8_15.has_value()) {
@@ -305,9 +305,9 @@ namespace daliMQTT
 
     std::optional<DaliLongAddress_t> DaliAPI::getLongAddress(const uint8_t shortAddress) {
         const auto h_opt = sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddress, DALI_COMMAND_QUERY_RANDOM_ADDRESS_H);
-        vTaskDelay(pdMS_TO_TICKS(5));
+        vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
         const auto m_opt = sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddress, DALI_COMMAND_QUERY_RANDOM_ADDRESS_M);
-        vTaskDelay(pdMS_TO_TICKS(5));
+        vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
         const auto l_opt = sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddress, DALI_COMMAND_QUERY_RANDOM_ADDRESS_L);
 
         if (h_opt && m_opt && l_opt) {

@@ -191,7 +191,7 @@ namespace daliMQTT {
             auto& dali = DaliAPI::getInstance();
             for (const auto& long_addr : affected_devices) {
                 if (auto short_addr_opt = getShortAddress(long_addr)) {
-                    vTaskDelay(pdMS_TO_TICKS(15));
+                    vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
                     if (auto level_opt = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, *short_addr_opt, DALI_COMMAND_QUERY_ACTUAL_LEVEL)) {
                         updateDeviceState(long_addr, *level_opt);
                     }

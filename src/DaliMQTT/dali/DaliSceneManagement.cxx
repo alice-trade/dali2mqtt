@@ -40,7 +40,7 @@ namespace daliMQTT
                 ESP_LOGE(TAG, "Failed to set DTR for device %d", addr);
                 continue;
             }
-            vTaskDelay(pdMS_TO_TICKS(10));
+            vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
 
 
             res = dali.sendCommand(
@@ -53,7 +53,7 @@ namespace daliMQTT
                 ESP_LOGE(TAG, "Failed to store scene %d for device %d", sceneId, addr);
             }
 
-            vTaskDelay(pdMS_TO_TICKS(10));
+            vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
         }
 
         ESP_LOGI(TAG, "Finished saving configuration for Scene %d", sceneId);
@@ -83,7 +83,7 @@ namespace daliMQTT
             } else {
                 results[device.short_address] = 255;
             }
-            vTaskDelay(pdMS_TO_TICKS(10));
+            vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
         }
         return results;
     }
