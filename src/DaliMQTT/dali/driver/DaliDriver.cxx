@@ -127,6 +127,11 @@ void IRAM_ATTR Dali::timer()
                 rxpos = rxpos + 1;
                 rxstate = COMPLETED;
                 _set_busstate_idle();
+
+                if (_rx_callback) {
+                    _rx_callback(_rx_callback_arg);
+                }
+
                 break;
             }
         } else {

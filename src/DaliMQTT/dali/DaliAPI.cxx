@@ -33,6 +33,8 @@ namespace daliMQTT
         uint8_t decoded_data[4];
 
         while (true) {
+            ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
             uint8_t bit_len;
             {
                 std::lock_guard lock(self->bus_mutex);
@@ -58,7 +60,6 @@ namespace daliMQTT
                     xQueueSend(queue, &frame, 0);
                 }
             }
-            vTaskDelay(pdMS_TO_TICKS(15));
         }
     }
 
@@ -90,6 +91,7 @@ namespace daliMQTT
         bus_set_high();
 
         m_dali_impl.begin(bus_is_high, bus_set_low, bus_set_high);
+        m_dali_impl.setRxCallback(rx_complete_isr, this);
 
         ESP_LOGI(TAG, "Configuring DALI GPTimer...");
         gptimer_config_t timer_config = {
@@ -280,6 +282,15 @@ namespace daliMQTT
             return std::bitset<16>(combined);
         }
         return std::nullopt;
+    }
+
+    void IRAM_ATTR DaliAPI::rx_complete_isr(void* arg) {
+        const auto* self = static_cast<DaliAPI*>(arg);
+        BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+        if (self->m_sniffer_task_handle) {
+            vTaskNotifyGiveFromISR(self->m_sniffer_task_handle, &xHigherPriorityTaskWoken);
+        }
+        portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
     }
 
     std::optional<DaliLongAddress_t> DaliAPI::getLongAddress(const uint8_t shortAddress) {

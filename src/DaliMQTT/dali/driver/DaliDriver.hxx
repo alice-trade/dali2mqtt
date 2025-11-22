@@ -52,6 +52,7 @@ Patched: daliMQTT Project
 #define DALI_TX_COLLISSION_ON 2   //handle all tx collisions
 
 #define DALI_RX_BUF_SIZE 40
+typedef void (*DaliRxCallback)(void*);
 
 class Dali {
 public:
@@ -65,7 +66,10 @@ public:
   uint8_t txcollisionhandling; //collision handling DALI_TX_COLLISSION_AUTO,DALI_TX_COLLISSION_OFF,DALI_TX_COLLISSION_ON
   uint32_t milli(); //esp32 as 32-bit controller needs millis to be 32-bit to rollover correctly
   Dali() : txcollisionhandling(DALI_TX_COLLISSION_AUTO), busstate(0), /* ticks(0), _milli(0), */ idlecnt(0) {}; //initialize variables
-
+  void setRxCallback(DaliRxCallback cb, void* arg) {
+      _rx_callback = cb;
+      _rx_callback_arg = arg;
+  }
   //-------------------------------------------------
   //HIGH LEVEL PUBLIC
   void     set_level(uint8_t level, uint8_t adr=0xFF); //set arc level
@@ -129,6 +133,8 @@ private:
   void _set_busstate_idle();
   void _tx_push_2hb(uint8_t hb);
 
+  DaliRxCallback _rx_callback = nullptr;
+  void* _rx_callback_arg = nullptr;
 
   uint8_t _man_weight(uint8_t i);
   uint8_t _man_sample(volatile uint8_t *edata, uint16_t bitpos, uint8_t *stop_coll);

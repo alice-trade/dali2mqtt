@@ -90,6 +90,8 @@ namespace daliMQTT
         std::recursive_mutex bus_mutex;
         std::atomic<bool> m_initialized{false};
         QueueHandle_t m_dali_event_queue{nullptr};
+        static void IRAM_ATTR rx_complete_isr(void* arg);
+
     };
 } // daliMQTT
 
