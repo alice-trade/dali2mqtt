@@ -1,5 +1,5 @@
 #include "sdkconfig.h"
-#include "MQTTDiscovery.hxx"
+#include "HADiscovery.hxx"
 #include "MQTTClient.hxx"
 #include "ConfigManager.hxx"
 #include "DaliDeviceController.hxx"
@@ -7,7 +7,7 @@
 
 namespace daliMQTT
 {
-    MQTTDiscovery::MQTTDiscovery() {
+    MQTTHomeAssistantDiscovery::MQTTHomeAssistantDiscovery() {
         const auto config = ConfigManager::getInstance().getConfig();
 
         base_topic = config.mqtt_base_topic;
@@ -28,7 +28,7 @@ namespace daliMQTT
         cJSON_Delete(names_root);
     }
 
-    void MQTTDiscovery::publishAllDevices() {
+    void MQTTHomeAssistantDiscovery::publishAllDevices() {
         auto devices = DaliDeviceController::getInstance().getDevices();
         for (const auto& device : devices | std::views::values) {
             publishLight(device.long_address);
@@ -41,7 +41,7 @@ namespace daliMQTT
         publishSceneSelector();
     }
 
-    void MQTTDiscovery::publishLight(const DaliLongAddress_t long_addr) {
+    void MQTTHomeAssistantDiscovery::publishLight(const DaliLongAddress_t long_addr) {
         const auto& mqtt = MQTTClient::getInstance();
 
         const auto addr_str_arr = longAddressToString(long_addr);
@@ -89,7 +89,7 @@ namespace daliMQTT
         cJSON_Delete(root);
     }
 
-    void MQTTDiscovery::publishGroup(uint8_t group_id) {
+    void MQTTHomeAssistantDiscovery::publishGroup(uint8_t group_id) {
         const auto& mqtt = MQTTClient::getInstance();
         const auto config = ConfigManager::getInstance().getConfig();
         const std::string object_id = std::format("dali_group_{}_{}", config.client_id, group_id);
@@ -128,7 +128,7 @@ namespace daliMQTT
         cJSON_Delete(root);
     }
 
-    void MQTTDiscovery::publishSceneSelector() {
+    void MQTTHomeAssistantDiscovery::publishSceneSelector() {
         const auto& mqtt = MQTTClient::getInstance();
         const auto config = ConfigManager::getInstance().getConfig();
         const std::string object_id = std::format("dali_scenes_{}", config.client_id);

@@ -1,13 +1,13 @@
-#ifndef DALIMQTT_MQTTDISCOVERY_HXX
-#define DALIMQTT_MQTTDISCOVERY_HXX
+#ifndef DALIMQTT_HA_DISCOVERY_HXX
+#define DALIMQTT_HA_DISCOVERY_HXX
 #include "DaliTypes.hxx"
 
 namespace daliMQTT
 {
-    class MQTTDiscovery
+    class MQTTHomeAssistantDiscovery
     {
         public:
-            MQTTDiscovery();
+            MQTTHomeAssistantDiscovery();
             void publishAllDevices();
 
         private:
@@ -22,4 +22,4 @@ namespace daliMQTT
     };
 } // daliMQTT
 
-#endif //DALIMQTT_MQTTDISCOVERY_HXX
+#endif // DALIMQTT_HA_DISCOVERY_HXX

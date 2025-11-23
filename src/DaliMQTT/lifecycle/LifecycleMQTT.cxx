@@ -2,7 +2,7 @@
 #include "ConfigManager.hxx"
 #include "MQTTClient.hxx"
 #include "DaliDeviceController.hxx"
-#include "MQTTDiscovery.hxx"
+#include "HADiscovery.hxx"
 #include "Lifecycle.hxx"
 #include "MQTTCommandHandler.hxx"
 
@@ -63,8 +63,8 @@ namespace daliMQTT {
             ESP_LOGW(TAG, "DEBUG INTERFACE ENABLED. Subscribed to: %s", debug_topic.c_str());
         #endif
 
-        MQTTDiscovery mqtt_discovery;
-        mqtt_discovery.publishAllDevices();
+        MQTTHomeAssistantDiscovery hass_discovery;
+        hass_discovery.publishAllDevices();
         ESP_LOGI(TAG, "MQTT discovery messages published.");
 
         DaliDeviceController::getInstance().start();
