@@ -146,7 +146,6 @@ namespace daliMQTT
 
         auto config = ConfigManager::getInstance().getConfig();
         auto& dali = DaliAPI::getInstance();
-        auto const& mqtt = MQTTClient::getInstance();
 
         ESP_LOGI(TAG, "DALI background sync task started.");
 
@@ -173,6 +172,36 @@ namespace daliMQTT
                     }
                     vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_POLL_DELAY_MS));
                 }
+            }
+            auto all_assignments = DaliGroupManagement::getInstance().getAllAssignments();
+
+            std::map<DaliLongAddress_t, uint8_t> current_levels;
+            {
+                std::lock_guard lock(self->m_devices_mutex);
+                for(const auto& [addr, dev] : self->m_devices) {
+                    if(dev.is_present) current_levels[addr] = dev.current_level;
+                }
+            }
+
+            std::map<uint8_t, uint8_t> group_sync_levels;
+
+            for (const auto& [long_addr, groups] : all_assignments) {
+                if (!current_levels.contains(long_addr)) continue;
+                uint8_t level = current_levels.at(long_addr);
+
+                for (uint8_t group = 0; group < 16; ++group) {
+                    if (groups.test(group)) {
+                        if (!group_sync_levels.contains(group)) {
+                            group_sync_levels[group] = level;
+                        } else if (level > group_sync_levels[group]) {
+                                group_sync_levels[group] = level;
+                        }
+                    }
+                }
+            }
+
+            for(const auto& [group_id, level] : group_sync_levels) {
+                DaliGroupManagement::getInstance().updateGroupState(group_id, level);
             }
         }
     }

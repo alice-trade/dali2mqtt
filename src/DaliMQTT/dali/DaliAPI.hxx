@@ -26,7 +26,8 @@ namespace daliMQTT
         esp_err_t sendDACP(dali_addressType_t addr_type, uint8_t addr, uint8_t level);
         // Отправка запроса с ожиданием ответа
         [[nodiscard]] std::optional<uint8_t> sendQuery(dali_addressType_t addr_type, uint8_t addr, uint8_t command);
-
+        // Raw send command
+        [[nodiscard]] std::optional<uint8_t> sendRaw(uint8_t byte1, uint8_t byte2);
         /**
       * @brief Starts the DALI bus sniffer.
       *

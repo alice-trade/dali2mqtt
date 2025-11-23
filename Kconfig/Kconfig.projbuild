@@ -71,18 +71,11 @@ menu "DALI MQTT Bridge Settings"
 
                                         Payload Schema (JSON):
                                         {
-                                            "type":  <int>,   // Address Type Enum
                                             "addr":  <int>,   // Target Address
-                                            "cmd":   <int>,   // Command ID or DACP Level (0-255)
+                                            "cmd":   <int>,   // Command ID / Data
                                             "twice": <bool>   // Send twice
-                                            "is_query": <bool> // If command should have result (sends at base/debug/res)
                                         }
-
-                                        Address Types (type):
-                                        0 = Short Address (addr: 0-63)
-                                        1 = Group Address (addr: 0-15)
-                                        2 = Broadcast     (addr: ignored)
-                                        3 = Special Cmd   (addr: special command arg)
+                                        Result topic: base/debug/res
 
     comment "Task Configuration"
 

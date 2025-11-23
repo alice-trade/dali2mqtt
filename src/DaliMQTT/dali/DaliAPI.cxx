@@ -203,8 +203,8 @@ namespace daliMQTT
             }
         }
 
-        int16_t result = m_dali_impl.cmd(dali_cmd, dali_arg);
-        ESP_LOGD(TAG,"Executed Command: %u with code %u", dali_cmd, result);
+        m_dali_impl.cmd(dali_cmd, dali_arg);
+        ESP_LOGD(TAG,"Executed Command: %u", dali_cmd);
         return ESP_OK;
     }
 
@@ -228,6 +228,17 @@ namespace daliMQTT
         const int16_t result = m_dali_impl.cmd(dali_cmd, dali_arg);
         vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
 
+        if (result >= 0) {
+            return static_cast<uint8_t>(result);
+        }
+        return std::nullopt;
+    }
+
+    std::optional<uint8_t> DaliAPI::sendRaw(const uint8_t byte1, const uint8_t byte2) {
+        std::lock_guard lock(bus_mutex);
+        const int16_t result = m_dali_impl.tx_wait_rx(byte1, byte2);
+        ESP_LOGD(TAG, "Raw TX: 0x%02X 0x%02X -> Result: %d", byte1, byte2, result);
+        vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
         if (result >= 0) {
             return static_cast<uint8_t>(result);
         }
