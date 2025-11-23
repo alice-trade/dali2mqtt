@@ -1,4 +1,3 @@
-#include "sdkconfig.h"
 #include "DaliAPI.hxx"
 
 namespace daliMQTT
@@ -8,13 +7,13 @@ namespace daliMQTT
     constexpr uint32_t DALI_TIMER_RESOLUTION_HZ = 24000000; // 24MHz
     constexpr uint32_t DALI_TIMER_ALARM_PERIOD_US = 2500; // 24'000'000 / 9600 = 2500
 
-    static uint8_t bus_is_high() {
+    static uint8_t IRAM_ATTR bus_is_high() {
         return gpio_get_level(static_cast<gpio_num_t>(CONFIG_DALI2MQTT_DALI_RX_PIN));
     }
-    static void bus_set_low() {
+    static void IRAM_ATTR bus_set_low() {
         gpio_set_level(static_cast<gpio_num_t>(CONFIG_DALI2MQTT_DALI_TX_PIN), 1);
     }
-    static void bus_set_high() {
+    static void IRAM_ATTR bus_set_high() {
         gpio_set_level(static_cast<gpio_num_t>(CONFIG_DALI2MQTT_DALI_TX_PIN), 0);
     }
 
@@ -205,6 +204,7 @@ namespace daliMQTT
 
         m_dali_impl.cmd(dali_cmd, dali_arg);
         ESP_LOGD(TAG,"Executed Command: %u", dali_cmd);
+        vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
         return ESP_OK;
     }
 

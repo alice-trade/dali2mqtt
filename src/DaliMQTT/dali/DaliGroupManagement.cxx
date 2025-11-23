@@ -188,8 +188,7 @@ namespace daliMQTT
         for (const auto& [long_addr, device] : devices) {
             if (!device.is_present) continue;
 
-            auto groups_opt = dali.getDeviceGroups(device.short_address);
-            if (groups_opt) {
+            if (auto groups_opt = dali.getDeviceGroups(device.short_address)) {
                 new_assignments[long_addr] = *groups_opt;
                 ESP_LOGD(TAG, "Device %s (SA %d) has group mask: %s",
                          longAddressToString(long_addr).data(),
@@ -243,7 +242,7 @@ namespace daliMQTT
 
     void DaliGroupManagement::restoreGroupLevel(const uint8_t group_id) {
         if (group_id >= 16) return;
-        uint8_t target = 254;
+        uint8_t target;
         {
             std::lock_guard lock(m_mutex);
             target = (m_group_states[group_id].last_level > 0)
