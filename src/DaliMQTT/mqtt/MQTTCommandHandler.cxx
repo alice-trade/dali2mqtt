@@ -29,6 +29,18 @@ namespace daliMQTT {
              device_controller.updateDeviceState(long_addr, level_to_set);
          };
 
+         if (addr_type == DALI_ADDRESS_TYPE_GROUP) {
+             uint8_t new_level = 0;
+             if (state == "ON") {
+                 new_level = brightness.value_or(254);
+                 if (!brightness.has_value()) {
+                     auto grp = DaliGroupManagement::getInstance().getGroupState(target_id);
+                     new_level = (grp.last_level > 0) ? grp.last_level : 254;
+                 }
+             }
+             DaliGroupManagement::getInstance().updateGroupState(target_id, new_level);
+         }
+
         switch (addr_type) {
             case DALI_ADDRESS_TYPE_SHORT: {
                 if (const auto long_addr_opt = device_controller.getLongAddress(target_id)) {

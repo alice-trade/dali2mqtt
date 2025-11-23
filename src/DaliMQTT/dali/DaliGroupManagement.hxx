@@ -33,13 +33,31 @@ namespace daliMQTT
 
         // Обновить назначения групп, опросив все устройства на шине
         esp_err_t refreshAssignmentsFromBus();
+
+        // Получить состояние конкретной группы
+        [[nodiscard]] DaliGroup getGroupState(uint8_t group_id) const;
+
+        // Обновить состояние группы
+        void updateGroupState(uint8_t group_id, uint8_t level);
+
+        // Восстановить уровень
+        void restoreGroupLevel(uint8_t group_id);
+
+        /**
+        * @brief Относительное изменение уровня
+        * @param is_up: true для увеличения, false для уменьшения
+        */
+        void stepGroupLevel(uint8_t group_id, bool is_up);
     private:
         DaliGroupManagement() = default;
 
         void loadFromConfig();
         esp_err_t saveToConfig();
 
+        void publishGroupState(uint8_t group_id, uint8_t level) const;
+
         GroupAssignments m_assignments;
+        std::array<DaliGroup, 16> m_group_states;
         mutable std::mutex m_mutex;
     };
 

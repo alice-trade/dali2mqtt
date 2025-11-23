@@ -2,6 +2,7 @@
 #include "ConfigManager.hxx"
 #include "DaliDeviceController.hxx"
 #include "DaliAPI.hxx"
+#include "MQTTClient.hxx"
 
 namespace daliMQTT
 {
@@ -207,5 +208,93 @@ namespace daliMQTT
             ESP_LOGI(TAG, "Finished refreshing group assignments. Found assignments for %zu devices.", m_assignments.size());
         }
         return saveToConfig();
+    }
+    DaliGroup DaliGroupManagement::getGroupState(const uint8_t group_id) const {
+        std::lock_guard lock(m_mutex);
+        if (group_id < 16) {
+            return m_group_states[group_id];
+        }
+        return DaliGroup{};
+    }
+
+    void DaliGroupManagement::updateGroupState(const uint8_t group_id, const uint8_t level) {
+        if (group_id >= 16) return;
+
+        bool changed = false;
+        {
+            std::lock_guard lock(m_mutex);
+            auto& group = m_group_states[group_id];
+
+            if (level > 0) {
+                group.last_level = level;
+            }
+
+            if (group.current_level != level) {
+                group.current_level = level;
+                changed = true;
+                ESP_LOGI(TAG, "Group %d state updated: %d", group_id, level);
+            }
+        }
+
+        if (changed) {
+            publishGroupState(group_id, level);
+        }
+    }
+
+    void DaliGroupManagement::restoreGroupLevel(const uint8_t group_id) {
+        if (group_id >= 16) return;
+        uint8_t target = 254;
+        {
+            std::lock_guard lock(m_mutex);
+            target = (m_group_states[group_id].last_level > 0)
+                     ? m_group_states[group_id].last_level
+                     : 254;
+        }
+        updateGroupState(group_id, target);
+    }
+
+    void DaliGroupManagement::publishGroupState(uint8_t group_id, uint8_t level) const {
+        auto const& mqtt = MQTTClient::getInstance();
+        auto config = ConfigManager::getInstance().getConfig();
+
+        // Topic: base/light/group/+/state
+        const std::string state_topic = std::format("{}/light/group/{}/state", config.mqtt_base_topic, group_id);
+        const std::string payload = std::format(R"({{"state":"{}","brightness":{}}})", (level > 0 ? "ON" : "OFF"), level);
+
+        ESP_LOGD(TAG, "Publishing Group %d State: %s", group_id, payload.c_str());
+        mqtt.publish(state_topic, payload);
+    }
+    void DaliGroupManagement::stepGroupLevel(const uint8_t group_id, const bool is_up) {
+        if (group_id >= 16) return;
+        constexpr int STEP_SIZE = 10; // FIXME: hard coded step
+        uint8_t new_level = 0;
+        bool should_update = false;
+
+        {
+            std::lock_guard lock(m_mutex);
+            const uint8_t current = m_group_states[group_id].current_level;
+
+            if (current == 0) {
+                return;
+            }
+
+            int calculated = current;
+            if (is_up) {
+                calculated += STEP_SIZE;
+                if (calculated > 254) calculated = 254;
+            } else {
+                calculated -= STEP_SIZE;
+                if (calculated < 1) calculated = 1;
+            }
+
+            if (calculated != current) {
+                new_level = static_cast<uint8_t>(calculated);
+                should_update = true;
+            }
+        }
+
+        if (should_update) {
+            updateGroupState(group_id, new_level);
+        }
     }
 }

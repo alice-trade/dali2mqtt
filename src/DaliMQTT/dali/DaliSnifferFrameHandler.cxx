@@ -57,50 +57,78 @@ namespace daliMQTT {
         uint8_t cmd_byte = frame.data & 0xFF;
 
         std::vector<DaliLongAddress_t> affected_devices;
-        dali_addressType_t addr_type;
+        std::optional<uint8_t> target_group_id = std::nullopt;
 
-        // DACP (Direct Arc Power Control)
-        if ((addr_byte & 0x01) == 0) {
-            if ((addr_byte & 0x80) == 0) { // Short Address
-                addr_type = DALI_ADDRESS_TYPE_SHORT;
+        if ((addr_byte & 0x01) == 0) {               // DACP (Direct Arc Power Control)
+            if ((addr_byte & 0x80) == 0) {           // Short Address
                 uint8_t short_addr = (addr_byte >> 1) & 0x3F;
                 if (auto long_addr_opt = getLongAddress(short_addr)) {
                     affected_devices.push_back(*long_addr_opt);
                 }
             } else if ((addr_byte & 0xE0) == 0x80) { // Group Address
-                addr_type = DALI_ADDRESS_TYPE_GROUP;
-                uint8_t group_addr = (addr_byte >> 1) & 0x0F;
-                auto all_assignments = DaliGroupManagement::getInstance().getAllAssignments();
-                for (const auto& [long_addr, groups] : all_assignments) {
-                    if (groups.test(group_addr)) affected_devices.push_back(long_addr);
-                }
-            } else if (addr_byte == 0xFE) { // Broadcast
-                addr_type = DALI_ADDRESS_TYPE_BROADCAST;
+                target_group_id = (addr_byte >> 1) & 0x0F;
+            } else if (addr_byte == 0xFE) {          // Broadcast
                 auto all_devices = getDevices();
                 for (const auto& long_addr : all_devices | std::views::keys) {
                     affected_devices.push_back(long_addr);
                 }
             }
         }
-        else {
-            if ((addr_byte & 0x80) == 0) { // Short Address
-                addr_type = DALI_ADDRESS_TYPE_SHORT;
+        else {                                       // Command
+            if ((addr_byte & 0x80) == 0) {           // Short Address
                 uint8_t short_addr = (addr_byte >> 1) & 0x3F;
                 if (auto long_addr_opt = getLongAddress(short_addr)) {
                     affected_devices.push_back(*long_addr_opt);
                 }
             } else if ((addr_byte & 0xE0) == 0x80) { // Group Address
-                addr_type = DALI_ADDRESS_TYPE_GROUP;
-                uint8_t group_addr = (addr_byte >> 1) & 0x0F;
-                auto all_assignments = DaliGroupManagement::getInstance().getAllAssignments();
-                for (const auto& [long_addr, groups] : all_assignments) {
-                    if (groups.test(group_addr)) affected_devices.push_back(long_addr);
-                }
+                target_group_id = (addr_byte >> 1) & 0x0F;
             } else if ((addr_byte & 0xFF) == 0xFF) { // Broadcast
-                addr_type = DALI_ADDRESS_TYPE_BROADCAST;
                 auto all_devices = getDevices();
                 for (const auto& long_addr : all_devices | std::views::keys) {
                     affected_devices.push_back(long_addr);
+                }
+            }
+        }
+
+        if (target_group_id.has_value()) {
+            auto all_assignments = DaliGroupManagement::getInstance().getAllAssignments();
+            for (const auto& [long_addr, groups] : all_assignments) {
+                if (groups.test(target_group_id.value())) {
+                    affected_devices.push_back(long_addr);
+                }
+            }
+        }
+
+        if (target_group_id.has_value()) {
+            auto& group_mgr = DaliGroupManagement::getInstance();
+            const uint8_t gid = target_group_id.value();
+
+            if ((addr_byte & 0x01) == 0) { // DACP
+                group_mgr.updateGroupState(gid, cmd_byte);
+            } else {                       // Command
+                switch (cmd_byte) {
+                case DALI_COMMAND_OFF:
+                case DALI_COMMAND_STEP_DOWN_AND_OFF:
+                    group_mgr.updateGroupState(gid, 0);
+                    break;
+                case DALI_COMMAND_RECALL_MAX_LEVEL:
+                    group_mgr.updateGroupState(gid, 254);
+                    break;
+                case DALI_COMMAND_RECALL_MIN_LEVEL:
+                    group_mgr.updateGroupState(gid, 1);
+                    break;
+                case DALI_COMMAND_ON_AND_STEP_UP:
+                    group_mgr.restoreGroupLevel(gid);
+                    break;
+                case DALI_COMMAND_UP:
+                case DALI_COMMAND_STEP_UP:
+                    group_mgr.stepGroupLevel(gid, true);
+                    break;
+                case DALI_COMMAND_DOWN:
+                case DALI_COMMAND_STEP_DOWN:
+                    group_mgr.stepGroupLevel(gid, false);
+                    break;
+                default: break; // TODO: Other cmd
                 }
             }
         }

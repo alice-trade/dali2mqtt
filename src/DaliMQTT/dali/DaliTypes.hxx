@@ -3,26 +3,49 @@
 
 namespace daliMQTT
 {
+    // Dali address Type
+    typedef enum {
+        DALI_ADDRESS_TYPE_SHORT,
+        DALI_ADDRESS_TYPE_GROUP,
+        DALI_ADDRESS_TYPE_BROADCAST,
+        DALI_ADDRESS_TYPE_SPECIAL_CMD
+    } dali_addressType_t;
+
+    // Dali frame structure
+    struct dali_frame_t {
+        uint32_t data;
+        uint8_t length;
+        bool is_backward_frame;
+    };
+
     // 24bit long dali addr type
     using DaliLongAddress_t = uint32_t;
 
     struct DaliDevice {
         DaliLongAddress_t long_address; // 24-bit DALI Long (random) Address
-        uint8_t short_address; // Short addr
-        uint8_t current_level; // Current Level
-        uint8_t last_level{254}; // Last Level
-        bool is_present; // Presence flag
+        uint8_t short_address;          // Short addr
+        uint8_t current_level;          // Current Level
+        uint8_t last_level{254};        // Last Level
+        bool is_present;                // Presence flag
     };
 
-    using LongAddrStr = std::array<char, 7>; // 6 hex chars + null
+    struct DaliGroup {
+        uint8_t id;                    // Group ID
+        uint8_t current_level{0};      // Current Level
+        uint8_t last_level{254};       // Last level
+    };
+
+    using DaliLongAddrStr = std::array<char, 7>; // DALI Long Str: 6 hex chars + null
+
+    // Utility functions
 
     /**
-     * @brief Конвертирует DaliLongAddress_t в его строковое (HEX) представление.
+     * @brief Convert DaliLongAddress_t to HEX string
      * @param addr 24-bit DALI long address.
      * @return std::array<char, 7> with HEX string of long addr.
      */
-    inline LongAddrStr longAddressToString(const DaliLongAddress_t addr) {
-        LongAddrStr result{};
+    inline DaliLongAddrStr longAddressToString(const DaliLongAddress_t addr) {
+        DaliLongAddrStr result{};
         if (auto [ptr, ec] =
                 std::to_chars(result.data(), result.data() + 6, addr & 0xFFFFFF, 16);
                 ec == std::errc()) {
@@ -41,11 +64,10 @@ namespace daliMQTT
     }
 
     /**
-     * @brief Конвертирует строковое HEX представление в DaliLongAddress.
-     * @params string DaliLongAddress.
+     * @brief Convert HEX long addr string to DaliLongAddress_t.
      * @return Optional DaliLongAddress_t or nullopt.
      */
-    inline std::optional<DaliLongAddress_t> stringToLongAddress(std::string_view s) {
+    inline std::optional<DaliLongAddress_t> stringToLongAddress(const std::string_view s) {
         DaliLongAddress_t addr = 0;
         if (s.length() > 6) return std::nullopt;
         if (auto [ptr, ec] = std::from_chars(s.data(), s.data() + s.size(), addr, 16); ec == std::errc() && ptr == s.data() + s.size()) {
