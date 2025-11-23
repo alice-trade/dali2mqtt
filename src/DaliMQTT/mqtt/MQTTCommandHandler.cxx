@@ -240,21 +240,42 @@ namespace daliMQTT {
              cJSON* addr_item = cJSON_GetObjectItem(root, "addr");
              cJSON* cmd_item = cJSON_GetObjectItem(root, "cmd");
              cJSON* twice_item = cJSON_GetObjectItem(root, "twice");
+             cJSON* query_item = cJSON_GetObjectItem(root, "query"); // NEW: Check if response is expected
 
              if (cJSON_IsNumber(type_item) && cJSON_IsNumber(addr_item) && cJSON_IsNumber(cmd_item)) {
                  dali_addressType_t addr_type = static_cast<dali_addressType_t>(type_item->valueint);
                  uint8_t addr = static_cast<uint8_t>(addr_item->valueint);
                  uint8_t cmd = static_cast<uint8_t>(cmd_item->valueint);
                  bool send_twice = cJSON_IsTrue(twice_item);
+                 bool is_query = cJSON_IsTrue(query_item);
 
-                 ESP_LOGD(TAG, "Debug Command: Type=%d, Addr=%d, Cmd=%d, Twice=%d", addr_type, addr, cmd, send_twice);
+                 ESP_LOGD(TAG, "Debug Command: Type=%d, Addr=%d, Cmd=%d, Twice=%d, Query=%d", addr_type, addr, cmd, send_twice, is_query);
 
-                 esp_err_t err = DaliAPI::getInstance().sendCommand(addr_type, addr, cmd, send_twice);
-                 if (err != ESP_OK) {
-                     ESP_LOGE(TAG, "Debug Command Failed: %s", esp_err_to_name(err));
+                 if (is_query) {
+                     auto result = DaliAPI::getInstance().sendQuery(addr_type, addr, cmd);
+
+                     auto const& mqtt = MQTTClient::getInstance();
+                     auto config = ConfigManager::getInstance().getConfig();
+                     std::string reply_topic = std::format("{}/debug/res", config.mqtt_base_topic);
+
+                     if (result.has_value()) {
+                         std::string payload = std::format(R"({{"status":"ok", "value":{}, "hex":"{:02X}"}})", *result, *result);
+                         mqtt.publish(reply_topic, payload);
+                         ESP_LOGD(TAG, "Debug Query Result: %d", *result);
+                     } else {
+                         mqtt.publish(reply_topic, R"({"status":"timeout"})");
+                         ESP_LOGD(TAG, "Debug Query Timeout");
+                     }
+
+                 } else {
+                     esp_err_t err = DaliAPI::getInstance().sendCommand(addr_type, addr, cmd, send_twice);
+                     if (err != ESP_OK) {
+                         ESP_LOGE(TAG, "Debug Command Failed: %s", esp_err_to_name(err));
+                     }
                  }
+
              } else {
-                 ESP_LOGW(TAG, "Debug: Invalid JSON structure. Expected {type, addr, cmd}");
+                 ESP_LOGD(TAG, "Debug: Invalid JSON structure. Expected {type, addr, cmd}");
              }
 
              cJSON_Delete(root);

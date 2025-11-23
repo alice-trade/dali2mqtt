@@ -75,6 +75,7 @@ menu "DALI MQTT Bridge Settings"
                                             "addr":  <int>,   // Target Address
                                             "cmd":   <int>,   // Command ID or DACP Level (0-255)
                                             "twice": <bool>   // Send twice
+                                            "is_query": <bool> // If command should have result (sends at base/debug/res)
                                         }
 
                                         Address Types (type):
