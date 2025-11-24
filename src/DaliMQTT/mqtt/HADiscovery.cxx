@@ -3,7 +3,7 @@
 #include "MQTTClient.hxx"
 #include "ConfigManager.hxx"
 #include "DaliDeviceController.hxx"
-
+#include "utils/DaliLongAddrConversions.hxx"
 
 namespace daliMQTT
 {
@@ -49,6 +49,7 @@ namespace daliMQTT
 
         const std::string object_id = std::format("dali_light_{}", addr_str);
         const std::string discovery_topic = std::format("homeassistant/light/{}/config", object_id);
+        const std::string device_status_topic = std::format("{}/light/{}/status", base_topic, addr_str);
 
         // Get readable name or generate default
         std::string readable_name;
@@ -69,11 +70,25 @@ namespace daliMQTT
         cJSON_AddStringToObject(root, "command_topic", std::format("{}/light/{}/set", base_topic, addr_str).c_str());
         cJSON_AddStringToObject(root, "state_topic", std::format("{}/light/{}/state", base_topic, addr_str).c_str());
         cJSON_AddTrueToObject(root, "brightness");
-        cJSON_AddStringToObject(root, "availability_topic", availability_topic.c_str());
-        cJSON_AddStringToObject(root, "payload_available", CONFIG_DALI2MQTT_MQTT_PAYLOAD_ONLINE);
-        cJSON_AddStringToObject(root, "payload_not_available", CONFIG_DALI2MQTT_MQTT_PAYLOAD_OFFLINE);
 
-        if (cJSON* device = cJSON_CreateObject()) {
+        cJSON* av_list = cJSON_CreateArray();
+        cJSON* av_bridge = cJSON_CreateObject();
+        cJSON_AddStringToObject(av_bridge, "topic", availability_topic.c_str());
+        cJSON_AddStringToObject(av_bridge, "payload_available", CONFIG_DALI2MQTT_MQTT_PAYLOAD_ONLINE);
+        cJSON_AddStringToObject(av_bridge, "payload_not_available", CONFIG_DALI2MQTT_MQTT_PAYLOAD_OFFLINE);
+        cJSON_AddItemToArray(av_list, av_bridge);
+
+        cJSON* av_device = cJSON_CreateObject();
+        cJSON_AddStringToObject(av_device, "topic", device_status_topic.c_str());
+        cJSON_AddStringToObject(av_device, "payload_available", CONFIG_DALI2MQTT_MQTT_PAYLOAD_ONLINE);
+        cJSON_AddStringToObject(av_device, "payload_not_available", CONFIG_DALI2MQTT_MQTT_PAYLOAD_OFFLINE);
+        cJSON_AddItemToArray(av_list, av_device);
+
+        cJSON_AddItemToObject(root, "availability", av_list);
+        cJSON_AddStringToObject(root, "availability_mode", "all");
+
+        cJSON* device = cJSON_CreateObject();
+        if (device) {
             cJSON_AddStringToObject(device, "identifiers", bridge_public_name.c_str());
             cJSON_AddStringToObject(device, "name", bridge_public_name.c_str());
             cJSON_AddStringToObject(device, "model", "ESP32 DALI Bridge");
@@ -112,7 +127,8 @@ namespace daliMQTT
         cJSON_AddStringToObject(root, "payload_available", CONFIG_DALI2MQTT_MQTT_PAYLOAD_ONLINE);
         cJSON_AddStringToObject(root, "payload_not_available", CONFIG_DALI2MQTT_MQTT_PAYLOAD_OFFLINE);
 
-        if (cJSON* device = cJSON_CreateObject()) {
+        cJSON* device = cJSON_CreateObject();
+        if (device) {
             cJSON_AddStringToObject(device, "identifiers", bridge_public_name.c_str());
             cJSON_AddStringToObject(device, "name", bridge_public_name.c_str());
             cJSON_AddStringToObject(device, "model", "ESP32 DALI Bridge");
@@ -152,7 +168,8 @@ namespace daliMQTT
         cJSON_AddStringToObject(root, "payload_available", CONFIG_DALI2MQTT_MQTT_PAYLOAD_ONLINE);
         cJSON_AddStringToObject(root, "payload_not_available", CONFIG_DALI2MQTT_MQTT_PAYLOAD_OFFLINE);
 
-        if (cJSON* device = cJSON_CreateObject()) {
+        cJSON* device = cJSON_CreateObject();
+        if (device) {
             cJSON_AddStringToObject(device, "identifiers", bridge_public_name.c_str());
             cJSON_AddStringToObject(device, "name", bridge_public_name.c_str());
             cJSON_AddItemToObject(root, "device", device);

@@ -2,6 +2,7 @@
 #include "DaliDeviceController.hxx"
 #include <DaliGroupManagement.hxx>
 #include <MQTTClient.hxx>
+#include "utils/DaliLongAddrConversions.hxx"
 
 namespace daliMQTT {
     static constexpr char TAG[] = "DaliSnifferFrameHandler";
@@ -179,13 +180,17 @@ namespace daliMQTT {
                     }
                     break;
                 }
+                case DALI_COMMAND_RECALL_MAX_LEVEL:
+                    known_level = 254;
+                    break;
+                case DALI_COMMAND_RECALL_MIN_LEVEL:
+                    known_level = 1;
+                    break;
                 // Should be recalled
                 case DALI_COMMAND_UP:
                 case DALI_COMMAND_DOWN:
                 case DALI_COMMAND_STEP_UP:
                 case DALI_COMMAND_STEP_DOWN:
-                case DALI_COMMAND_RECALL_MAX_LEVEL:
-                case DALI_COMMAND_RECALL_MIN_LEVEL:
                 case DALI_COMMAND_GO_TO_SCENE_0:
                 case DALI_COMMAND_GO_TO_SCENE_1:
                 case DALI_COMMAND_GO_TO_SCENE_2:
@@ -219,7 +224,7 @@ namespace daliMQTT {
             auto& dali = DaliAPI::getInstance();
             for (const auto& long_addr : affected_devices) {
                 if (auto short_addr_opt = getShortAddress(long_addr)) {
-                    vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
+                    vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS + 20));
                     if (auto level_opt = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, *short_addr_opt, DALI_COMMAND_QUERY_ACTUAL_LEVEL)) {
                         updateDeviceState(long_addr, *level_opt);
                     }

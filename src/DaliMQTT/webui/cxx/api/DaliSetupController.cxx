@@ -4,7 +4,7 @@
 #include "ConfigManager.hxx"
 #include "WebUI.hxx"
 #include "DaliAPI.hxx"
-
+#include "utils/DaliLongAddrConversions.hxx"
 
 namespace daliMQTT {
     enum class DaliTaskStatus { IDLE, SCANNING, INITIALIZING, REFRESHING_GROUPS };
