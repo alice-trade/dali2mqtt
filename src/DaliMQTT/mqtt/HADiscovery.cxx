@@ -1,4 +1,3 @@
-#include "sdkconfig.h"
 #include "HADiscovery.hxx"
 #include "MQTTClient.hxx"
 #include "ConfigManager.hxx"

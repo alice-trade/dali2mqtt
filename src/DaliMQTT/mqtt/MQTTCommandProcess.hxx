@@ -7,12 +7,12 @@ namespace daliMQTT {
         std::string payload;
     };
 
-    class DaliCommandProcessor {
+    class MQTTCommandProcess {
         public:
-            DaliCommandProcessor(const DaliCommandProcessor&) = delete;
-            DaliCommandProcessor& operator=(const DaliCommandProcessor&) = delete;
-            static DaliCommandProcessor& getInstance() {
-                static DaliCommandProcessor instance;
+            MQTTCommandProcess(const MQTTCommandProcess&) = delete;
+            MQTTCommandProcess& operator=(const MQTTCommandProcess&) = delete;
+            static MQTTCommandProcess& getInstance() {
+                static MQTTCommandProcess instance;
                 return instance;
             }
 
@@ -20,7 +20,7 @@ namespace daliMQTT {
             bool enqueueMqttMessage(const char* topic, int topic_len, const char* data, int data_len) const;
 
         private:
-            DaliCommandProcessor() = default;
+            MQTTCommandProcess() = default;
 
             [[noreturn]] static void CommandProcessTask(void* arg);
 

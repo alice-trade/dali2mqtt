@@ -1,17 +1,16 @@
-#include "DaliCommandProcessor.hxx"
+#include "MQTTCommandProcess.hxx"
 #include "MQTTCommandHandler.hxx"
 
 namespace daliMQTT {
-    static constexpr char TAG[] = "DaliCmdProcessor";
-
-    void DaliCommandProcessor::init() {
+    static constexpr char TAG[] = "MQTTCommandProcess";
+    void MQTTCommandProcess::init() {
         if (m_queue) return;
         m_queue = xQueueCreate(64, sizeof(MqttMessage*));
-        xTaskCreate(CommandProcessTask, "dali_cmd_task", 4096, this, 5, nullptr);
+        xTaskCreate(CommandProcessTask, "mqtt_cmd_task", 4096, this, 5, nullptr);
         ESP_LOGI(TAG, "DALI Command Processor started");
     }
 
-    bool DaliCommandProcessor::enqueueMqttMessage(const char* topic, const int topic_len, const char* data, const int data_len) const {
+    bool MQTTCommandProcess::enqueueMqttMessage(const char* topic, const int topic_len, const char* data, const int data_len) const {
         if (!m_queue) return false;
 
         auto* msg = new MqttMessage;
@@ -27,8 +26,8 @@ namespace daliMQTT {
         return true;
     }
 
-    [[noreturn]] void DaliCommandProcessor::CommandProcessTask(void* arg) {
-        const auto* self = static_cast<DaliCommandProcessor*>(arg);
+    [[noreturn]] void MQTTCommandProcess::CommandProcessTask(void* arg) {
+        const auto* self = static_cast<MQTTCommandProcess*>(arg);
         MqttMessage* msg = nullptr;
 
         while (true) {

@@ -1,6 +1,5 @@
 #include "ConfigManager.hxx"
 #include "utils/NvsHandle.hxx"
-#include "sdkconfig.h"
 #include <esp_spiffs.h>
 #include <dirent.h>
 #include <esp_mac.h>

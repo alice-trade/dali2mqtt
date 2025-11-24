@@ -1,6 +1,6 @@
 #include "ConfigManager.hxx"
 #include "DaliAPI.hxx"
-#include "DaliCommandProcessor.hxx"
+#include "MQTTCommandProcess.hxx"
 #include "DaliGroupManagement.hxx"
 #include "DaliSceneManagement.hxx"
 #include "Lifecycle.hxx"
@@ -40,7 +40,7 @@ namespace daliMQTT
                 SyslogConfig::getInstance().init(config.syslog_server);
             }
             auto& mqtt = MQTTClient::getInstance();
-            DaliCommandProcessor::getInstance().init();
+            MQTTCommandProcess::getInstance().init();
 
             const std::string availability_topic = std::format("{}{}", config.mqtt_base_topic, CONFIG_DALI2MQTT_MQTT_AVAILABILITY_TOPIC);
             mqtt.init(config.mqtt_uri, config.client_id, availability_topic, config.mqtt_user, config.mqtt_pass);

@@ -10,7 +10,7 @@ string(TIMESTAMP PROJ_BUILD_TIMESTAMP "%Y-%m-%dT%H:%M:%SZ")
 target_compile_definitions(DaliMQTT-Core PUBLIC  $<$<CONFIG:Debug>:_DEBUG_DALIMQTT_> DALIMQTT_VERSION=\"${PROJVER}\" DALIMQTT_CONFIGURED_TIMESTAMP=\"${PROJ_BUILD_TIMESTAMP}\")
 
 set(MODULE_DIRS
-        config
+        system
         wifi
         lifecycle
         webui

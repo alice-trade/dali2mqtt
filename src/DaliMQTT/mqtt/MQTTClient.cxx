@@ -1,6 +1,5 @@
 #include "MQTTClient.hxx"
-#include "DaliCommandProcessor.hxx"
-#include "sdkconfig.h"
+#include "MQTTCommandProcess.hxx"
 namespace daliMQTT
 {
     static constexpr char  TAG[] = "MQTTClient";
@@ -83,7 +82,7 @@ namespace daliMQTT
                 break;
             case MQTT_EVENT_DATA:
                 ESP_LOGI(TAG, "MQTT_EVENT_DATA");
-                DaliCommandProcessor::getInstance().enqueueMqttMessage(
+                MQTTCommandProcess::getInstance().enqueueMqttMessage(
                    event->topic,
                    event->topic_len,
                    event->data,
