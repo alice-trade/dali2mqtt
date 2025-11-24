@@ -1,4 +1,3 @@
-
 #include <WebUI.hxx>
 #include "ConfigManager.hxx"
 #include "DaliAPI.hxx"

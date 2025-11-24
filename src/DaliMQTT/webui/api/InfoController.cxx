@@ -1,8 +1,6 @@
 #include <esp_chip_info.h>
-
 #include <esp_system.h>
 #include <esp_timer.h>
-
 #include "DaliAPI.hxx"
 #include "DaliDeviceController.hxx"
 #include "WebUI.hxx"

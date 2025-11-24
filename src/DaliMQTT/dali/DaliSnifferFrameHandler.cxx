@@ -11,32 +11,32 @@ namespace daliMQTT {
             {
                 auto const& mqtt = MQTTClient::getInstance();
                 if (mqtt.getStatus() == MqttStatus::CONNECTED) {
-                    static std::string cached_topic_prefix;
-                    if (cached_topic_prefix.empty()) {
-                        cached_topic_prefix = ConfigManager::getInstance().getMqttBaseTopic();
+                    static std::string cached_topic;
+                    if (cached_topic.empty()) {
+                        cached_topic = ConfigManager::getInstance().getMqttBaseTopic() + "/debug/sniffer_raw";
                     }
-                    std::string topic = cached_topic_prefix + "/debug/sniffer_raw";
 
-                    std::string payload;
+                    char payload_buffer[128];
+                    int len = 0;
                     uint32_t timestamp = esp_log_timestamp();
 
                     if (frame.length == 8) {
-                        payload = std::format(
-                            R"({{"type":"backward","len":8,"data":{},"hex":"{:02X}","ts":{}}})",
-                            frame.data, frame.data & 0xFF, timestamp
-                        );
+                        len = snprintf(payload_buffer, sizeof(payload_buffer),
+                            R"({"type":"backward","len":8,"data":%lu,"hex":"%02lX","ts":%lu})",
+                            frame.data, (frame.data & 0xFF), static_cast<unsigned long>(timestamp));
                     } else if (frame.length == 24) {
-                        payload = std::format(
-                            R"({{"type":"forward","len":24,"data":{},"hex":"{:06X}","ts":{}}})",
-                            frame.data, frame.data & 0xFFFFFF, timestamp
-                        );
+                        len = snprintf(payload_buffer, sizeof(payload_buffer),
+                            R"({"type":"forward","len":24,"data":%lu,"hex":"%06lX","ts":%lu})",
+                            frame.data, (frame.data & 0xFFFFFF), static_cast<unsigned long>(timestamp));
                     } else {
-                        payload = std::format(
-                            R"({{"type":"forward","len":{},"data":{},"hex":"{:04X}","ts":{}}})",
-                            frame.length, frame.data, frame.data & 0xFFFF, timestamp
-                        );
+                        len = snprintf(payload_buffer, sizeof(payload_buffer),
+                            R"({"type":"forward","len":%u,"data":%lu,"hex":"%04lX","ts":%lu})",
+                            frame.length, frame.data, (frame.data & 0xFFFF), static_cast<unsigned long>(timestamp));
                     }
-                    mqtt.publish(topic, payload, 0, false);
+
+                    if (len > 0 && len < sizeof(payload_buffer)) {
+                        mqtt.publish(cached_topic, std::string(payload_buffer, len), 0, false);
+                    }
                 }
             }
         #endif

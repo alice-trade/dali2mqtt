@@ -197,7 +197,10 @@ namespace daliMQTT {
 
     esp_err_t WebUI::api::DaliSetGroupsHandler(httpd_req_t *req) {
         if (checkAuth(req) != ESP_OK) return ESP_FAIL;
-
+        if (req->content_len >= 10240) {
+            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Request payload too large");
+            return ESP_FAIL;
+        }
         std::vector<char> buf(req->content_len + 1, 0);
         if (httpd_req_recv(req, buf.data(), req->content_len) <= 0) return ESP_FAIL;
 
@@ -238,7 +241,10 @@ namespace daliMQTT {
 
     esp_err_t WebUI::api::DaliSetSceneHandler(httpd_req_t *req) {
         if (checkAuth(req) != ESP_OK) return ESP_FAIL;
-
+        if (req->content_len >= 4096) {
+            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Request payload too large");
+            return ESP_FAIL;
+        }
         std::vector<char> buf(req->content_len + 1, 0);
         if (httpd_req_recv(req, buf.data(), req->content_len) <= 0) return ESP_FAIL;
 

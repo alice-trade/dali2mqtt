@@ -13,8 +13,8 @@ set(MODULE_DIRS
         config
         wifi
         lifecycle
-        webui/cxx
-        webui/cxx/api
+        webui
+        webui/api
         dali
         dali/driver
         mqtt
