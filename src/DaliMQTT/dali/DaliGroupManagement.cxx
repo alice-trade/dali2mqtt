@@ -3,6 +3,7 @@
 #include "DaliDeviceController.hxx"
 #include "DaliAPI.hxx"
 #include "MQTTClient.hxx"
+#include "utils/DaliLongAddrConversions.hxx"
 
 namespace daliMQTT
 {

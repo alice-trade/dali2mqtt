@@ -41,6 +41,9 @@ namespace daliMQTT
         [[noreturn]] static void daliEventHandlerTask(void* pvParameters);
         [[noreturn]] static void daliSyncTask(void* pvParameters);
 
+        static void publishState(DaliLongAddress_t long_addr, uint8_t level);
+        static void publishAvailability(DaliLongAddress_t long_addr, bool is_available);
+
         TaskHandle_t m_event_handler_task{nullptr};
         TaskHandle_t m_sync_task_handle{nullptr};
         

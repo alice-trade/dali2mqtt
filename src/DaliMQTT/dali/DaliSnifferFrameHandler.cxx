@@ -2,6 +2,7 @@
 #include "DaliDeviceController.hxx"
 #include <DaliGroupManagement.hxx>
 #include <MQTTClient.hxx>
+#include "utils/DaliLongAddrConversions.hxx"
 
 namespace daliMQTT {
     static constexpr char TAG[] = "DaliSnifferFrameHandler";

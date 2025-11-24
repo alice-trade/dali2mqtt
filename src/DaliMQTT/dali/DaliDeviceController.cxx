@@ -4,6 +4,7 @@
 #include "DaliAddressMap.hxx"
 #include "DaliAPI.hxx"
 #include "MQTTClient.hxx"
+#include "utils/DaliLongAddrConversions.hxx"
 
 namespace daliMQTT
 {
@@ -41,7 +42,7 @@ namespace daliMQTT
             ESP_LOGE(TAG, "Cannot start DALI tasks: DaliAPI not initialized.");
         }
     }
-    static void publishState(const DaliLongAddress_t long_addr, uint8_t level) {
+     void publishState(const DaliLongAddress_t long_addr, uint8_t level) {
         auto const& mqtt = MQTTClient::getInstance();
         auto config = ConfigManager::getInstance().getConfig();
 
@@ -55,6 +56,18 @@ namespace daliMQTT
         mqtt.publish(state_topic, payload);
     }
 
+    void DaliDeviceController::publishAvailability(const DaliLongAddress_t long_addr, const bool is_available) {
+        auto const& mqtt = MQTTClient::getInstance();
+        auto config = ConfigManager::getInstance().getConfig();
+
+        const auto addr_str = longAddressToString(long_addr);
+        const std::string status_topic = std::format("{}/light/{}/status", config.mqtt_base_topic, addr_str.data());
+
+        const std::string payload = is_available ? CONFIG_DALI2MQTT_MQTT_PAYLOAD_ONLINE : CONFIG_DALI2MQTT_MQTT_PAYLOAD_OFFLINE;
+
+        ESP_LOGD(TAG, "Publishing AVAILABILITY to %s: %s", status_topic.c_str(), payload.c_str());
+        mqtt.publish(status_topic, payload, 1, true);
+    }
 
     void DaliDeviceController::updateDeviceState(DaliLongAddress_t longAddr, uint8_t level) {
         std::lock_guard lock(m_devices_mutex);
@@ -63,10 +76,11 @@ namespace daliMQTT
             if (level > 0) {
                 it->second.last_level = level;
             }
-            if (it->second.current_level != level) {
-                ESP_LOGI(TAG, "State change detected for %s. Old: %d, New: %d",
-                         longAddressToString(longAddr).data(), it->second.current_level, level);
+            if (it->second.current_level != level || it->second.initial_sync_needed) {
+                ESP_LOGI(TAG, "State update for %s: %d -> %d (InitSync: %d)",
+                         longAddressToString(longAddr).data(), it->second.current_level, level, it->second.initial_sync_needed);
                 it->second.current_level = level;
+                it->second.initial_sync_needed = false;
                 publishState(longAddr, level);
             }
         }
@@ -108,7 +122,6 @@ namespace daliMQTT
                 }
             } else {
                 ESP_LOGW(TAG, "Validation failed: Device at short address %d did not respond.", short_address);
-                return false;
             }
             vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_POLL_DELAY_MS));
         }
@@ -117,6 +130,8 @@ namespace daliMQTT
             std::lock_guard lock(m_devices_mutex);
             for (auto &val: m_devices | std::views::values) {
                 val.is_present = false;
+                val.available = false;
+                val.initial_sync_needed = true;
             }
             for (const auto& long_addr : validated_devices) {
                 if (m_devices.contains(long_addr)) {
@@ -164,25 +179,39 @@ namespace daliMQTT
                 ESP_LOGD(TAG, "Polling %zu active DALI devices...", devices_to_poll.size());
                 for (const auto& [long_addr, device] : devices_to_poll) {
                     if (!device.is_present) continue;
+                    auto level_opt = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, device.short_address, DALI_COMMAND_QUERY_ACTUAL_LEVEL);
 
-                    if (auto level_opt = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, device.short_address, DALI_COMMAND_QUERY_ACTUAL_LEVEL); level_opt && level_opt.value() != 255) {
-                        self->updateDeviceState(long_addr, level_opt.value());
-                    } else if (!level_opt.has_value()) {
-                        ESP_LOGD(TAG, "No reply from DALI device with short addr %d during sync", device.short_address);
+                    bool new_availability = level_opt.has_value();
+                    bool prev_availability = device.available;
+                    if (new_availability != prev_availability) {
+                        ESP_LOGD(TAG, "Availability change for %s: %s -> %s",
+                                longAddressToString(long_addr).data(), prev_availability ? "online" : "offline", new_availability ? "online" : "offline");
+                        {
+                            std::lock_guard lock(self->m_devices_mutex);
+                            if(self->m_devices.contains(long_addr)) {
+                                self->m_devices.at(long_addr).available = new_availability;
+                            }
+                        }
+                        publishAvailability(long_addr, new_availability);
                     }
+
+                    if (new_availability && level_opt.value() != 255) {
+                        self->updateDeviceState(long_addr, level_opt.value());
+                    } else if (!new_availability) {
+                        ESP_LOGD(TAG, "No reply from DALI device short addr %d", device.short_address);
+                    }
+
                     vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_POLL_DELAY_MS));
                 }
             }
             auto all_assignments = DaliGroupManagement::getInstance().getAllAssignments();
-
             std::map<DaliLongAddress_t, uint8_t> current_levels;
             {
                 std::lock_guard lock(self->m_devices_mutex);
                 for(const auto& [addr, dev] : self->m_devices) {
-                    if(dev.is_present) current_levels[addr] = dev.current_level;
+                    if(dev.is_present && dev.available) current_levels[addr] = dev.current_level;
                 }
             }
-
             std::map<uint8_t, uint8_t> group_sync_levels;
 
             for (const auto& [long_addr, groups] : all_assignments) {
@@ -194,7 +223,7 @@ namespace daliMQTT
                         if (!group_sync_levels.contains(group)) {
                             group_sync_levels[group] = level;
                         } else if (level > group_sync_levels[group]) {
-                                group_sync_levels[group] = level;
+                            group_sync_levels[group] = level;
                         }
                     }
                 }
@@ -247,7 +276,9 @@ namespace daliMQTT
                         .short_address = sa,
                         .current_level = 0,
                         .last_level = 254,
-                        .is_present = true
+                        .is_present = true,
+                        .available = true,
+                        .initial_sync_needed = true
                     };
                     new_short_to_long_map[sa] = long_addr;
                 } else {
