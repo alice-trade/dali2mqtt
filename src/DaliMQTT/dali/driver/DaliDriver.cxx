@@ -23,8 +23,6 @@ Changelog:
 Patched: daliMQTT Project
 ###########################################################################*/
 
-// #define DALI_DEBUG
-
 //=================================================================
 // LOW LEVEL DRIVER
 //=================================================================
@@ -35,7 +33,6 @@ Patched: daliMQTT Project
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "esp_system.h"
 #include "esp_log.h"
 
 // timing
@@ -446,7 +443,9 @@ uint8_t Dali::tx_wait(uint8_t* data, uint8_t bitlen, uint32_t timeout_ms)
 // blocking transmit 2 byte command, receive 1 byte reply (if a reply was sent)
 // returns >=0 with reply byte
 // returns <0 with negative result code
-int16_t Dali::tx_wait_rx(uint8_t cmd0, uint8_t cmd1, uint32_t timeout_ms)
+
+// 16 bit args
+int16_t Dali::tx_wait_rx(const uint8_t cmd0, const uint8_t cmd1, const uint32_t timeout_ms)
 {
     uint8_t data[4];
     data[0] = cmd0;
@@ -483,6 +482,42 @@ int16_t Dali::tx_wait_rx(uint8_t cmd0, uint8_t cmd1, uint32_t timeout_ms)
     return -DALI_RESULT_NO_REPLY; // should not get here
 }
 
+int16_t Dali::tx_wait_rx(const uint8_t byte0, const uint8_t byte1, const uint8_t byte2, const uint32_t timeout_ms) {
+    uint8_t data[4];
+    data[0] = byte0;
+    data[1] = byte1;
+    data[2] = byte2;
+    int16_t rv = tx_wait(data, 24, timeout_ms);
+    if (rv) return -rv;
+
+    // wait up to 10 ms for start of reply, additional 15ms for receive to complete
+    uint32_t rx_start_ms = milli();
+    uint32_t rx_timeout_ms = 10;
+    while (1) {
+        rv = rx(data);
+        switch (rv) {
+            case 0:
+                break; // nothing received yet, wait
+            case 1:
+                rx_timeout_ms = 25;
+                break; // extend timeout, wait for RX completion
+            case 2:
+                return -DALI_RESULT_COLLISION; // report collision
+            default:
+                if (rv == 8)
+                    return data[0];
+                else
+                    return -DALI_RESULT_INVALID_REPLY;
+        }
+
+        if (milli() - rx_start_ms > rx_timeout_ms)
+            return -DALI_RESULT_NO_REPLY;
+
+        vTaskDelay(1);
+    }
+    return -DALI_RESULT_NO_REPLY;
+}
+
 // check YAAAAAA: 0000 0000 to 0011 1111 adr, 0100 0000 to 0100 1111 group, x111 1111 broadcast
 uint8_t Dali::_check_yaaaaaa(uint8_t yaaaaaa)
 {
@@ -495,13 +530,11 @@ void Dali::set_level(uint8_t level, uint8_t adr)
         tx_wait_rx(adr << 1, level);
 }
 
-int16_t Dali::cmd(uint16_t cmd, uint8_t arg)
+int16_t Dali::cmd(const uint16_t cmd, const uint8_t arg, bool wait_reply)
 {
-    // Serial.print("dali_cmd[");Serial.print(cmd,HEX);Serial.print(",");Serial.print(arg,HEX);Serial.print(")");
     uint8_t cmd0, cmd1;
     if (cmd & 0x0100) {
         // special commands: MUST NOT have YAAAAAAX pattern for cmd
-        // Serial.print(" SPC");
         if (!_check_yaaaaaa(cmd >> 1)) {
             cmd0 = cmd;
             cmd1 = arg;
@@ -511,7 +544,6 @@ int16_t Dali::cmd(uint16_t cmd, uint8_t arg)
     } else {
         // regular commands: MUST have YAAAAAA pattern for arg
 
-        // Serial.print(" REG");
         if (_check_yaaaaaa(arg)) {
             cmd0 = arg << 1 | 1;
             cmd1 = cmd;
@@ -519,12 +551,19 @@ int16_t Dali::cmd(uint16_t cmd, uint8_t arg)
             return DALI_RESULT_INVALID_CMD;
         }
     }
+    uint8_t data[2] = {cmd0, cmd1};
     if (cmd & 0x0200) {
-        // Serial.print(" REPEAT");
-        tx_wait_rx(cmd0, cmd1);
+        if (wait_reply) {
+            tx_wait_rx(cmd0, cmd1);
+        } else {
+            tx_wait(data, 16);
+        }
     }
-    int16_t rv = tx_wait_rx(cmd0, cmd1);
-    return rv;
+    if (wait_reply) {
+        return tx_wait_rx(cmd0, cmd1);
+    }
+    const uint8_t res = tx_wait(data, 16);
+    return (res == DALI_OK) ? DALI_OK : (-res);
 }
 
 uint8_t Dali::set_operating_mode(uint8_t v, uint8_t adr)
@@ -640,13 +679,7 @@ uint32_t Dali::find_addr()
     while (addsub) {
         set_searchaddr_diff(adr, adr_last);
         adr_last = adr;
-        // Serial.print("cmpadr=");
-        // Serial.print(adr,HEX);
         uint8_t cmp = compare(); // returns 1 if searchadr > adr
-        // Serial.print("cmp ");
-        // Serial.print(adr,HEX);
-        // Serial.print(" = ");
-        // Serial.println(cmp);
         if (cmp)
             adr -= addsub;
         else
@@ -710,7 +743,7 @@ uint8_t Dali::commission(uint8_t init_arg)
         // assign short address
         program_short_address(sa);
 
-        // Serial.println(query_short_address()); //TODO check read adr, handle if not the same...
+        //TODO check read adr, handle if not the same...
 
         // remove the device from the search
         cmd(DALI_WITHDRAW, 0x00);

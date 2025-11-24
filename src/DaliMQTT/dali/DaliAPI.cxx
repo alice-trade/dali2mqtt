@@ -202,7 +202,7 @@ namespace daliMQTT
             }
         }
 
-        m_dali_impl.cmd(dali_cmd, dali_arg);
+        m_dali_impl.cmd(dali_cmd, dali_arg, false);
         ESP_LOGD(TAG,"Executed Command: %u", dali_cmd);
         vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
         return ESP_OK;
@@ -234,11 +234,29 @@ namespace daliMQTT
         return std::nullopt;
     }
 
-    std::optional<uint8_t> DaliAPI::sendRaw(const uint8_t byte1, const uint8_t byte2) {
+    std::optional<uint8_t> DaliAPI::sendRaw(const uint32_t data, const uint8_t bits) {
         std::lock_guard lock(bus_mutex);
-        const int16_t result = m_dali_impl.tx_wait_rx(byte1, byte2);
-        ESP_LOGD(TAG, "Raw TX: 0x%02X 0x%02X -> Result: %d", byte1, byte2, result);
+        int16_t result;
+
+        if (bits == 16) {
+            const uint8_t b1 = (data >> 8) & 0xFF;
+            const uint8_t b2 = data & 0xFF;
+            result = m_dali_impl.tx_wait_rx(b1, b2);
+            ESP_LOGD(TAG, "Raw TX (16bit): 0x%02X 0x%02X -> Result: %d", b1, b2, result);
+        }
+        else if (bits == 24) {
+            const uint8_t b1 = (data >> 16) & 0xFF;
+            const uint8_t b2 = (data >> 8) & 0xFF;
+            const uint8_t b3 = data & 0xFF;
+            result = m_dali_impl.tx_wait_rx(b1, b2, b3);
+            ESP_LOGD(TAG, "Raw TX (24bit): 0x%02X 0x%02X 0x%02X -> Result: %d", b1, b2, b3, result);
+        }
+        else {
+            ESP_LOGW(TAG, "Invalid bit length for sendRaw: %d", bits);
+            return std::nullopt;
+        }
         vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
+
         if (result >= 0) {
             return static_cast<uint8_t>(result);
         }

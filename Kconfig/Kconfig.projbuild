@@ -62,20 +62,7 @@ menu "DALI MQTT Bridge Settings"
                                             "hex":  "<HEX_STRING>",          // Hexadecimal representation
                                             "ts":   <uint32>                 // ESP log timestamp (ms)
                                         }
-    config DALI2MQTT_DEBUG_COMMAND_INTERFACE_TOPIC
-                        bool "Enable debug MQTT topic to sending DALI commands"
-                        default n
-                        help
-                             Enable debug mqtt topic to send arbitrary raw DALI commands.
-                                        Topic: <mqtt_base>/debug/pub
 
-                                        Payload Schema (JSON):
-                                        {
-                                            "addr":  <int>,   // Target Address
-                                            "cmd":   <int>,   // Command ID / Data
-                                            "twice": <bool>   // Send twice
-                                        }
-                                        Result topic: base/debug/res
 
     comment "Task Configuration"
 

@@ -239,17 +239,35 @@ namespace daliMQTT {
          cJSON* addr_item = cJSON_GetObjectItem(root, "addr");
          cJSON* cmd_item = cJSON_GetObjectItem(root, "cmd");
          cJSON* repeat_item = cJSON_GetObjectItem(root, "twice");
+         cJSON* bits_item = cJSON_GetObjectItem(root, "bits");
 
-         if (cJSON_IsNumber(addr_item) && cJSON_IsNumber(cmd_item)) {
-             const auto byte1 = static_cast<uint8_t>(addr_item->valueint);
-             const auto byte2 = static_cast<uint8_t>(cmd_item->valueint);
+        if (cJSON_IsNumber(addr_item) && cJSON_IsNumber(cmd_item)) {
+             const auto addr_val = static_cast<uint32_t>(addr_item->valueint);
+             const auto cmd_val = static_cast<uint32_t>(cmd_item->valueint);
+             uint8_t bits = 16;
+
+             if (cJSON_IsNumber(bits_item)) {
+                 bits = static_cast<uint8_t>(bits_item->valueint);
+             } else {
+                 if (addr_val > 0xFF) {
+                     bits = 24;
+                 }
+             }
+
+             uint32_t raw_data = 0;
+             if (bits == 24) {
+                 raw_data = ((addr_val & 0xFFFF) << 8) | (cmd_val & 0xFF);
+             } else {
+                 raw_data = ((addr_val & 0xFF) << 8) | (cmd_val & 0xFF);
+             }
+
              const bool repeat = cJSON_IsTrue(repeat_item);
              std::optional<uint8_t> result;
 
-             result = DaliAPI::getInstance().sendRaw(byte1, byte2);
+             result = DaliAPI::getInstance().sendRaw(raw_data, bits);
              if (repeat) {
-                 auto res2 = DaliAPI::getInstance().sendRaw(byte1, byte2);
-                 if (res2.has_value()) result = res2;
+                 if (auto res2 = DaliAPI::getInstance().sendRaw(raw_data, bits); res2.has_value())
+                     result = res2;
              }
 
              auto const& mqtt = MQTTClient::getInstance();
@@ -257,19 +275,25 @@ namespace daliMQTT {
              std::string reply_topic = std::format("{}/cmd/res", config_base);
 
              if (result.has_value()) {
-                 std::string payload = std::format(R"({{"status":"ok", "addr":{}, "cmd":{}, "response":{}, "hex":"{:02X}"}})",
-                 byte1, byte2, *result, *result);
+                 std::string payload;
+                 if (bits == 24) {
+                      payload = std::format(R"({{"status":"ok", "addr":{}, "cmd":{}, "bits":24, "response":{}, "hex":"{:06X}"}})",
+                         addr_val, cmd_val, *result, raw_data);
+                 } else {
+                      payload = std::format(R"({{"status":"ok", "addr":{}, "cmd":{}, "bits":16, "response":{}, "hex":"{:04X}"}})",
+                         addr_val, cmd_val, *result, raw_data);
+                 }
                  mqtt.publish(reply_topic, payload, 0, false);
-                 ESP_LOGD(TAG, "Command got reply: 0x%02X", *result);
+                 ESP_LOGD(TAG, "Command reply: 0x%02X", *result);
              } else {
-                 std::string payload = std::format(R"({{"status":"no_reply", "addr":{}, "cmd":{}}})", byte1, byte2);
+                 std::string payload = std::format(R"({{"status":"no_reply", "addr":{}, "cmd":{}, "bits":{}}})",
+                    addr_val, cmd_val, bits);
                  mqtt.publish(reply_topic, payload, 0, false);
                  ESP_LOGD(TAG, "Command: No reply");
              }
          }
-
          cJSON_Delete(root);
-         }
+     }
 
 
     void MQTTCommandHandler::handle(const std::string& topic, const std::string& data)
