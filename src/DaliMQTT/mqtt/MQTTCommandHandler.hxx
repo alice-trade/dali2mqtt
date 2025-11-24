@@ -7,18 +7,14 @@ namespace daliMQTT {
 
     class MQTTCommandHandler {
     public:
-        MQTTCommandHandler(const MQTTCommandHandler&) = delete;
-        MQTTCommandHandler& operator=(const MQTTCommandHandler&) = delete;
+        MQTTCommandHandler() = delete;
         /**
          * @brief Handle mqtt message
          * @param topic
          * @param data
          */
         static void handle(const std::string& topic, const std::string& data);
-
     private:
-        MQTTCommandHandler() = default;
-
         // MQTT handlers
         static void handleLightCommand(const std::vector<std::string_view>& parts, const std::string& data);
         static void handleGroupCommand(const std::string& data);

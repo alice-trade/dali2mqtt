@@ -33,7 +33,6 @@ namespace daliMQTT
             // Callbacks
             std::function<void()> onConnected;
             std::function<void()> onDisconnected;
-            std::function<void(const std::string& topic, const std::string& data)> onData;
 
         private:
             MQTTClient() = default;

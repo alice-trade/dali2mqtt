@@ -24,7 +24,6 @@ namespace daliMQTT
 
             void setupAndRunMqtt();
             void onMqttConnected() const;
-            void onMqttData(const std::string& topic, const std::string& data) const;
     };
 } // daliMQTT
 

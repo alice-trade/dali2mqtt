@@ -1,4 +1,5 @@
 #include "MQTTClient.hxx"
+#include "DaliCommandProcessor.hxx"
 #include "sdkconfig.h"
 namespace daliMQTT
 {
@@ -82,11 +83,12 @@ namespace daliMQTT
                 break;
             case MQTT_EVENT_DATA:
                 ESP_LOGI(TAG, "MQTT_EVENT_DATA");
-                if (client->onData) {
-                    std::string topic(event->topic, event->topic_len);
-                    std::string data(event->data, event->data_len);
-                    client->onData(topic, data);
-                }
+                DaliCommandProcessor::getInstance().enqueueMqttMessage(
+                   event->topic,
+                   event->topic_len,
+                   event->data,
+                   event->data_len
+               );
                 break;
             case MQTT_EVENT_ERROR:
                 ESP_LOGE(TAG, "MQTT_EVENT_ERROR");

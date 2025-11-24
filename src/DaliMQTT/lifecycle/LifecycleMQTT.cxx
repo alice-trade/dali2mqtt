@@ -1,5 +1,6 @@
 #include "sdkconfig.h"
 #include "ConfigManager.hxx"
+#include "DaliCommandProcessor.hxx"
 #include "MQTTClient.hxx"
 #include "DaliDeviceController.hxx"
 #include "HADiscovery.hxx"
@@ -13,11 +14,11 @@ namespace daliMQTT {
     void Lifecycle::setupAndRunMqtt() {
         const auto config = ConfigManager::getInstance().getConfig();
         auto& mqtt = MQTTClient::getInstance();
+        DaliCommandProcessor::getInstance().init();
 
         const std::string availability_topic = std::format("{}{}", config.mqtt_base_topic, CONFIG_DALI2MQTT_MQTT_AVAILABILITY_TOPIC);
         mqtt.init(config.mqtt_uri, config.client_id, availability_topic, config.mqtt_user, config.mqtt_pass);
         mqtt.onConnected = [this]() { this->onMqttConnected(); };
-        mqtt.onData = [this](const std::string& t, const std::string& d) { this->onMqttData(t, d); };
 
         mqtt.connect();
     }
@@ -56,22 +57,15 @@ namespace daliMQTT {
         mqtt.subscribe(scene_cmd_topic);
         ESP_LOGI(TAG, "Subscribed to scenes: %s", scene_cmd_topic.c_str());
 
-        #ifdef CONFIG_DALI2MQTT_DEBUG_COMMAND_INTERFACE_TOPIC // Debug command interface
-            // base/debug/pub
-            std::string debug_topic = std::format("{}/debug/pub", config.mqtt_base_topic);
-            mqtt.subscribe(debug_topic);
-            ESP_LOGW(TAG, "DEBUG INTERFACE ENABLED. Subscribed to: %s", debug_topic.c_str());
-        #endif
+        // base/cmd/raw
+        std::string debug_topic = std::format("{}/cmd/raw", config.mqtt_base_topic);
+        mqtt.subscribe(debug_topic);
+        ESP_LOGW(TAG, "DEBUG INTERFACE ENABLED. Subscribed to: %s", debug_topic.c_str());
 
         MQTTHomeAssistantDiscovery hass_discovery;
         hass_discovery.publishAllDevices();
         ESP_LOGI(TAG, "MQTT discovery messages published.");
 
         DaliDeviceController::getInstance().start();
-    }
-
-    void Lifecycle::onMqttData(const std::string& topic, const std::string& data) const
-    {
-        MQTTCommandHandler::handle(topic, data);
     }
 }
