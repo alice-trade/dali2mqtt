@@ -7,23 +7,16 @@ namespace daliMQTT
         public:
             Lifecycle(const Lifecycle&) = delete;
             Lifecycle& operator=(const Lifecycle&) = delete;
-
-            static Lifecycle& getInstance() {
-                static Lifecycle instance;
-                return instance;
-            }
+            Lifecycle() = delete;
 
             // Запуск в режиме начальной настройки
-            void startProvisioningMode();
+            static void startProvisioningMode();
 
             // Запуск в нормальном режиме работы
-            void startNormalMode();
+            static void startNormalMode();
 
         private:
-            Lifecycle() = default;
-
-            void setupAndRunMqtt();
-            void onMqttConnected() const;
+            static void onMqttConnected();
     };
 } // daliMQTT
 

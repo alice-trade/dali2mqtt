@@ -16,14 +16,13 @@ extern "C" void app_main(void) {
     ESP_ERROR_CHECK(config.init());
     ESP_ERROR_CHECK(config.load());
 
-    auto& logic = daliMQTT::Lifecycle::getInstance();
 
     if (config.isConfigured()) {
         ESP_LOGI(TAG, "Device is configured. Starting normal mode.");
-        logic.startNormalMode();
+        daliMQTT::Lifecycle::startNormalMode();
     } else {
         ESP_LOGI(TAG, "Device is not configured. Starting provisioning mode.");
-        logic.startProvisioningMode();
+        daliMQTT::Lifecycle::startProvisioningMode();
     }
 
     ESP_LOGI(TAG, "Application setup complete. Logic running in background tasks.");
