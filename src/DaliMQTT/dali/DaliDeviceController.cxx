@@ -42,7 +42,7 @@ namespace daliMQTT
             ESP_LOGE(TAG, "Cannot start DALI tasks: DaliAPI not initialized.");
         }
     }
-     void publishState(const DaliLongAddress_t long_addr, uint8_t level) {
+    void DaliDeviceController::publishState(const DaliLongAddress_t long_addr, uint8_t level) {
         auto const& mqtt = MQTTClient::getInstance();
         auto config = ConfigManager::getInstance().getConfig();
 

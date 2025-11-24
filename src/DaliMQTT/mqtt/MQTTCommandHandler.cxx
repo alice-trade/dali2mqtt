@@ -230,51 +230,49 @@ namespace daliMQTT {
 
         cJSON_Delete(root);
     }
-    #ifdef CONFIG_DALI2MQTT_DEBUG_COMMAND_INTERFACE_TOPIC
-        static void LOCAL_processDebugSendDALICommand(const std::string& data) {
-             cJSON* root = cJSON_Parse(data.c_str());
-             if (!root) {
-                 return;
-             }
-
-             cJSON* addr_item = cJSON_GetObjectItem(root, "addr");
-             cJSON* cmd_item = cJSON_GetObjectItem(root, "cmd");
-             cJSON* repeat_item = cJSON_GetObjectItem(root, "twice");
-
-             if (cJSON_IsNumber(addr_item) && cJSON_IsNumber(cmd_item)) {
-                 const uint8_t byte1 = static_cast<uint8_t>(addr_item->valueint);
-                 const uint8_t byte2 = static_cast<uint8_t>(cmd_item->valueint);
-                 const bool repeat = cJSON_IsTrue(repeat_item);
-                 std::optional<uint8_t> result;
-
-                 result = DaliAPI::getInstance().sendRaw(byte1, byte2);
-                 if (repeat) {
-                     auto res2 = DaliAPI::getInstance().sendRaw(byte1, byte2);
-                     if (res2.has_value()) result = res2;
-                 }
-
-                 auto const& mqtt = MQTTClient::getInstance();
-                 auto config_base = ConfigManager::getInstance().getMqttBaseTopic();
-                 std::string reply_topic = std::format("{}/debug/res", config_base);
-
-                 if (result.has_value()) {
-                     std::string payload = std::format(R"({{"status":"ok", "addr":{}, "cmd":{}, "response":{}, "hex":"{:02X}"}})",
-                        byte1, byte2, *result, *result);
-                     mqtt.publish(reply_topic, payload, 0, false);
-                     ESP_LOGD(TAG, "Debug Command got reply: 0x%02X", *result);
-                 } else {
-                     std::string payload = std::format(R"({{"status":"no_reply", "addr":{}, "cmd":{}}})", byte1, byte2);
-                     mqtt.publish(reply_topic, payload, 0, false);
-                     ESP_LOGD(TAG, "Debug Command: No reply");
-                 }
-             }
-
-             cJSON_Delete(root);
+    void MQTTCommandHandler::processSendDALICommand(const std::string& data) {
+         cJSON* root = cJSON_Parse(data.c_str());
+         if (!root) {
+             return;
          }
-    #endif
+
+         cJSON* addr_item = cJSON_GetObjectItem(root, "addr");
+         cJSON* cmd_item = cJSON_GetObjectItem(root, "cmd");
+         cJSON* repeat_item = cJSON_GetObjectItem(root, "twice");
+
+         if (cJSON_IsNumber(addr_item) && cJSON_IsNumber(cmd_item)) {
+             const auto byte1 = static_cast<uint8_t>(addr_item->valueint);
+             const auto byte2 = static_cast<uint8_t>(cmd_item->valueint);
+             const bool repeat = cJSON_IsTrue(repeat_item);
+             std::optional<uint8_t> result;
+
+             result = DaliAPI::getInstance().sendRaw(byte1, byte2);
+             if (repeat) {
+                 auto res2 = DaliAPI::getInstance().sendRaw(byte1, byte2);
+                 if (res2.has_value()) result = res2;
+             }
+
+             auto const& mqtt = MQTTClient::getInstance();
+             auto config_base = ConfigManager::getInstance().getMqttBaseTopic();
+             std::string reply_topic = std::format("{}/cmd/res", config_base);
+
+             if (result.has_value()) {
+                 std::string payload = std::format(R"({{"status":"ok", "addr":{}, "cmd":{}, "response":{}, "hex":"{:02X}"}})",
+                 byte1, byte2, *result, *result);
+                 mqtt.publish(reply_topic, payload, 0, false);
+                 ESP_LOGD(TAG, "Command got reply: 0x%02X", *result);
+             } else {
+                 std::string payload = std::format(R"({{"status":"no_reply", "addr":{}, "cmd":{}}})", byte1, byte2);
+                 mqtt.publish(reply_topic, payload, 0, false);
+                 ESP_LOGD(TAG, "Command: No reply");
+             }
+         }
+
+         cJSON_Delete(root);
+         }
 
 
-    void MQTTCommandHandler::handle(const std::string& topic, const std::string& data) const
+    void MQTTCommandHandler::handle(const std::string& topic, const std::string& data)
     {
         ESP_LOGD(TAG, "MQTT Rx: %s -> %s", topic.c_str(), data.c_str());
 
@@ -305,12 +303,9 @@ namespace daliMQTT {
              } else {
                  handleSceneCommand(data);
              }
+        } else if (parts[0] == "cmd" && parts.size() > 1 && parts[1] == "raw") {
+            processSendDALICommand(data);
         }
-        #ifdef CONFIG_DALI2MQTT_DEBUG_COMMAND_INTERFACE_TOPIC
-            else if (parts[0] == "debug" && parts.size() > 1 && parts[1] == "pub") {
-                LOCAL_processDebugSendDALICommand(data);
-            }
-        #endif
     }
 
 } // namespace daliMQTT

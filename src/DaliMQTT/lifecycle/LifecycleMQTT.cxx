@@ -72,6 +72,6 @@ namespace daliMQTT {
 
     void Lifecycle::onMqttData(const std::string& topic, const std::string& data) const
     {
-        MQTTCommandHandler::getInstance().handle(topic, data);
+        MQTTCommandHandler::handle(topic, data);
     }
 }
