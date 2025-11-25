@@ -18,7 +18,7 @@ namespace daliMQTT
 
         config.lru_purge_enable = true;
         config.uri_match_fn = httpd_uri_match_wildcard;
-        config.max_uri_handlers = 16;
+        config.max_uri_handlers = 17;
         config.max_open_sockets = 4;
         config.backlog_conn = 4;
         ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
@@ -28,7 +28,7 @@ namespace daliMQTT
         }
 
         // Register handlers
-        const std::array<httpd_uri_t, 15> handlers = {{
+        const std::array<httpd_uri_t, 16> handlers = {{
             { .uri = "/api/config", .method = HTTP_GET,  .handler = api::GetConfigHandler, .user_ctx = this },
             { .uri = "/api/config", .method = HTTP_POST, .handler = api::SetConfigHandler, .user_ctx = this },
             { .uri = "/api/info",   .method = HTTP_GET,  .handler = api::GetInfoHandler,   .user_ctx = this },
@@ -43,7 +43,8 @@ namespace daliMQTT
             { .uri = "/api/dali/groups/refresh", .method = HTTP_POST, .handler = api::DaliRefreshGroupsHandler, .user_ctx = nullptr },
             { .uri = "/api/dali/scenes",     .method = HTTP_POST, .handler = api::DaliSetSceneHandler,   .user_ctx = nullptr },
             { .uri = "/api/dali/scenes",     .method = HTTP_GET,  .handler = api::DaliGetSceneHandler,   .user_ctx = nullptr },
-            { .uri = "/*",          .method = HTTP_GET,  .handler = staticFileGetHandler, .user_ctx = nullptr }
+            { .uri = "/*",          .method = HTTP_GET,  .handler = staticFileGetHandler, .user_ctx = nullptr },
+            { .uri = "/api/ota/pull", .method = HTTP_POST, .handler = api::OtaUpdateHandler, .user_ctx = this },
 
         }};
 

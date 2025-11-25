@@ -28,6 +28,9 @@ namespace daliMQTT
         std::string syslog_server;
         bool syslog_enabled{false};
 
+        // OTA
+        std::string app_ota_url;
+
         // General
         std::string client_id;
 

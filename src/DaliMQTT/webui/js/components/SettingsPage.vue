@@ -15,6 +15,7 @@ interface ConfigData {
   http_pass?: string;
   syslog_server?: string;
   syslog_enabled?: boolean;
+  ota_url?: string;
 }
 
 const config = ref<ConfigData>({
@@ -23,6 +24,7 @@ const config = ref<ConfigData>({
   mqtt_user: '',
   client_id: '',
   mqtt_base_topic: '',
+  ota_url: '',
   http_domain: '',
   http_user: '',
   syslog_server: '',
@@ -44,6 +46,24 @@ const loadConfig = async () => {
     isError.value = true;
   } finally {
     loading.value = false;
+  }
+};
+
+const handleSystemOta = async () => {
+  if (config.value.ota_url) {
+    // todo: save after
+  }
+
+  if (!confirm(`Start firmware update from ${config.value.ota_url}?`)) return;
+
+  try {
+    await api.saveConfig({ ...config.value });
+    await api.triggerSystemOta();
+
+    alert("System update started! The device will reboot if successful. Please wait and reload the page.");
+  } catch (e) {
+    alert("Failed to start update. Check console/logs.");
+    console.error(e);
   }
 };
 
@@ -138,6 +158,17 @@ onMounted(loadConfig);
         <label for="syslog_server">Syslog Server Address</label>
         <input type="text" id="syslog_server" v-model="config.syslog_server" placeholder="e.g., 192.168.1.100" :disabled="!config.syslog_enabled">
         <small>Logs will be sent to this server over UDP (port 514).</small>
+      </fieldset>
+
+      <fieldset>
+        <legend>Firmware Update</legend>
+        <label for="ota_url">Firmware URL</label>
+        <input type="text" id="ota_url" v-model="config.ota_url" placeholder="http://server/firmware.bin">
+        <small>Provide a URL to the binary file. Supports HTTP and HTTPS.</small>
+
+        <button type="button" class="contrast" @click="handleSystemOta" :disabled="loading || !config.ota_url">
+          Update from Server
+        </button>
       </fieldset>
 
       <button type="submit" :disabled="loading">Save and Reboot</button>

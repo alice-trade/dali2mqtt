@@ -20,6 +20,8 @@ set(PLATFORM_MODULES
         esp_http_client
         driver
         esp_netif
+        esp_https_ota
+        app_update
         nvs_flash
         esp_timer
         Kconfig

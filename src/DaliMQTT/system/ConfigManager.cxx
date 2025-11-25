@@ -84,6 +84,7 @@ namespace daliMQTT
             config_cache.syslog_server = CONFIG_DALI2MQTT_SYSLOG_DEFAULT_SERVER;
         }
         #endif
+        getString(nvs_handle.get(), "ota_url", config_cache.app_ota_url, "");
         getU32(nvs_handle.get(), "dali_poll", config_cache.dali_poll_interval_ms, CONFIG_DALI2MQTT_DALI_DEFAULT_POLL_INTERVAL_MS);
 
         #ifdef CONFIG_DALI2MQTT_SYSLOG_ENABLED_BY_DEFAULT
@@ -137,6 +138,8 @@ namespace daliMQTT
         SetNVS(setString, "http_pass", new_config.http_pass);
         SetNVS(setString, "syslog_srv", new_config.syslog_server);
         SetNVS(nvs_set_u8, "syslog_en", new_config.syslog_enabled ? 1 : 0);
+        SetNVS(setString, "ota_url", new_config.app_ota_url);
+
 
         #undef SetNVS
         
@@ -198,6 +201,7 @@ namespace daliMQTT
         SetNVS(nvs_set_u32, "dali_poll", config_cache.dali_poll_interval_ms);
         SetNVS(setString, "syslog_srv", config_cache.syslog_server);
         SetNVS(nvs_set_u8, "syslog_en", config_cache.syslog_enabled ? 1 : 0);
+        SetNVS(setString, "ota_url", config_cache.app_ota_url);
 
         #undef SetNVS
 
