@@ -108,9 +108,9 @@ namespace daliMQTT
         ESP_LOGI(TAG, "Subscribed to scenes: %s", scene_cmd_topic.c_str());
 
         // base/cmd/raw
-        std::string debug_topic = std::format("{}/cmd/raw", config.mqtt_base_topic);
-        mqtt.subscribe(debug_topic);
-        ESP_LOGW(TAG, "DEBUG INTERFACE ENABLED. Subscribed to: %s", debug_topic.c_str());
+        std::string cmd_topic = std::format("{}/cmd/raw", config.mqtt_base_topic);
+        mqtt.subscribe(cmd_topic);
+        ESP_LOGW(TAG, "DEBUG INTERFACE ENABLED. Subscribed to: %s", cmd_topic.c_str());
 
         MQTTHomeAssistantDiscovery hass_discovery;
         hass_discovery.publishAllDevices();

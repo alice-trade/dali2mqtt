@@ -21,8 +21,7 @@ namespace daliMQTT {
             return false;
         }
 
-        // Копируем URL в новую строку для передачи в задачу
-        std::string* url_copy = new std::string(url);
+        auto url_copy = new std::string(url);
 
         BaseType_t ret = xTaskCreate(otaTask, "ota_task", 8192, url_copy, 5, nullptr);
         if (ret != pdPASS) {
@@ -40,8 +39,8 @@ namespace daliMQTT {
     }
 
     void AppUpdateManager::otaTask(void* pvParameter) {
-        std::string* url_ptr = static_cast<std::string*>(pvParameter);
-        std::string url = *url_ptr;
+        const std::string* url_ptr = static_cast<std::string*>(pvParameter);
+        const std::string url = *url_ptr;
         delete url_ptr;
 
         AppUpdateManager::getInstance().performUpdate(url);

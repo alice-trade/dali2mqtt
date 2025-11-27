@@ -50,7 +50,6 @@ namespace daliMQTT
         const std::string discovery_topic = std::format("homeassistant/light/{}/config", object_id);
         const std::string device_status_topic = std::format("{}/light/{}/status", base_topic, addr_str);
 
-        // Get readable name or generate default
         std::string readable_name;
         const auto it = device_identification.find(addr_str);
         if (it != device_identification.end() && !it->second.empty()) {

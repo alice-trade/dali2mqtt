@@ -128,11 +128,6 @@ namespace daliMQTT
 
         {
             std::lock_guard lock(m_devices_mutex);
-            for (auto &val: m_devices | std::views::values) {
-                val.is_present = false;
-                val.available = false;
-                val.initial_sync_needed = true;
-            }
             for (const auto& long_addr : validated_devices) {
                 if (m_devices.contains(long_addr)) {
                     m_devices.at(long_addr).is_present = true;

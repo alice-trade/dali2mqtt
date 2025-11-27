@@ -13,11 +13,6 @@ namespace daliMQTT
             return instance;
         }
 
-        /**
-         * @brief Запускает задачу обновления OTA в фоновом режиме.
-         * @param url URL для скачивания прошивки.
-         * @return true если задача успешно запущена, false если уже выполняется.
-         */
         bool startUpdateAsync(const std::string& url);
 
         bool isUpdateInProgress() const;
