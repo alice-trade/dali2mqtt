@@ -306,7 +306,7 @@ namespace daliMQTT
         return m_devices;
     }
 
-    std::optional<uint8_t> DaliDeviceController::getShortAddress(DaliLongAddress_t longAddress) const {
+    std::optional<uint8_t> DaliDeviceController::getShortAddress(const DaliLongAddress_t longAddress) const {
         std::lock_guard lock(m_devices_mutex);
         if (const auto it = m_devices.find(longAddress); it != m_devices.end()) {
             return it->second.short_address;

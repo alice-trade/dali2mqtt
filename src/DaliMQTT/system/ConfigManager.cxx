@@ -208,6 +208,29 @@ namespace daliMQTT
         return ensureConfiguredAndCommit(nvs_handle.get());
     }
 
+    esp_err_t ConfigManager::resetConfiguredFlag() {
+        std::lock_guard lock(config_mutex);
+        const NvsHandle nvs_handle(NVS_NAMESPACE, NVS_READWRITE);
+        if (!nvs_handle) {
+            return ESP_FAIL;
+        }
+
+        config_cache.configured = false;
+        esp_err_t err = nvs_set_u8(nvs_handle.get(), "configured", 0);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to set configured flag to 0: %s", esp_err_to_name(err));
+            return err;
+        }
+
+        err = nvs_commit(nvs_handle.get());
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to commit NVS reset: %s", esp_err_to_name(err));
+            return err;
+        }
+        ESP_LOGI(TAG, "Configuration flag reset to 0 (Unconfigured).");
+        return ESP_OK;
+    }
+
     esp_err_t ConfigManager::ensureConfiguredAndCommit(nvs_handle_t handle) {
         if (!config_cache.configured) {
             config_cache.configured = true;

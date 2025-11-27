@@ -61,6 +61,8 @@ namespace daliMQTT
             // Сохранение конфигурации в NVS
             esp_err_t save();
 
+            esp_err_t resetConfiguredFlag();
+
             // Получение текущей конфигурации
             [[nodiscard]] AppConfig getConfig() const;
 
