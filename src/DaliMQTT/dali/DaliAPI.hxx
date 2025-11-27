@@ -51,11 +51,8 @@ namespace daliMQTT
          */
         [[nodiscard]] QueueHandle_t getEventQueue() const;
 
-        // Сканирование шины на наличие уже адресованных устройств
-        [[nodiscard]] std::bitset<64> scanBus();
-
         // Процесс инициализации и адресации новых устройств на шине
-        [[nodiscard]] std::bitset<64> initializeBus();
+        uint8_t initializeBus();
 
         // Добавить в группу
         esp_err_t assignToGroup(uint8_t shortAddress, uint8_t group);

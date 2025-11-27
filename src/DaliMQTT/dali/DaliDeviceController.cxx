@@ -240,10 +240,9 @@ namespace daliMQTT
             ESP_LOGE(TAG, "Cannot initialize DALI bus: DALI driver is not initialized (device might be in provisioning mode).");
             return {};
         }
-        const std::bitset<64> found_devices = DaliAPI::getInstance().initializeBus();
-        discoverAndMapDevices();
-
-        return found_devices;
+        DaliAPI::getInstance().initializeBus();
+        const std::bitset<64> devices = discoverAndMapDevices();
+        return devices;
     }
 
     std::bitset<64> DaliDeviceController::performScan() {
@@ -251,20 +250,21 @@ namespace daliMQTT
             ESP_LOGE(TAG, "Cannot scan DALI bus: DALI driver is not initialized (device might be in provisioning mode).");
             return {};
         }
-        const std::bitset<64> found_devices = DaliAPI::getInstance().scanBus();
-        discoverAndMapDevices();
+        const std::bitset<64> found_devices = discoverAndMapDevices();
         
         return found_devices;
     }
     
-    void DaliDeviceController::discoverAndMapDevices() {
+    std::bitset<64> DaliDeviceController::discoverAndMapDevices() {
         ESP_LOGI(TAG, "Starting DALI device discovery and mapping...");
         auto& dali = DaliAPI::getInstance();
         std::map<DaliLongAddress_t, DaliDevice> new_devices;
         std::map<uint8_t, DaliLongAddress_t> new_short_to_long_map;
+        std::bitset<64> found_devices;
 
         for (uint8_t sa = 0; sa < 64; ++sa) {
             if (auto status_opt = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, sa, DALI_COMMAND_QUERY_STATUS); status_opt.has_value()) {
+                found_devices.set(sa);
                 ESP_LOGI(TAG, "Device found at short address %d. Querying long address...", sa);
                 if (auto long_addr_opt = dali.getLongAddress(sa)) {
                     DaliLongAddress_t long_addr = *long_addr_opt;
@@ -297,6 +297,7 @@ namespace daliMQTT
             DaliAddressMap::save(m_devices);
 
         }
+        return found_devices;
     }
 
 

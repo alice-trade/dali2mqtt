@@ -217,32 +217,12 @@ namespace daliMQTT
         return std::nullopt;
     }
 
-    std::bitset<64> DaliAPI::scanBus() {
-        std::lock_guard lock(bus_mutex);
-        std::bitset<64> found_devices;
-        ESP_LOGI(TAG, "Starting DALI bus scan...");
-        for (uint8_t i = 0; i < 64; ++i) {
-            int16_t rv = m_dali_impl.cmd(DALI_COMMAND_QUERY_STATUS, i);
-            if (rv >= 0) {
-                ESP_LOGI(TAG, "Device found at short address %d (Status: 0x%02X)", i, rv);
-                found_devices.set(i);
-            } else if (-rv != DALI_RESULT_NO_REPLY) {
-                ESP_LOGW(TAG, "Scan error at address %d: code %d", i, -rv);
-            }
-
-            vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_POLL_DELAY_MS));
-        }
-
-        ESP_LOGI(TAG, "Scan finished. Found %zu devices.", found_devices.count());
-        return found_devices;
-    }
-
-    std::bitset<64> DaliAPI::initializeBus() {
+    uint8_t DaliAPI::initializeBus() {
         std::lock_guard lock(bus_mutex);
         ESP_LOGI(TAG, "Starting DALI commissioning process...");
-        m_dali_impl.commission(0xff);
-        ESP_LOGI(TAG, "Commissioning finished.");
-        return scanBus();
+        uint8_t assigned_devices = m_dali_impl.commission(0xff);
+        ESP_LOGI(TAG, "Commissioning finished. Assigned %u devices", assigned_devices);
+        return assigned_devices;
     }
 
     esp_err_t DaliAPI::assignToGroup(const uint8_t shortAddress, const uint8_t group) {

@@ -35,7 +35,7 @@ namespace daliMQTT
         DaliDeviceController() = default;
 
         void processDaliFrame(const dali_frame_t& frame);
-        void discoverAndMapDevices();
+        std::bitset<64> discoverAndMapDevices();
         bool validateAddressMap();
 
         [[noreturn]] static void daliEventHandlerTask(void* pvParameters);
@@ -46,7 +46,7 @@ namespace daliMQTT
 
         TaskHandle_t m_event_handler_task{nullptr};
         TaskHandle_t m_sync_task_handle{nullptr};
-        
+
         std::map<DaliLongAddress_t, DaliDevice> m_devices;
         std::map<uint8_t, DaliLongAddress_t> m_short_to_long_map;
         mutable std::mutex m_devices_mutex;
