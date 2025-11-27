@@ -1,6 +1,7 @@
 #include "ConfigManager.hxx"
 #include "DaliAPI.hxx"
 #include "MQTTCommandProcess.hxx"
+#include "SystemControl.hxx"
 #include "DaliGroupManagement.hxx"
 #include "DaliSceneManagement.hxx"
 #include "Lifecycle.hxx"
@@ -11,13 +12,13 @@
 #include "Wifi.hxx"
 #include "SyslogConfig.hxx"
 
-
 namespace daliMQTT
 {
     static constexpr  char TAG[] = "LifecycleBase";
 
     void Lifecycle::startProvisioningMode() {
         ESP_LOGI(TAG, "Starting in provisioning mode...");
+        SystemControl::checkOtaValidation();
         auto& wifi = Wifi::getInstance();
         wifi.init();
 
@@ -25,12 +26,15 @@ namespace daliMQTT
 
         auto& web = WebUI::getInstance();
         web.start();
+
         ESP_LOGI(TAG, "Web server for provisioning is running.");
     }
 
     void Lifecycle::startNormalMode() {
         ESP_LOGI(TAG, "Starting in normal mode...");
         auto config = ConfigManager::getInstance().getConfig();
+        SystemControl::checkOtaValidation();
+        SystemControl::startResetConfigurationButtonMonitor();
 
         auto& wifi = Wifi::getInstance();
         wifi.init();
@@ -67,7 +71,6 @@ namespace daliMQTT
 
         auto& web = WebUI::getInstance();
         web.start();
-
         wifi.connectToAP(config.wifi_ssid, config.wifi_password);
     }
 

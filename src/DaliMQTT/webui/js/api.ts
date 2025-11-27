@@ -78,5 +78,8 @@ export const api = {
     },
     async getDaliScene(sceneId: number) {
         return await apiClient.get(`/api/dali/scenes?id=${sceneId}`);
-    }
+    },
+    async triggerSystemOta() {
+        return await apiClient.post('/api/ota/pull', {});
+    },
 };

@@ -84,6 +84,7 @@ namespace daliMQTT
             config_cache.syslog_server = CONFIG_DALI2MQTT_SYSLOG_DEFAULT_SERVER;
         }
         #endif
+        getString(nvs_handle.get(), "ota_url", config_cache.app_ota_url, "");
         getU32(nvs_handle.get(), "dali_poll", config_cache.dali_poll_interval_ms, CONFIG_DALI2MQTT_DALI_DEFAULT_POLL_INTERVAL_MS);
 
         #ifdef CONFIG_DALI2MQTT_SYSLOG_ENABLED_BY_DEFAULT
@@ -137,6 +138,8 @@ namespace daliMQTT
         SetNVS(setString, "http_pass", new_config.http_pass);
         SetNVS(setString, "syslog_srv", new_config.syslog_server);
         SetNVS(nvs_set_u8, "syslog_en", new_config.syslog_enabled ? 1 : 0);
+        SetNVS(setString, "ota_url", new_config.app_ota_url);
+
 
         #undef SetNVS
         
@@ -198,10 +201,34 @@ namespace daliMQTT
         SetNVS(nvs_set_u32, "dali_poll", config_cache.dali_poll_interval_ms);
         SetNVS(setString, "syslog_srv", config_cache.syslog_server);
         SetNVS(nvs_set_u8, "syslog_en", config_cache.syslog_enabled ? 1 : 0);
+        SetNVS(setString, "ota_url", config_cache.app_ota_url);
 
         #undef SetNVS
 
         return ensureConfiguredAndCommit(nvs_handle.get());
+    }
+
+    esp_err_t ConfigManager::resetConfiguredFlag() {
+        std::lock_guard lock(config_mutex);
+        const NvsHandle nvs_handle(NVS_NAMESPACE, NVS_READWRITE);
+        if (!nvs_handle) {
+            return ESP_FAIL;
+        }
+
+        config_cache.configured = false;
+        esp_err_t err = nvs_set_u8(nvs_handle.get(), "configured", 0);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to set configured flag to 0: %s", esp_err_to_name(err));
+            return err;
+        }
+
+        err = nvs_commit(nvs_handle.get());
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to commit NVS reset: %s", esp_err_to_name(err));
+            return err;
+        }
+        ESP_LOGI(TAG, "Configuration flag reset to 0 (Unconfigured).");
+        return ESP_OK;
     }
 
     esp_err_t ConfigManager::ensureConfiguredAndCommit(nvs_handle_t handle) {

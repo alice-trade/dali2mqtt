@@ -28,6 +28,9 @@ namespace daliMQTT
         std::string syslog_server;
         bool syslog_enabled{false};
 
+        // OTA
+        std::string app_ota_url;
+
         // General
         std::string client_id;
 
@@ -57,6 +60,8 @@ namespace daliMQTT
             esp_err_t saveDaliGroupAssignments(const std::string& assignments);
             // Сохранение конфигурации в NVS
             esp_err_t save();
+
+            esp_err_t resetConfiguredFlag();
 
             // Получение текущей конфигурации
             [[nodiscard]] AppConfig getConfig() const;
