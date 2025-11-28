@@ -54,7 +54,7 @@ namespace daliMQTT
         const std::string payload = utils::stringFormat(R"({"state":"%s","brightness":%d})", (level > 0 ? "ON" : "OFF"), level);
 
         ESP_LOGD(TAG, "Publishing to %s: %s", state_topic.c_str(), payload.c_str());
-        mqtt.publish(state_topic, payload);
+        mqtt.publish(state_topic, payload, 0, true); // publish with RETAIN (!)
     }
 
     void DaliDeviceController::publishAvailability(const DaliLongAddress_t long_addr, const bool is_available) {
