@@ -1,4 +1,5 @@
 #include "MQTTCommandHandler.hxx"
+#include <utils/StringUtils.hxx>
 #include "ConfigManager.hxx"
 #include "MQTTClient.hxx"
 #include "DaliDeviceController.hxx"
@@ -55,7 +56,7 @@ namespace daliMQTT {
                 for (const auto& [long_addr, groups] : all_assignments) {
                     if (groups.test(target_id)) {
                         ESP_LOGD(TAG, "Group Update: Device %s belongs to group %d -> Level %d",
-                                longAddressToString(long_addr).data(), target_id, brightness.value_or(0));
+                                utils::longAddressToString(long_addr).data(), target_id, brightness.value_or(0));
                         update_device(long_addr);
                     }
                 }
@@ -97,7 +98,7 @@ namespace daliMQTT {
             target_id = 0;
         } else {
             addr_type = DALI_ADDRESS_TYPE_SHORT;
-            const auto long_addr_opt = stringToLongAddress(parts[1]);
+            const auto long_addr_opt = utils::stringToLongAddress(parts[1]);
             if (!long_addr_opt) return;
             const auto short_addr_opt = DaliDeviceController::getInstance().getShortAddress(*long_addr_opt);
             if (!short_addr_opt) {
@@ -195,7 +196,7 @@ namespace daliMQTT {
             return;
         }
 
-        auto long_addr_opt = stringToLongAddress(addr_item->valuestring);
+        auto long_addr_opt = utils::stringToLongAddress(addr_item->valuestring);
         if (!long_addr_opt) return; // Invalid long address format
 
         uint8_t group = group_item->valueint;
@@ -205,9 +206,9 @@ namespace daliMQTT {
 
         auto config = ConfigManager::getInstance().getConfig();
         auto const& mqtt = MQTTClient::getInstance();
-        std::string result_topic = std::format("{}{}", config.mqtt_base_topic, CONFIG_DALI2MQTT_MQTT_GROUP_RES_SUBTOPIC);
-        std::string payload = std::format(R"({{"status":"success","device":"{}","group":{},"action":"{}"}})", addr_item->valuestring, group, (assign ? "added" : "removed"));
-        mqtt.publish(result_topic, payload);
+         std::string result_topic = utils::stringFormat("%s%s", config.mqtt_base_topic.c_str(), CONFIG_DALI2MQTT_MQTT_GROUP_RES_SUBTOPIC);
+         std::string payload = utils::stringFormat(R"({"status":"success","device":"%s","group":%d,"action":"%s"})", addr_item->valuestring, group, (assign ? "added" : "removed"));
+         mqtt.publish(result_topic, payload);
 
         cJSON_Delete(root);
     }
@@ -272,22 +273,22 @@ namespace daliMQTT {
 
              auto const& mqtt = MQTTClient::getInstance();
              auto config_base = ConfigManager::getInstance().getMqttBaseTopic();
-             std::string reply_topic = std::format("{}/cmd/res", config_base);
+            std::string reply_topic = utils::stringFormat("%s/cmd/res", config_base.c_str());
 
              if (result.has_value()) {
                  std::string payload;
                  if (bits == 24) {
-                      payload = std::format(R"({{"status":"ok", "addr":{}, "cmd":{}, "bits":24, "response":{}, "hex":"{:06X}"}})",
-                         addr_val, cmd_val, *result, raw_data);
+                     payload = utils::stringFormat(R"({"status":"ok", "addr":%lu, "cmd":%lu, "bits":24, "response":%d, "hex":"%06lX"})",
+                       static_cast<unsigned long>(addr_val), static_cast<unsigned long>(cmd_val), *result, raw_data);
                  } else {
-                      payload = std::format(R"({{"status":"ok", "addr":{}, "cmd":{}, "bits":16, "response":{}, "hex":"{:04X}"}})",
-                         addr_val, cmd_val, *result, raw_data);
+                     payload = utils::stringFormat(R"({"status":"ok", "addr":%lu, "cmd":%lu, "bits":16, "response":%d, "hex":"%04lX"})",
+                        static_cast<unsigned long>(addr_val), static_cast<unsigned long>(cmd_val), *result, raw_data);
                  }
                  mqtt.publish(reply_topic, payload, 0, false);
                  ESP_LOGD(TAG, "Command reply: 0x%02X", *result);
              } else {
-                 std::string payload = std::format(R"({{"status":"no_reply", "addr":{}, "cmd":{}, "bits":{}}})",
-                    addr_val, cmd_val, bits);
+                 std::string payload = utils::stringFormat(R"({"status":"no_reply", "addr":%lu, "cmd":%lu, "bits":%d})",
+                    static_cast<unsigned long>(addr_val), static_cast<unsigned long>(cmd_val), bits);
                  mqtt.publish(reply_topic, payload, 0, false);
                  ESP_LOGD(TAG, "Command: No reply");
              }

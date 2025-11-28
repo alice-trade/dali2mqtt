@@ -2,6 +2,7 @@
 #include <esp_chip_info.h>
 #include <mbedtls/base64.h>
 #include "WebUI.hxx"
+#include <utils/StringUtils.hxx>
 #include "ConfigManager.hxx"
 #include "utils/FileHandle.hxx"
 
@@ -75,11 +76,11 @@ namespace daliMQTT
     }
 
     esp_err_t WebUI::staticFileGetHandler(httpd_req_t *req) {
-        std::string filepath = std::format("{}{}", WEB_MOUNT_POINT, (strcmp(req->uri, "/") == 0 ? "/index.html" : req->uri));
+        std::string filepath = utils::stringFormat("%s%s", WEB_MOUNT_POINT.data(), (strcmp(req->uri, "/") == 0 ? "/index.html" : req->uri));
 
         if (struct stat file_stat{}; stat(filepath.c_str(), &file_stat) == -1) {
             ESP_LOGD(TAG, "File '%s' not found. Assuming SPA route, serving index.html.", filepath.c_str());
-            filepath = std::format("{}/index.html", WEB_MOUNT_POINT);
+            filepath = utils::stringFormat("%s/index.html", WEB_MOUNT_POINT.data());
             if (stat(filepath.c_str(), &file_stat) == -1) {
                 ESP_LOGE(TAG, "FATAL: Fallback file index.html not found!");
                 httpd_resp_send_404(req);

@@ -18,7 +18,7 @@ namespace daliMQTT
             std::string base_topic;
             std::string availability_topic;
             std::string bridge_public_name;
-            std::unordered_map<std::string, std::string> device_identification;
+            std::map<std::string, std::string> device_identification;
     };
 } // daliMQTT
 

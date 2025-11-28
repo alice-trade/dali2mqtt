@@ -1,11 +1,9 @@
 #ifndef DALIMQTT_NVSHANDLE_HXX
 #define DALIMQTT_NVSHANDLE_HXX
 #include <esp_log.h>
-#include <format>
 #include <nvs.h>
 
-static constexpr char  TAG[] = "NVS_Handler";
-
+static constexpr char  TAG_NVS[] = "NVS_Handler";
 
 // RAII wrapper for NVS handle
 class NvsHandle {
@@ -13,7 +11,7 @@ public:
     NvsHandle(const char* ns, nvs_open_mode_t mode) {
         esp_err_t err = nvs_open(ns, mode, &m_handle);
         if (err != ESP_OK) {
-            ESP_LOGE(TAG, "%s", std::format("Error ({}) opening NVS handle!", esp_err_to_name(err)).c_str());
+            ESP_LOGE(TAG_NVS, "Error (%s) opening NVS handle!", esp_err_to_name(err));
             m_handle = 0;
         }
     }

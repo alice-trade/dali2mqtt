@@ -1,6 +1,7 @@
 #include <DaliDeviceController.hxx>
 #include <DaliGroupManagement.hxx>
 #include <DaliSceneManagement.hxx>
+#include <utils/StringUtils.hxx>
 #include "ConfigManager.hxx"
 #include "WebUI.hxx"
 #include "DaliAPI.hxx"
@@ -27,7 +28,7 @@ namespace daliMQTT {
 
         for (const auto& [long_addr, device] : devices) {
             cJSON* device_obj = cJSON_CreateObject();
-            const auto addr_str = longAddressToString(long_addr);
+            const auto addr_str = utils::longAddressToString(long_addr);
             cJSON_AddStringToObject(device_obj, "long_address", addr_str.data());
             cJSON_AddNumberToObject(device_obj, "short_address", device.short_address);
             cJSON_AddItemToArray(root, device_obj);
@@ -93,7 +94,7 @@ namespace daliMQTT {
     }
 
     esp_err_t WebUI::api::DaliGetStatusHandler(httpd_req_t *req) {
-        const char *status_str;
+        const char *status_str = nullptr;
         switch(g_dali_task_status.load()) {
             using enum DaliTaskStatus;
             case IDLE:
@@ -109,7 +110,7 @@ namespace daliMQTT {
                 status_str = "refreshing_groups";
                 break;
         }
-        const std::string response = std::format(R"({{"status":"{}"}})", status_str);
+        const std::string response = utils::stringFormat(R"({"status":"%s"})", status_str);
         httpd_resp_set_type(req, "application/json");
         httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
         return ESP_OK;
@@ -143,7 +144,7 @@ namespace daliMQTT {
 
         const cJSON* item = nullptr;
         cJSON_ArrayForEach(item, root) {
-            if (!stringToLongAddress(item->string)) {
+            if (!utils::stringToLongAddress(item->string)) {
                  cJSON_Delete(root);
                  httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON: all keys must be valid long addresses.");
                  return ESP_FAIL;
@@ -177,7 +178,7 @@ namespace daliMQTT {
         cJSON *root = cJSON_CreateObject();
 
         for (const auto& [long_addr, groups] : assignments) {
-            const auto addr_str = longAddressToString(long_addr);
+            const auto addr_str = utils::longAddressToString(long_addr);
             cJSON* group_array = cJSON_CreateArray();
             for (int i = 0; i < 16; ++i) {
                 if (groups.test(i)) {
@@ -214,7 +215,7 @@ namespace daliMQTT {
         GroupAssignments new_assignments;
         cJSON* device_item = nullptr;
         cJSON_ArrayForEach(device_item, root) {
-            auto long_addr_opt = stringToLongAddress(device_item->string);
+            auto long_addr_opt = utils::stringToLongAddress(device_item->string);
             if (!long_addr_opt) {
                 ESP_LOGW(TAG, "Skipping invalid long address key '%s' in set groups request.", device_item->string);
                 continue;
@@ -270,7 +271,7 @@ namespace daliMQTT {
 
         const cJSON* level_item = nullptr;
         cJSON_ArrayForEach(level_item, levels_item) {
-            auto long_addr_opt = stringToLongAddress(level_item->string);
+            auto long_addr_opt = utils::stringToLongAddress(level_item->string);
             if (!long_addr_opt) continue;
 
             auto short_addr_opt = controller.getShortAddress(*long_addr_opt);
@@ -344,7 +345,7 @@ namespace daliMQTT {
         for (const auto& [short_addr, level] : levels) {
             auto long_addr_opt = controller.getLongAddress(short_addr);
             if (long_addr_opt) {
-                cJSON_AddNumberToObject(levels_obj, longAddressToString(*long_addr_opt).data(), level);
+                cJSON_AddNumberToObject(levels_obj, utils::longAddressToString(*long_addr_opt).data(), level);
             }
         }
         cJSON_AddItemToObject(root, "levels", levels_obj);

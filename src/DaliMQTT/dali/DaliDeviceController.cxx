@@ -1,5 +1,6 @@
 #include "DaliDeviceController.hxx"
 #include <DaliGroupManagement.hxx>
+#include <utils/StringUtils.hxx>
 #include "ConfigManager.hxx"
 #include "DaliAddressMap.hxx"
 #include "DaliAPI.hxx"
@@ -46,11 +47,11 @@ namespace daliMQTT
         auto const& mqtt = MQTTClient::getInstance();
         auto config = ConfigManager::getInstance().getConfig();
 
-        const auto addr_str = longAddressToString(long_addr);
-        const std::string state_topic = std::format("{}/light/{}/state", config.mqtt_base_topic, addr_str.data());
+        const auto addr_str = utils::longAddressToString(long_addr);
+        const std::string state_topic = utils::stringFormat("%s/light/%s/state", config.mqtt_base_topic.c_str(), addr_str.data());
         if (level == 255) return;
 
-        const std::string payload = std::format(R"({{"state":"{}","brightness":{}}})", (level > 0 ? "ON" : "OFF"), level);
+        const std::string payload = utils::stringFormat(R"({"state":"%s","brightness":%d})", (level > 0 ? "ON" : "OFF"), level);
 
         ESP_LOGD(TAG, "Publishing to %s: %s", state_topic.c_str(), payload.c_str());
         mqtt.publish(state_topic, payload);
@@ -60,8 +61,8 @@ namespace daliMQTT
         auto const& mqtt = MQTTClient::getInstance();
         auto config = ConfigManager::getInstance().getConfig();
 
-        const auto addr_str = longAddressToString(long_addr);
-        const std::string status_topic = std::format("{}/light/{}/status", config.mqtt_base_topic, addr_str.data());
+        const auto addr_str = utils::longAddressToString(long_addr);
+        const std::string status_topic = utils::stringFormat("%s/light/%s/status", config.mqtt_base_topic.c_str(), addr_str.data());
 
         const std::string payload = is_available ? CONFIG_DALI2MQTT_MQTT_PAYLOAD_ONLINE : CONFIG_DALI2MQTT_MQTT_PAYLOAD_OFFLINE;
 
@@ -78,7 +79,7 @@ namespace daliMQTT
             }
             if (it->second.current_level != level || it->second.initial_sync_needed) {
                 ESP_LOGI(TAG, "State update for %s: %d -> %d (InitSync: %d)",
-                         longAddressToString(longAddr).data(), it->second.current_level, level, it->second.initial_sync_needed);
+                         utils::longAddressToString(longAddr).data(), it->second.current_level, level, it->second.initial_sync_needed);
                 it->second.current_level = level;
                 it->second.initial_sync_needed = false;
                 publishState(longAddr, level);
@@ -180,7 +181,7 @@ namespace daliMQTT
                     bool prev_availability = device.available;
                     if (new_availability != prev_availability) {
                         ESP_LOGD(TAG, "Availability change for %s: %s -> %s",
-                                longAddressToString(long_addr).data(), prev_availability ? "online" : "offline", new_availability ? "online" : "offline");
+                                utils::longAddressToString(long_addr).data(), prev_availability ? "online" : "offline", new_availability ? "online" : "offline");
                         {
                             std::lock_guard lock(self->m_devices_mutex);
                             if(self->m_devices.contains(long_addr)) {
@@ -263,7 +264,7 @@ namespace daliMQTT
                 ESP_LOGI(TAG, "Device found at short address %d. Querying long address...", sa);
                 if (auto long_addr_opt = dali.getLongAddress(sa)) {
                     DaliLongAddress_t long_addr = *long_addr_opt;
-                    const auto addr_str = longAddressToString(long_addr);
+                    const auto addr_str = utils::longAddressToString(long_addr);
                     ESP_LOGI(TAG, "  -> Long address: %s (0x%lX)", addr_str.data(), long_addr);
 
                     new_devices[long_addr] = DaliDevice{

@@ -3,6 +3,7 @@
 #include <esp_spiffs.h>
 #include <dirent.h>
 #include <esp_mac.h>
+#include <utils/StringUtils.hxx>
 
 namespace daliMQTT
 {
@@ -49,7 +50,7 @@ namespace daliMQTT
             } else if (ret == ESP_ERR_NOT_FOUND) {
                 ESP_LOGE(TAG, "Failed to find SPIFFS partition");
             } else {
-                ESP_LOGE(TAG, "%s", std::format("Failed to initialize SPIFFS ({})", error_msg).c_str());
+                ESP_LOGE(TAG, "Failed to initialize SPIFFS (%s)", error_msg);
             }
             return ret;
         }
@@ -98,7 +99,7 @@ namespace daliMQTT
         if (config_cache.client_id.empty()) {
           uint8_t mac[6];
           esp_read_mac(mac, ESP_MAC_WIFI_STA);
-          config_cache.client_id = std::format("dali_{:02x}{:02x}{:02x}", mac[3], mac[4], mac[5]);
+          config_cache.client_id = utils::stringFormat("dali_%02x%02x%02x", mac[3], mac[4], mac[5]);
         }
 
         uint8_t configured_flag = 0;
@@ -244,7 +245,7 @@ namespace daliMQTT
         if (err == ESP_OK) {
             ESP_LOGI(TAG, "Configuration saved successfully.");
         } else {
-            ESP_LOGE(TAG, "%s", std::format("Failed to commit NVS changes: {}", esp_err_to_name(err)).c_str());
+            ESP_LOGE(TAG, "Failed to commit NVS changes: %s", esp_err_to_name(err));
         }
 
         return err;
@@ -274,14 +275,14 @@ namespace daliMQTT
         if (err == ESP_ERR_NVS_NOT_FOUND) {
             if (default_value) {
                 out_value = default_value;
-                 ESP_LOGW(TAG, "%s", std::format("Key '{}' not found in NVS, using default value: '{}'", key, default_value).c_str());
+                 ESP_LOGW(TAG, "Key '%s' not found in NVS, using default value: '%s'", key, default_value);
             } else {
                 out_value.clear();
             }
             return ESP_OK;
         }
         if (err != ESP_OK) {
-            ESP_LOGE(TAG, "%s", std::format("Error reading key '{}': {}", key, esp_err_to_name(err)).c_str());
+            ESP_LOGE(TAG, "Error reading key '%s': %s", key, esp_err_to_name(err));
             return err;
         }
         if (required_size == 0) {
@@ -306,7 +307,7 @@ namespace daliMQTT
         const esp_err_t err = nvs_get_u32(handle, key, &out_value);
         if (err == ESP_ERR_NVS_NOT_FOUND) {
             out_value = default_value;
-            ESP_LOGW(TAG, "%s", std::format("Key '{}' not found in NVS, using default value: {}", key, default_value).c_str());
+            ESP_LOGW(TAG, "Key %s not found in NVS, using default value: %s", key, default_value);
             return ESP_OK;
         }
         return err;

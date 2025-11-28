@@ -1,6 +1,7 @@
 #include <esp_chip_info.h>
 #include <esp_system.h>
 #include <esp_timer.h>
+#include <utils/StringUtils.hxx>
 #include "DaliAPI.hxx"
 #include "DaliDeviceController.hxx"
 #include "WebUI.hxx"
@@ -52,14 +53,14 @@ namespace daliMQTT {
         esp_chip_info_t chip_info;
         esp_chip_info(&chip_info);
 
-        const std::string firmware_version = std::format("{} (built at: {})", DALIMQTT_VERSION, DALIMQTT_CONFIGURED_TIMESTAMP);
+        const std::string firmware_version = utils::stringFormat("%s (built at: %s)", DALIMQTT_VERSION, DALIMQTT_CONFIGURED_TIMESTAMP);
 
         // Get DALI status
         const auto& dali_api = DaliAPI::getInstance();
         std::string dali_status;
         if (dali_api.isInitialized()) {
             const auto discovered_devices = DaliDeviceController::getInstance().getDevices().size();
-            dali_status = std::format("Active, {} devices found", discovered_devices);
+            dali_status = utils::stringFormat("Active, %zu devices found", discovered_devices);
         } else {
             dali_status = "Inactive (Provisioning Mode)";
         }
@@ -74,7 +75,7 @@ namespace daliMQTT {
 
         // Get WiFi status
         const auto& wifi = Wifi::getInstance();
-        const std::string wifi_status_str = std::format("{} ({})", get_wifi_status_string(wifi.getStatus()), wifi.getIpAddress());
+        const std::string wifi_status_str = utils::stringFormat("%s (%s)", get_wifi_status_string(wifi.getStatus()), wifi.getIpAddress().c_str());
 
         cJSON *root = cJSON_CreateObject();
         cJSON_AddStringToObject(root, "version",  firmware_version.c_str());

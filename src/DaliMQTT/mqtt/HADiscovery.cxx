@@ -3,6 +3,7 @@
 #include "ConfigManager.hxx"
 #include "DaliDeviceController.hxx"
 #include "utils/DaliLongAddrConversions.hxx"
+#include "utils/StringUtils.hxx"
 
 namespace daliMQTT
 {
@@ -10,13 +11,13 @@ namespace daliMQTT
         const auto config = ConfigManager::getInstance().getConfig();
 
         base_topic = config.mqtt_base_topic;
-        availability_topic = std::format("{}{}", base_topic, CONFIG_DALI2MQTT_MQTT_AVAILABILITY_TOPIC);
-        bridge_public_name = std::format("DALI-MQTT Bridge ({})", config.client_id);
+        availability_topic = utils::stringFormat("%s%s", base_topic.c_str(), CONFIG_DALI2MQTT_MQTT_AVAILABILITY_TOPIC);
+        bridge_public_name = utils::stringFormat("DALI-MQTT Bridge (%s)", config.client_id.c_str());
 
         cJSON* names_root = cJSON_Parse(config.dali_device_identificators.c_str());
         if (cJSON_IsObject(names_root)) {
             const cJSON* current_name = nullptr;
-            const auto addr_str = longAddressToString(0);
+            const auto addr_str = utils::longAddressToString(0);
             cJSON_ArrayForEach(current_name, names_root) {
                 if (cJSON_IsString(current_name) && current_name->valuestring != nullptr) {
                     std::string key(current_name->string, strnlen(current_name->string, addr_str.size()));
@@ -43,12 +44,12 @@ namespace daliMQTT
     void MQTTHomeAssistantDiscovery::publishLight(const DaliLongAddress_t long_addr) {
         const auto& mqtt = MQTTClient::getInstance();
 
-        const auto addr_str_arr = longAddressToString(long_addr);
+        const auto addr_str_arr = utils::longAddressToString(long_addr);
         const std::string addr_str(addr_str_arr.data());
 
-        const std::string object_id = std::format("dali_light_{}", addr_str);
-        const std::string discovery_topic = std::format("homeassistant/light/{}/config", object_id);
-        const std::string device_status_topic = std::format("{}/light/{}/status", base_topic, addr_str);
+        const std::string object_id = utils::stringFormat("dali_light_%s", addr_str.c_str());
+        const std::string discovery_topic = utils::stringFormat("homeassistant/light/%s/config", object_id.c_str());
+        const std::string device_status_topic = utils::stringFormat("%s/light/%s/status", base_topic.c_str(), addr_str.c_str());
 
         std::string readable_name;
         const auto it = device_identification.find(addr_str);
@@ -56,7 +57,7 @@ namespace daliMQTT
             readable_name = it->second;
         }
         if (readable_name.empty()) {
-            readable_name = std::format("DALI Device {}", addr_str);
+            readable_name = utils::stringFormat("DALI Device %s", addr_str.c_str());
         }
 
         cJSON* root = cJSON_CreateObject();
@@ -65,8 +66,8 @@ namespace daliMQTT
         cJSON_AddStringToObject(root, "name", readable_name.c_str());
         cJSON_AddStringToObject(root, "unique_id", object_id.c_str());
         cJSON_AddStringToObject(root, "schema", "json");
-        cJSON_AddStringToObject(root, "command_topic", std::format("{}/light/{}/set", base_topic, addr_str).c_str());
-        cJSON_AddStringToObject(root, "state_topic", std::format("{}/light/{}/state", base_topic, addr_str).c_str());
+        cJSON_AddStringToObject(root, "command_topic", utils::stringFormat("%s/light/%s/set", base_topic.c_str(), addr_str.c_str()).c_str());
+        cJSON_AddStringToObject(root, "state_topic", utils::stringFormat("%s/light/%s/state", base_topic.c_str(), addr_str.c_str()).c_str());
         cJSON_AddTrueToObject(root, "brightness");
 
         cJSON* av_list = cJSON_CreateArray();
@@ -105,9 +106,9 @@ namespace daliMQTT
     void MQTTHomeAssistantDiscovery::publishGroup(uint8_t group_id) {
         const auto& mqtt = MQTTClient::getInstance();
         const auto config = ConfigManager::getInstance().getConfig();
-        const std::string object_id = std::format("dali_group_{}_{}", config.client_id, group_id);
-        const std::string discovery_topic = std::format("homeassistant/light/{}/config", object_id);
-        const std::string readable_name = std::format("DALI Group {}", group_id);
+        const std::string object_id = utils::stringFormat("dali_group_%s_%d", config.client_id.c_str(), group_id);
+        const std::string discovery_topic = utils::stringFormat("homeassistant/light/%s/config", object_id.c_str());
+        const std::string readable_name = utils::stringFormat("DALI Group %d", group_id);
 
         cJSON* root = cJSON_CreateObject();
         if (!root) return;
@@ -116,9 +117,9 @@ namespace daliMQTT
         cJSON_AddStringToObject(root, "unique_id", object_id.c_str());
         cJSON_AddStringToObject(root, "schema", "json");
         cJSON_AddStringToObject(root, "command_topic",
-                                std::format("{}/light/group/{}/set", base_topic, group_id).c_str());
+                                utils::stringFormat("%s/light/group/%d/set", base_topic.c_str(), group_id).c_str());
         cJSON_AddStringToObject(root, "state_topic",
-                                std::format("{}/light/group/{}/state", base_topic, group_id).c_str());
+                                utils::stringFormat("%s/light/group/%d/state", base_topic.c_str(), group_id).c_str());
 
         cJSON_AddTrueToObject(root, "brightness");
         cJSON_AddStringToObject(root, "availability_topic", availability_topic.c_str());
@@ -145,8 +146,8 @@ namespace daliMQTT
     void MQTTHomeAssistantDiscovery::publishSceneSelector() {
         const auto& mqtt = MQTTClient::getInstance();
         const auto config = ConfigManager::getInstance().getConfig();
-        const std::string object_id = std::format("dali_scenes_{}", config.client_id);
-        const std::string discovery_topic = std::format("homeassistant/select/{}/config", object_id);
+        const std::string object_id = utils::stringFormat("dali_scenes_%s", config.client_id.c_str());
+        const std::string discovery_topic = utils::stringFormat("homeassistant/select/%s/config", object_id.c_str());
 
         cJSON* root = cJSON_CreateObject();
         if (!root) return;
@@ -154,11 +155,11 @@ namespace daliMQTT
         cJSON_AddStringToObject(root, "name", "DALI Scenes");
         cJSON_AddStringToObject(root, "unique_id", object_id.c_str());
         cJSON_AddStringToObject(root, "command_topic",
-                                std::format("{}{}", base_topic, CONFIG_DALI2MQTT_MQTT_SCENE_CMD_SUBTOPIC).c_str());
+                                utils::stringFormat("%s%s", base_topic.c_str(), CONFIG_DALI2MQTT_MQTT_SCENE_CMD_SUBTOPIC).c_str());
 
         cJSON* options = cJSON_CreateArray();
         for (int i = 0; i < 16; ++i) {
-            cJSON_AddItemToArray(options, cJSON_CreateString(std::format("Scene {}", i).c_str()));
+            cJSON_AddItemToArray(options, cJSON_CreateString(utils::stringFormat("Scene %d", i).c_str()));
         }
         cJSON_AddItemToObject(root, "options", options);
 

@@ -4,8 +4,8 @@
 #include <mdns.h>
 #include "Wifi.hxx"
 #include <ConfigManager.hxx>
+#include <utils/StringUtils.hxx>
 #include "utils/NvsHandle.hxx"
-#include "sdkconfig.h"
 
 namespace daliMQTT
 {
@@ -120,7 +120,7 @@ namespace daliMQTT
             {"path", "/"}
         }};
 
-        std::string instance_name = std::format("DALI Bridge ({})", config.client_id);
+        std::string instance_name = utils::stringFormat("DALI Bridge (%s)", config.client_id.c_str());
         ESP_ERROR_CHECK(mdns_instance_name_set(instance_name.c_str()));
 
         ESP_ERROR_CHECK(mdns_service_add(nullptr, "_http", "_tcp", 80, serviceTxtData.data(), serviceTxtData.size()));

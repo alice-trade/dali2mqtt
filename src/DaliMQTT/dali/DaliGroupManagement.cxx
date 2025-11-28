@@ -1,4 +1,7 @@
 #include "DaliGroupManagement.hxx"
+
+#include <utils/StringUtils.hxx>
+
 #include "ConfigManager.hxx"
 #include "DaliDeviceController.hxx"
 #include "DaliAPI.hxx"
@@ -28,7 +31,7 @@ namespace daliMQTT
 
         cJSON* device_item = nullptr;
         cJSON_ArrayForEach(device_item, root) {
-            auto long_addr_opt = stringToLongAddress(device_item->string);
+            auto long_addr_opt = utils::stringToLongAddress(device_item->string);
             if (!long_addr_opt) {
                 ESP_LOGW(TAG, "Skipping invalid key '%s' in DALI group assignments JSON.", device_item->string);
                 continue;
@@ -61,7 +64,7 @@ namespace daliMQTT
             if (!root) return ESP_ERR_NO_MEM;
 
             for (const auto& [addr, groups] : m_assignments) {
-                const auto addr_str = longAddressToString(addr);
+                const auto addr_str = utils::longAddressToString(addr);
                 cJSON* group_array = cJSON_CreateArray();
                 for (int i = 0; i < 16; ++i) {
                     if (groups.test(i)) {
@@ -192,12 +195,12 @@ namespace daliMQTT
             if (auto groups_opt = dali.getDeviceGroups(device.short_address)) {
                 new_assignments[long_addr] = *groups_opt;
                 ESP_LOGD(TAG, "Device %s (SA %d) has group mask: %s",
-                         longAddressToString(long_addr).data(),
+                         utils::longAddressToString(long_addr).data(),
                          device.short_address,
                          groups_opt->to_string().c_str());
             } else {
                 ESP_LOGW(TAG, "Failed to get group info for device %s (SA %d)",
-                         longAddressToString(long_addr).data(),
+                         utils::longAddressToString(long_addr).data(),
                          device.short_address);
             }
             vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
@@ -255,11 +258,11 @@ namespace daliMQTT
 
     void DaliGroupManagement::publishGroupState(uint8_t group_id, uint8_t level) const {
         auto const& mqtt = MQTTClient::getInstance();
-        auto config = ConfigManager::getInstance().getConfig();
+        const auto config = ConfigManager::getInstance().getConfig();
 
         // Topic: base/light/group/+/state
-        const std::string state_topic = std::format("{}/light/group/{}/state", config.mqtt_base_topic, group_id);
-        const std::string payload = std::format(R"({{"state":"{}","brightness":{}}})", (level > 0 ? "ON" : "OFF"), level);
+        const std::string state_topic = utils::stringFormat("%s/light/group/%d/state", config.mqtt_base_topic.c_str(), group_id);
+        const std::string payload = utils::stringFormat(R"({"state":"%s","brightness":%d})", (level > 0 ? "ON" : "OFF"), level);
 
         ESP_LOGD(TAG, "Publishing Group %d State: %s", group_id, payload.c_str());
         mqtt.publish(state_topic, payload);

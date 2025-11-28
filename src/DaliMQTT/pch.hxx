@@ -8,8 +8,9 @@
 #include <atomic>
 #include <bitset>
 #include <charconv>
+#include <cstdarg>
+#include <cstdio>
 #include <cstring>
-#include <format>
 #include <functional>
 #include <map>
 #include <mutex>
@@ -17,7 +18,6 @@
 #include <ranges>
 #include <string>
 #include <string_view>
-#include <unordered_map>
 #include <vector>
 
 // C headers

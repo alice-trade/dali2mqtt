@@ -3,7 +3,7 @@
 #include "DaliTypes.hxx"
 
 // Utility functions
-namespace daliMQTT {
+namespace daliMQTT::utils {
     /**
      * @brief Convert DaliLongAddress_t to HEX string
      * @param addr 24-bit DALI long address.
