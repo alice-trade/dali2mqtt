@@ -219,8 +219,6 @@ namespace daliMQTT
         ESP_LOGI(TAG, "DALI background sync task started.");
 
         while (true) {
-            vTaskDelay(pdMS_TO_TICKS(config.dali_poll_interval_ms));
-            
             std::map<DaliLongAddress_t, DaliDevice> devices_to_poll;
             {
                 std::lock_guard lock(self->m_devices_mutex);
@@ -311,6 +309,7 @@ namespace daliMQTT
             for(const auto& [group_id, level] : group_sync_levels) {
                 DaliGroupManagement::getInstance().updateGroupState(group_id, level);
             }
+            vTaskDelay(pdMS_TO_TICKS(config.dali_poll_interval_ms));
         }
     }
 
