@@ -63,6 +63,12 @@ namespace daliMQTT
         // Получение маски группы
         [[nodiscard]] std::optional<std::bitset<16>> getDeviceGroups(uint8_t shortAddress);
 
+        std::optional<uint8_t> getDeviceType(uint8_t shortAddress);
+
+        std::optional<std::string> getGTIN(uint8_t shortAddress);
+
+        std::optional<uint8_t> getDeviceStatus(uint8_t shortAddress);
+
         // Получение long address устройства по short address
         [[nodiscard]] std::optional<DaliLongAddress_t> getLongAddress(uint8_t shortAddress);
 

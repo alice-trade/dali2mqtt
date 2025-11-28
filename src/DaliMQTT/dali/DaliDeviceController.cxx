@@ -43,23 +43,27 @@ namespace daliMQTT
             ESP_LOGE(TAG, "Cannot start DALI tasks: DaliAPI not initialized.");
         }
     }
-    void DaliDeviceController::publishState(const DaliLongAddress_t long_addr, uint8_t level) {
+    void DaliDeviceController::publishState(const DaliLongAddress_t long_addr, const uint8_t level, const bool lamp_failure) {
         auto const& mqtt = MQTTClient::getInstance();
-        auto config = ConfigManager::getInstance().getConfig();
+        const auto config = ConfigManager::getInstance().getConfig();
 
         const auto addr_str = utils::longAddressToString(long_addr);
         const std::string state_topic = utils::stringFormat("%s/light/%s/state", config.mqtt_base_topic.c_str(), addr_str.data());
         if (level == 255) return;
 
-        const std::string payload = utils::stringFormat(R"({"state":"%s","brightness":%d})", (level > 0 ? "ON" : "OFF"), level);
-
+        const std::string payload = utils::stringFormat(
+                R"({"state":"%s","brightness":%d,"lamp_failure":%s})",
+                (level > 0 ? "ON" : "OFF"),
+                level,
+                (lamp_failure ? "true" : "false")
+            );
         ESP_LOGD(TAG, "Publishing to %s: %s", state_topic.c_str(), payload.c_str());
         mqtt.publish(state_topic, payload, 0, true); // publish with RETAIN (!)
     }
 
     void DaliDeviceController::publishAvailability(const DaliLongAddress_t long_addr, const bool is_available) {
         auto const& mqtt = MQTTClient::getInstance();
-        auto config = ConfigManager::getInstance().getConfig();
+        const auto config = ConfigManager::getInstance().getConfig();
 
         const auto addr_str = utils::longAddressToString(long_addr);
         const std::string status_topic = utils::stringFormat("%s/light/%s/status", config.mqtt_base_topic.c_str(), addr_str.data());
@@ -70,21 +74,75 @@ namespace daliMQTT
         mqtt.publish(status_topic, payload, 1, true);
     }
 
-    void DaliDeviceController::updateDeviceState(DaliLongAddress_t longAddr, uint8_t level) {
+    void DaliDeviceController::updateDeviceState(DaliLongAddress_t longAddr, uint8_t level, std::optional<bool> lamp_failure) {
         std::lock_guard lock(m_devices_mutex);
         const auto it = m_devices.find(longAddr);
         if (it != m_devices.end()) {
+            bool state_changed = false;
+
             if (level > 0) {
                 it->second.last_level = level;
             }
-            if (it->second.current_level != level || it->second.initial_sync_needed) {
-                ESP_LOGI(TAG, "State update for %s: %d -> %d (InitSync: %d)",
-                         utils::longAddressToString(longAddr).data(), it->second.current_level, level, it->second.initial_sync_needed);
+
+            if (it->second.current_level != level) {
                 it->second.current_level = level;
+                state_changed = true;
+            }
+            bool actual_failure_status = lamp_failure.has_value() ? *lamp_failure : it->second.lamp_failure;
+
+            if (it->second.lamp_failure != actual_failure_status) {
+                ESP_LOGW(TAG, "Lamp failure status changed for %s: %d", utils::longAddressToString(longAddr).data(), actual_failure_status);
+                it->second.lamp_failure = actual_failure_status;
+                state_changed = true;
+            }
+
+            if (state_changed || it->second.initial_sync_needed) {
+                ESP_LOGI(TAG, "State update for %s: Level=%d, Fail=%d (InitSync: %d)",
+                         utils::longAddressToString(longAddr).data(), level, actual_failure_status, it->second.initial_sync_needed);
+
+                publishState(longAddr, level, actual_failure_status);
+
                 it->second.initial_sync_needed = false;
-                publishState(longAddr, level);
             }
         }
+    }
+    void DaliDeviceController::publishAttributes(const DaliLongAddress_t long_addr) {
+        auto const& mqtt = MQTTClient::getInstance();
+        const auto config = ConfigManager::getInstance().getConfig();
+        const auto addr_str = utils::longAddressToString(long_addr);
+
+        DaliDevice dev_copy;
+        {
+            std::lock_guard lock(getInstance().m_devices_mutex);
+            if (!getInstance().m_devices.contains(long_addr)) return;
+            dev_copy = getInstance().m_devices.at(long_addr);
+        }
+        const std::string attr_topic = utils::stringFormat("%s/light/%s/attributes", config.mqtt_base_topic.c_str(), addr_str.data());
+
+        cJSON* root = cJSON_CreateObject();
+
+        if (dev_copy.device_type != -1) {
+            cJSON_AddNumberToObject(root, "device_type", dev_copy.device_type);
+            auto type_str = "Unknown";
+            if (dev_copy.device_type == 6) type_str = "LED Module (DT6)";
+            else if (dev_copy.device_type == 8) type_str = "Colour Control (DT8)";
+            cJSON_AddStringToObject(root, "device_type_str", type_str);
+        }
+
+        if (!dev_copy.gtin.empty()) {
+            cJSON_AddStringToObject(root, "gtin", dev_copy.gtin.c_str());
+        }
+
+        cJSON_AddNumberToObject(root, "short_address", dev_copy.short_address);
+
+        char* json_str = cJSON_PrintUnformatted(root);
+        if (json_str) {
+            mqtt.publish(attr_topic, json_str, 1, true);
+            free(json_str);
+        }
+        cJSON_Delete(root);
+
+        ESP_LOGI(TAG, "Published extended attributes for %s", addr_str.data());
     }
 
     std::optional<uint8_t> DaliDeviceController::getLastLevel(const DaliLongAddress_t longAddress) const {
@@ -151,7 +209,7 @@ namespace daliMQTT
         }
     }
 
-    [[noreturn]] void DaliDeviceController::daliSyncTask(void* pvParameters) {
+    [[noreturn]] void DaliDeviceController::daliSyncTask(void* pvParameters) { // TODO: Rewrite to adaptive sync task with different causes
         auto* self = static_cast<DaliDeviceController*>(pvParameters);
         if (!self) { vTaskDelete(nullptr); }
 
@@ -179,6 +237,7 @@ namespace daliMQTT
 
                     bool new_availability = level_opt.has_value();
                     bool prev_availability = device.available;
+                    bool lamp_failure = device.lamp_failure;
                     if (new_availability != prev_availability) {
                         ESP_LOGD(TAG, "Availability change for %s: %s -> %s",
                                 utils::longAddressToString(long_addr).data(), prev_availability ? "online" : "offline", new_availability ? "online" : "offline");
@@ -192,9 +251,33 @@ namespace daliMQTT
                     }
 
                     if (new_availability && level_opt.value() != 255) {
-                        self->updateDeviceState(long_addr, level_opt.value());
-                    } else if (!new_availability) {
-                        ESP_LOGD(TAG, "No reply from DALI device short addr %d", device.short_address);
+                        auto status_opt = dali.getDeviceStatus(device.short_address);
+                        if (status_opt.has_value()) {
+                            uint8_t st = *status_opt;
+                            lamp_failure = (st >> 1) & 0x01;
+                        }
+
+                        uint8_t actual_level = (level_opt.value() == 255) ? device.current_level : level_opt.value();
+                        self->updateDeviceState(long_addr, actual_level, lamp_failure);
+
+                        if (!device.static_data_loaded) {
+                            ESP_LOGI(TAG, "Performing extended init for SA %d", device.short_address);
+
+                            auto dt_opt = dali.getDeviceType(device.short_address);
+                            // auto gtin_opt = dali.getGTIN(device.short_address);
+
+                            {
+                                std::lock_guard lock(self->m_devices_mutex);
+                                if(self->m_devices.contains(long_addr)) {
+                                    auto& dev_ref = self->m_devices.at(long_addr);
+                                    if (dt_opt) dev_ref.device_type = *dt_opt;
+                                    // if (gtin_opt) dev_ref.gtin = *gtin_opt;
+                                    dev_ref.static_data_loaded = true;
+                                }
+                            }
+                            self->publishAttributes(long_addr);
+                            vTaskDelay(pdMS_TO_TICKS(10));
+                        }
                     }
 
                     vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_POLL_DELAY_MS));

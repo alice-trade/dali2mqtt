@@ -317,6 +317,37 @@ namespace daliMQTT
         }
         return std::nullopt;
     }
+    std::optional<uint8_t> DaliAPI::getDeviceType(const uint8_t shortAddress) {
+        // QUERY DEVICE TYPE
+        return sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddress, DALI_COMMAND_QUERY_DEVICE_TYPE);
+    }
+
+    std::optional<uint8_t> DaliAPI::getDeviceStatus(const uint8_t shortAddress) {
+        // QUERY STATUS
+        return sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddress, DALI_COMMAND_QUERY_STATUS);
+    }
+
+    std::optional<std::string> DaliAPI::getGTIN(const uint8_t shortAddress) {
+        std::lock_guard lock(bus_mutex);
+
+        m_dali_impl.set_dtr1(0, shortAddress);
+
+        std::string gtin_res;
+        for (uint8_t offset = 0x03; offset <= 0x08; ++offset) {
+            m_dali_impl.set_dtr0(offset, shortAddress);
+            const int16_t byte_val = m_dali_impl.cmd(DALI_READ_MEMORY_LOCATION, (shortAddress << 1) | 1);
+
+            if (byte_val >= 0) {
+                char buf[4];
+                snprintf(buf, sizeof(buf), "%02X", static_cast<uint8_t>(byte_val));
+                gtin_res += buf;
+            } else {
+                return std::nullopt;
+            }
+            vTaskDelay(pdMS_TO_TICKS(5));
+        }
+        return gtin_res;
+    }
 
     bool DaliAPI::isInitialized() const {
         return m_initialized;
