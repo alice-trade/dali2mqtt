@@ -307,7 +307,7 @@ namespace daliMQTT
         const esp_err_t err = nvs_get_u32(handle, key, &out_value);
         if (err == ESP_ERR_NVS_NOT_FOUND) {
             out_value = default_value;
-            ESP_LOGW(TAG, "Key %s not found in NVS, using default value: %s", key, default_value);
+            ESP_LOGW(TAG, "Key %s not found in NVS, using default value: %lu", key, static_cast<unsigned long>(default_value));
             return ESP_OK;
         }
         return err;
