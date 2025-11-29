@@ -113,7 +113,7 @@ namespace daliMQTT
 
         DaliDevice dev_copy;
         {
-            std::lock_guard lock(getInstance().m_devices_mutex);
+            std::lock_guard lock(m_devices_mutex);
             if (!getInstance().m_devices.contains(long_addr)) return;
             dev_copy = getInstance().m_devices.at(long_addr);
         }
@@ -357,7 +357,7 @@ namespace daliMQTT
                         .current_level = 0,
                         .last_level = 254,
                         .is_present = true,
-                        .available = true,
+                        .available = false,
                         .initial_sync_needed = true
                     };
                     new_short_to_long_map[sa] = long_addr;
