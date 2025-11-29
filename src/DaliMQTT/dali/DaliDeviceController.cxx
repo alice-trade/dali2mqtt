@@ -121,11 +121,13 @@ namespace daliMQTT
 
         cJSON* root = cJSON_CreateObject();
 
-        if (dev_copy.device_type != -1) {
-            cJSON_AddNumberToObject(root, "device_type", dev_copy.device_type);
+        if (dev_copy.device_type.has_value()) {
+            uint8_t dt = dev_copy.device_type.value();
+            cJSON_AddNumberToObject(root, "device_type", dt);
+
             auto type_str = "Unknown";
-            if (dev_copy.device_type == 6) type_str = "LED Module (DT6)";
-            else if (dev_copy.device_type == 8) type_str = "Colour Control (DT8)";
+            if (dt == 6) type_str = "LED Module (DT6)";
+            else if (dt == 8) type_str = "Colour Control (DT8)";
             cJSON_AddStringToObject(root, "device_type_str", type_str);
         }
 
@@ -268,7 +270,7 @@ namespace daliMQTT
                                 std::lock_guard lock(self->m_devices_mutex);
                                 if(self->m_devices.contains(long_addr)) {
                                     auto& dev_ref = self->m_devices.at(long_addr);
-                                    if (dt_opt) dev_ref.device_type = *dt_opt;
+                                    dev_ref.device_type = dt_opt;
                                     // if (gtin_opt) dev_ref.gtin = *gtin_opt;
                                     dev_ref.static_data_loaded = true;
                                 }

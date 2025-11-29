@@ -28,7 +28,7 @@ namespace daliMQTT
         uint8_t last_level{254};            // Last Level
         uint8_t status_byte{0};             //  Current status
         bool lamp_failure{false};
-        int device_type{-1};                // Device Type
+        std::optional<uint8_t> device_type; // Device Type
         std::string gtin;                   // GTIN
         bool is_present{false};             // Presence flag
         bool available{false};              // Runtime Availability flag
