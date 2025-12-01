@@ -6,7 +6,7 @@
 #include "DaliAPI.hxx"
 #include "MQTTClient.hxx"
 #include "utils/DaliLongAddrConversions.hxx"
-
+#include <esp_timer.h>
 namespace daliMQTT
 {
     static constexpr char TAG[] = "DaliDeviceController";
@@ -211,107 +211,176 @@ namespace daliMQTT
         }
     }
 
-    [[noreturn]] void DaliDeviceController::daliSyncTask(void* pvParameters) { // TODO: Rewrite to adaptive sync task with different causes
-        auto* self = static_cast<DaliDeviceController*>(pvParameters);
-        if (!self) { vTaskDelete(nullptr); }
+    void DaliDeviceController::requestDeviceSync(uint8_t shortAddress, uint32_t delay_ms) {
+        if (shortAddress >= 64) return;
+        std::lock_guard lock(m_queue_mutex);
 
-        auto config = ConfigManager::getInstance().getConfig();
+        if (delay_ms == 0) {
+            if (m_priority_set.find(shortAddress) == m_priority_set.end()) {
+                m_priority_queue.push_back(shortAddress);
+                m_priority_set.insert(shortAddress);
+                ESP_LOGD(TAG, "Scheduled IMMEDIATE poll for SA: %d", shortAddress);
+            }
+        } else {
+            int64_t now = esp_timer_get_time() / 1000;
+            int64_t target_time = now + delay_ms;
+            m_deferred_requests.push_back({shortAddress, target_time});
+            ESP_LOGD(TAG, "Scheduled DELAYED poll for SA: %d in %u ms", shortAddress, delay_ms);
+        }
+    }
+
+    void DaliDeviceController::pollSingleDevice(uint8_t shortAddr) {
+        DaliLongAddress_t long_addr = 0;
+        bool known_device = false;
+
+        {
+            std::lock_guard lock(m_devices_mutex);
+            if (auto it = m_short_to_long_map.find(shortAddr); it != m_short_to_long_map.end()) {
+                long_addr = it->second;
+                known_device = true;
+            }
+        }
+
+        if (!known_device) {
+            return;
+        }
+
         auto& dali = DaliAPI::getInstance();
 
-        ESP_LOGI(TAG, "DALI background sync task started.");
+        auto level_opt = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddr, DALI_COMMAND_QUERY_ACTUAL_LEVEL);
+
+        bool is_present = level_opt.has_value();
+        {
+            std::lock_guard lock(m_devices_mutex);
+            if (m_devices.contains(long_addr)) {
+                if (m_devices[long_addr].available != is_present) {
+                    m_devices[long_addr].available = is_present;
+                    publishAvailability(long_addr, is_present);
+                }
+            } else {
+                return;
+            }
+        }
+
+        if (!is_present) return;
+
+        auto status_opt = dali.getDeviceStatus(shortAddr);
+        bool lamp_failure = false;
+        if (status_opt.has_value()) {
+            lamp_failure = (*status_opt >> 1) & 0x01;
+        }
+
+        uint8_t current_cached_level = 0;
+        {
+             std::lock_guard lock(m_devices_mutex);
+             if(m_devices.contains(long_addr)) current_cached_level = m_devices[long_addr].current_level;
+        }
+
+        uint8_t actual_level = (level_opt.value() == 255) ? current_cached_level : level_opt.value();
+
+        updateDeviceState(long_addr, actual_level, lamp_failure);
+
+        bool needs_static_data = false;
+        {
+            std::lock_guard lock(m_devices_mutex);
+            if (m_devices.contains(long_addr) && !m_devices[long_addr].static_data_loaded) {
+                needs_static_data = true;
+            }
+        }
+
+        if (needs_static_data) {
+                auto dt_opt = dali.getDeviceType(shortAddr);
+                {
+                    std::lock_guard lock(m_devices_mutex);
+                    if(m_devices.contains(long_addr)) {
+                        m_devices[long_addr].device_type = dt_opt;
+                        m_devices[long_addr].static_data_loaded = true;
+                    }
+                }
+                publishAttributes(long_addr);
+        }
+    }
+
+
+    [[noreturn]] void DaliDeviceController::daliSyncTask(void* pvParameters) {
+        auto* self = static_cast<DaliDeviceController*>(pvParameters);
+
+        ESP_LOGI(TAG, "Dali Adaptive Sync Task Started.");
+
+        const auto config = ConfigManager::getInstance().getConfig();
+
+        const uint32_t safe_cycle_time = std::max<uint32_t>(1000, config.dali_poll_interval_ms);
+        const uint32_t calc_delay_ms = safe_cycle_time >> 6;
+        const TickType_t rr_delay_ticks = pdMS_TO_TICKS(std::max<uint32_t>(20, calc_delay_ms));
+        const TickType_t priority_delay_ticks = pdMS_TO_TICKS(10);
 
         while (true) {
-            std::map<DaliLongAddress_t, DaliDevice> devices_to_poll;
+            uint8_t priority_addr = 255;
+            bool has_priority = false;
+            int64_t now = esp_timer_get_time() / 1000;
+
             {
-                std::lock_guard lock(self->m_devices_mutex);
-                devices_to_poll = self->m_devices;
+                std::lock_guard lock(self->m_queue_mutex);
+
+                if (!self->m_deferred_requests.empty()) {
+                    auto it = self->m_deferred_requests.begin();
+                    while (it != self->m_deferred_requests.end()) {
+                        if (now >= it->execute_at_ts) {
+                            if (self->m_priority_set.find(it->short_address) == self->m_priority_set.end()) {
+                                self->m_priority_queue.push_back(it->short_address);
+                                self->m_priority_set.insert(it->short_address);
+                            }
+                            it = self->m_deferred_requests.erase(it);
+                        } else {
+                            ++it;
+                        }
+                    }
+                }
+
+                if (!self->m_priority_queue.empty()) {
+                    priority_addr = self->m_priority_queue.front();
+                    self->m_priority_queue.erase(self->m_priority_queue.begin());
+                    self->m_priority_set.erase(priority_addr);
+                    has_priority = true;
+                }
             }
 
-            if (devices_to_poll.empty()) {
-                ESP_LOGD(TAG, "No active devices to poll.");
+            if (has_priority) {
+                self->pollSingleDevice(priority_addr);
+                vTaskDelay(priority_delay_ticks);
             } else {
-                ESP_LOGD(TAG, "Polling %zu active DALI devices...", devices_to_poll.size());
-                for (const auto& [long_addr, device] : devices_to_poll) {
-                    if (!device.is_present) continue;
-                    auto level_opt = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, device.short_address, DALI_COMMAND_QUERY_ACTUAL_LEVEL);
+                self->pollSingleDevice(self->m_round_robin_index);
 
-                    bool new_availability = level_opt.has_value();
-                    bool prev_availability = device.available;
-                    bool lamp_failure = device.lamp_failure;
-                    if (new_availability != prev_availability) {
-                        ESP_LOGD(TAG, "Availability change for %s: %s -> %s",
-                                utils::longAddressToString(long_addr).data(), prev_availability ? "online" : "offline", new_availability ? "online" : "offline");
-                        {
-                            std::lock_guard lock(self->m_devices_mutex);
-                            if(self->m_devices.contains(long_addr)) {
-                                self->m_devices.at(long_addr).available = new_availability;
+                self->m_round_robin_index++;
+                if (self->m_round_robin_index >= 64)
+                {
+                    self->m_round_robin_index = 0;
+                    auto all_assignments = DaliGroupManagement::getInstance().getAllAssignments();
+                    std::map<DaliLongAddress_t, uint8_t> current_levels;
+                    {
+                        std::lock_guard lock(self->m_devices_mutex);
+                        for(const auto& [addr, dev] : self->m_devices) {
+                            if(dev.is_present && dev.available) current_levels[addr] = dev.current_level;
+                        }
+                    }
+                    std::map<uint8_t, uint8_t> group_sync_levels;
+                    for (const auto& [long_addr, groups] : all_assignments) {
+                        if (!current_levels.contains(long_addr)) continue;
+                        uint8_t level = current_levels.at(long_addr);
+                        for (uint8_t group = 0; group < 16; ++group) {
+                            if (groups.test(group)) {
+                                if (!group_sync_levels.contains(group)) group_sync_levels[group] = level;
+                                else if (level > group_sync_levels[group]) group_sync_levels[group] = level;
                             }
                         }
-                        publishAvailability(long_addr, new_availability);
                     }
 
-                    if (new_availability && level_opt.value() != 255) {
-                        auto status_opt = dali.getDeviceStatus(device.short_address);
-                        if (status_opt.has_value()) {
-                            uint8_t st = *status_opt;
-                            lamp_failure = (st >> 1) & 0x01;
-                        }
-
-                        uint8_t actual_level = (level_opt.value() == 255) ? device.current_level : level_opt.value();
-                        self->updateDeviceState(long_addr, actual_level, lamp_failure);
-
-                        if (!device.static_data_loaded) {
-                            ESP_LOGI(TAG, "Performing extended init for SA %d", device.short_address);
-
-                            auto dt_opt = dali.getDeviceType(device.short_address);
-                            // auto gtin_opt = dali.getGTIN(device.short_address);
-
-                            {
-                                std::lock_guard lock(self->m_devices_mutex);
-                                if(self->m_devices.contains(long_addr)) {
-                                    auto& dev_ref = self->m_devices.at(long_addr);
-                                    dev_ref.device_type = dt_opt;
-                                    // if (gtin_opt) dev_ref.gtin = *gtin_opt;
-                                    dev_ref.static_data_loaded = true;
-                                }
-                            }
-                            self->publishAttributes(long_addr);
-                            vTaskDelay(pdMS_TO_TICKS(10));
-                        }
-                    }
-
-                    vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_POLL_DELAY_MS));
-                }
-            }
-            auto all_assignments = DaliGroupManagement::getInstance().getAllAssignments();
-            std::map<DaliLongAddress_t, uint8_t> current_levels;
-            {
-                std::lock_guard lock(self->m_devices_mutex);
-                for(const auto& [addr, dev] : self->m_devices) {
-                    if(dev.is_present && dev.available) current_levels[addr] = dev.current_level;
-                }
-            }
-            std::map<uint8_t, uint8_t> group_sync_levels;
-
-            for (const auto& [long_addr, groups] : all_assignments) {
-                if (!current_levels.contains(long_addr)) continue;
-                uint8_t level = current_levels.at(long_addr);
-
-                for (uint8_t group = 0; group < 16; ++group) {
-                    if (groups.test(group)) {
-                        if (!group_sync_levels.contains(group)) {
-                            group_sync_levels[group] = level;
-                        } else if (level > group_sync_levels[group]) {
-                            group_sync_levels[group] = level;
-                        }
+                    for(const auto& [group_id, level] : group_sync_levels) {
+                        DaliGroupManagement::getInstance().updateGroupState(group_id, level);
                     }
                 }
+                vTaskDelay(rr_delay_ticks);
             }
-
-            for(const auto& [group_id, level] : group_sync_levels) {
-                DaliGroupManagement::getInstance().updateGroupState(group_id, level);
-            }
-            vTaskDelay(pdMS_TO_TICKS(config.dali_poll_interval_ms));
         }
     }
 
