@@ -265,7 +265,7 @@ namespace daliMQTT
         const std::string payload = utils::stringFormat(R"({"state":"%s","brightness":%d})", (level > 0 ? "ON" : "OFF"), level);
 
         ESP_LOGD(TAG, "Publishing Group %d State: %s", group_id, payload.c_str());
-        mqtt.publish(state_topic, payload, 0,true); // publish with RETAIN (!)
+        mqtt.publish(state_topic, payload, 0,false);
     }
     void DaliGroupManagement::stepGroupLevel(const uint8_t group_id, const bool is_up) {
         if (group_id >= 16) return;

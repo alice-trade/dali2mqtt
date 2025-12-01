@@ -82,6 +82,10 @@ namespace daliMQTT
         std::string availability_topic = utils::stringFormat("%s%s", config.mqtt_base_topic.c_str(), CONFIG_DALI2MQTT_MQTT_AVAILABILITY_TOPIC);
         mqtt.publish(availability_topic, CONFIG_DALI2MQTT_MQTT_PAYLOAD_ONLINE, 1, true);
 
+        std::string ip_topic = utils::stringFormat("%s/ip_addr", config.mqtt_base_topic.c_str());
+        std::string ip_addr = Wifi::getInstance().getIpAddress();
+        mqtt.publish(ip_topic, ip_addr, 1, true);
+
         // base/light/LONG_ADDR/set
         std::string light_single_topic = utils::stringFormat("%s/light/+/set", config.mqtt_base_topic.c_str());
         mqtt.subscribe(light_single_topic);

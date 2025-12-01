@@ -58,7 +58,7 @@ namespace daliMQTT
                 (lamp_failure ? "true" : "false")
             );
         ESP_LOGD(TAG, "Publishing to %s: %s", state_topic.c_str(), payload.c_str());
-        mqtt.publish(state_topic, payload, 0, true); // publish with RETAIN (!)
+        mqtt.publish(state_topic, payload, 0, false);
     }
 
     void DaliDeviceController::publishAvailability(const DaliLongAddress_t long_addr, const bool is_available) {
