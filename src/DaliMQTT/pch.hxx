@@ -19,7 +19,6 @@
 #include <string>
 #include <string_view>
 #include <vector>
-
 // C headers
 #ifdef __cplusplus
 extern "C" {
