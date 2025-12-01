@@ -20,6 +20,7 @@ namespace daliMQTT {
         g_dali_task_status = DaliTaskStatus::IDLE;
         vTaskDelete(nullptr);
     }
+
     esp_err_t WebUI::api::DaliGetDevicesHandler(httpd_req_t *req) {
         if (checkAuth(req) != ESP_OK) return ESP_FAIL;
 
@@ -29,8 +30,20 @@ namespace daliMQTT {
         for (const auto& [long_addr, device] : devices) {
             cJSON* device_obj = cJSON_CreateObject();
             const auto addr_str = utils::longAddressToString(long_addr);
+
             cJSON_AddStringToObject(device_obj, "long_address", addr_str.data());
             cJSON_AddNumberToObject(device_obj, "short_address", device.short_address);
+
+            cJSON_AddNumberToObject(device_obj, "level", device.current_level);
+            cJSON_AddBoolToObject(device_obj, "available", device.available);
+            cJSON_AddBoolToObject(device_obj, "lamp_failure", device.lamp_failure);
+
+            if (device.device_type.has_value()) {
+                cJSON_AddNumberToObject(device_obj, "dt", device.device_type.value());
+            } else {
+                cJSON_AddNullToObject(device_obj, "dt");
+            }
+
             cJSON_AddItemToArray(root, device_obj);
         }
 
@@ -315,6 +328,7 @@ namespace daliMQTT {
         httpd_resp_send(req, R"({"status":"ok", "message":"Group refresh initiated."})", -1);
         return ESP_OK;
     }
+
     esp_err_t WebUI::api::DaliGetSceneHandler(httpd_req_t *req) {
         if (checkAuth(req) != ESP_OK) return ESP_FAIL;
 
