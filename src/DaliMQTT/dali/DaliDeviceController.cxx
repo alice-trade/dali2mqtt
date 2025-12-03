@@ -216,7 +216,7 @@ namespace daliMQTT
         std::lock_guard lock(m_queue_mutex);
 
         if (delay_ms == 0) {
-            if (m_priority_set.find(shortAddress) == m_priority_set.end()) {
+            if (!m_priority_set.contains(shortAddress)) {
                 m_priority_queue.push_back(shortAddress);
                 m_priority_set.insert(shortAddress);
                 ESP_LOGD(TAG, "Scheduled IMMEDIATE poll for SA: %d", shortAddress);
@@ -229,13 +229,13 @@ namespace daliMQTT
         }
     }
 
-    void DaliDeviceController::pollSingleDevice(uint8_t shortAddr) {
+    void DaliDeviceController::pollSingleDevice(const uint8_t shortAddr) {
         DaliLongAddress_t long_addr = 0;
         bool known_device = false;
 
         {
             std::lock_guard lock(m_devices_mutex);
-            if (auto it = m_short_to_long_map.find(shortAddr); it != m_short_to_long_map.end()) {
+            if (const auto it = m_short_to_long_map.find(shortAddr); it != m_short_to_long_map.end()) {
                 long_addr = it->second;
                 known_device = true;
             }
@@ -247,9 +247,9 @@ namespace daliMQTT
 
         auto& dali = DaliAPI::getInstance();
 
-        auto level_opt = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddr, DALI_COMMAND_QUERY_ACTUAL_LEVEL);
+        const auto level_opt = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddr, DALI_COMMAND_QUERY_ACTUAL_LEVEL);
 
-        bool is_present = level_opt.has_value();
+        const bool is_present = level_opt.has_value();
         {
             std::lock_guard lock(m_devices_mutex);
             if (m_devices.contains(long_addr)) {
@@ -264,7 +264,7 @@ namespace daliMQTT
 
         if (!is_present) return;
 
-        auto status_opt = dali.getDeviceStatus(shortAddr);
+        const auto status_opt = dali.getDeviceStatus(shortAddr);
         bool lamp_failure = false;
         if (status_opt.has_value()) {
             lamp_failure = (*status_opt >> 1) & 0x01;
@@ -276,7 +276,7 @@ namespace daliMQTT
              if(m_devices.contains(long_addr)) current_cached_level = m_devices[long_addr].current_level;
         }
 
-        uint8_t actual_level = (level_opt.value() == 255) ? current_cached_level : level_opt.value();
+        const uint8_t actual_level = (level_opt.value() == 255) ? current_cached_level : level_opt.value();
 
         updateDeviceState(long_addr, actual_level, lamp_failure);
 
@@ -289,7 +289,7 @@ namespace daliMQTT
         }
 
         if (needs_static_data) {
-                auto dt_opt = dali.getDeviceType(shortAddr);
+                const auto dt_opt = dali.getDeviceType(shortAddr);
                 {
                     std::lock_guard lock(m_devices_mutex);
                     if(m_devices.contains(long_addr)) {
@@ -312,7 +312,7 @@ namespace daliMQTT
         const uint32_t safe_cycle_time = std::max<uint32_t>(1000, config.dali_poll_interval_ms);
         const uint32_t calc_delay_ms = safe_cycle_time >> 6;
         const TickType_t rr_delay_ticks = pdMS_TO_TICKS(std::max<uint32_t>(20, calc_delay_ms));
-        const TickType_t priority_delay_ticks = pdMS_TO_TICKS(10);
+        constexpr TickType_t priority_delay_ticks = pdMS_TO_TICKS(10);
 
         while (true) {
             uint8_t priority_addr = 255;
@@ -326,7 +326,7 @@ namespace daliMQTT
                     auto it = self->m_deferred_requests.begin();
                     while (it != self->m_deferred_requests.end()) {
                         if (now >= it->execute_at_ts) {
-                            if (self->m_priority_set.find(it->short_address) == self->m_priority_set.end()) {
+                            if (!self->m_priority_set.contains(it->short_address)) {
                                 self->m_priority_queue.push_back(it->short_address);
                                 self->m_priority_set.insert(it->short_address);
                             }
