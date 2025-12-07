@@ -22,22 +22,22 @@ namespace daliMQTT
     using DaliLongAddress_t = uint32_t;
 
     struct DaliDevice {
-        DaliLongAddress_t long_address{};   // 24-bit DALI Long (random) Address
-        uint8_t short_address{};            // Short addr
-        uint8_t current_level{0};           // Current Level
-        uint8_t last_level{254};            // Last Level
-        uint8_t status_byte{0};             //  Current status
-        bool lamp_failure{false};
-        std::optional<uint8_t> device_type; // Device Type
-        std::string gtin;                   // GTIN
-        bool is_present{false};             // Presence flag
-        bool available{false};              // Runtime Availability flag
-        bool initial_sync_needed{true};     // First sync flag
-        bool static_data_loaded{false};
+        DaliLongAddress_t long_address{};     // 24-bit DALI Long (random) Address
+        uint8_t short_address{};              // Short addr
+        uint8_t current_level{0};             // Current Level
+        uint8_t last_level{254};              // Last Level
+        uint8_t status_byte{0};               // Current status
+        bool lamp_failure{false};             // Lamp failure flag
+        std::optional<uint8_t> device_type{}; // Device Type
+        std::string gtin{};                   // GTIN
+        bool is_present{false};               // Presence flag
+        bool available{false};                // Runtime Availability flag
+        bool initial_sync_needed{true};       // First sync flag
+        bool static_data_loaded{false};       // Static data load flag
     };
 
     struct DaliGroup {
-        uint8_t id;                    // Group ID
+        uint8_t id{};                    // Group ID
         uint8_t current_level{0};      // Current Level
         uint8_t last_level{254};       // Last level
     };

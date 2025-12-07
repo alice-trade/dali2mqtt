@@ -289,10 +289,12 @@ namespace daliMQTT
         }
 
         if (needs_static_data) {
+                const auto gtin_opt = dali.getGTIN(shortAddr);
                 const auto dt_opt = dali.getDeviceType(shortAddr);
                 {
                     std::lock_guard lock(m_devices_mutex);
                     if(m_devices.contains(long_addr)) {
+                        m_devices[long_addr].gtin = gtin_opt.value_or("");
                         m_devices[long_addr].device_type = dt_opt;
                         m_devices[long_addr].static_data_loaded = true;
                     }
@@ -423,11 +425,7 @@ namespace daliMQTT
                     new_devices[long_addr] = DaliDevice{
                         .long_address = long_addr,
                         .short_address = sa,
-                        .current_level = 0,
-                        .last_level = 254,
-                        .is_present = true,
-                        .available = false,
-                        .initial_sync_needed = true
+                        .is_present = true
                     };
                     new_short_to_long_map[sa] = long_addr;
                 } else {
