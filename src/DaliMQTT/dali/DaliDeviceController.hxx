@@ -31,6 +31,7 @@ namespace daliMQTT
         void updateDeviceState(DaliLongAddress_t longAddr, uint8_t level, std::optional<bool> lamp_failure = std::nullopt);
         void publishAttributes(DaliLongAddress_t longAddr);
         [[nodiscard]] std::optional<uint8_t> getLastLevel(DaliLongAddress_t longAddress) const;
+        void requestDeviceSync(uint8_t shortAddress, uint32_t delay_ms = 0);
 
     private:
         DaliDeviceController() = default;
@@ -38,6 +39,7 @@ namespace daliMQTT
         void processDaliFrame(const dali_frame_t& frame);
         std::bitset<64> discoverAndMapDevices();
         bool validateAddressMap();
+        void pollSingleDevice(uint8_t shortAddr);
 
         [[noreturn]] static void daliEventHandlerTask(void* pvParameters);
         [[noreturn]] static void daliSyncTask(void* pvParameters);
@@ -51,6 +53,12 @@ namespace daliMQTT
         std::map<DaliLongAddress_t, DaliDevice> m_devices;
         std::map<uint8_t, DaliLongAddress_t> m_short_to_long_map;
         mutable std::mutex m_devices_mutex;
+
+        std::vector<DeferredRequest> m_deferred_requests;
+        std::vector<uint8_t> m_priority_queue;
+        std::set<uint8_t> m_priority_set;
+        mutable std::mutex m_queue_mutex;
+        uint8_t m_round_robin_index{0};
     };
 
 } // daliMQTT

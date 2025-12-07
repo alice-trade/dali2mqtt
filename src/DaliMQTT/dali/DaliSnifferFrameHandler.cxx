@@ -220,14 +220,21 @@ namespace daliMQTT {
                 updateDeviceState(long_addr, *known_level);
             }
         } else if (needs_query) {
-            ESP_LOGD(TAG, "Sniffer: Querying state for %zu devices due to command 0x%02X.", affected_devices.size(), cmd_byte);
-            auto& dali = DaliAPI::getInstance();
+            uint32_t current_delay_ms = 400;
+            constexpr uint32_t stagger_step_ms = 150;
+
+            // if (is_group_or_broadcast) {
+            //     current_delay_ms = 600;
+            // }
+
+            ESP_LOGD(TAG, "Sniffer: Scheduling sync for %zu devices (Base delay: %u ms)", affected_devices.size(), current_delay_ms);
+
             for (const auto& long_addr : affected_devices) {
-                if (auto short_addr_opt = getShortAddress(long_addr)) {
-                    vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS + 20));
-                    if (auto level_opt = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, *short_addr_opt, DALI_COMMAND_QUERY_ACTUAL_LEVEL)) {
-                        updateDeviceState(long_addr, *level_opt);
-                    }
+                auto short_addr_opt = getShortAddress(long_addr);
+
+                if (short_addr_opt.has_value()) {
+                    requestDeviceSync(short_addr_opt.value(), current_delay_ms);
+                    current_delay_ms += stagger_step_ms;
                 }
             }
         }
