@@ -109,8 +109,10 @@ namespace daliMQTT
         }
         uint8_t shortAddress = *short_address_opt;
 
-        std::lock_guard lock(m_mutex);
-        m_assignments[longAddress].set(group, assigned);
+        {
+            std::lock_guard lock(m_mutex);
+            m_assignments[longAddress].set(group, assigned);
+        }
         
         auto& dali = DaliAPI::getInstance();
         esp_err_t result;
@@ -124,11 +126,23 @@ namespace daliMQTT
         }
 
         if (result == ESP_OK) {
-            return saveToConfig();
-        }
+            saveToConfig();
 
-        m_assignments[longAddress].set(group, !assigned);
-        return result;
+            std::bitset<16> current_groups;
+            {
+                std::lock_guard lock(m_mutex);
+                current_groups = m_assignments[longAddress];
+            }
+            publishDeviceGroupState(longAddress, current_groups);
+
+            return ESP_OK;
+        } else {
+            {
+                std::lock_guard lock(m_mutex);
+                m_assignments[longAddress].set(group, !assigned);
+            }
+            return result;
+        }
     }
 
     esp_err_t DaliGroupManagement::setAllAssignments(const GroupAssignments& newAssignments) {
@@ -173,6 +187,7 @@ namespace daliMQTT
             }
             vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
         }
+        publishAllGroups();
         return saveToConfig();
     }
 
@@ -210,6 +225,8 @@ namespace daliMQTT
             m_assignments = new_assignments;
             ESP_LOGI(TAG, "Finished refreshing group assignments. Found assignments for %zu devices.", m_assignments.size());
         }
+        publishAllGroups();
+
         return saveToConfig();
     }
     DaliGroup DaliGroupManagement::getGroupState(const uint8_t group_id) const {
@@ -219,7 +236,39 @@ namespace daliMQTT
         }
         return DaliGroup{};
     }
+    void DaliGroupManagement::publishDeviceGroupState(const DaliLongAddress_t longAddr, const std::bitset<16>& groups) const {
+        auto const& mqtt = MQTTClient::getInstance();
+        if (mqtt.getStatus() != MqttStatus::CONNECTED) return;
 
+        const auto config = ConfigManager::getInstance().getConfig();
+        const auto addr_str = utils::longAddressToString(longAddr);
+        const std::string topic = utils::stringFormat("%s/light/%s/groups", config.mqtt_base_topic.c_str(), addr_str.data()); // base/light/{LONG_ADDRESS}/groups
+
+        cJSON* root = cJSON_CreateObject();
+        cJSON* groups_array = cJSON_CreateArray();
+
+        for (uint8_t i = 0; i < 16; ++i) {
+            if (groups.test(i)) {
+                cJSON_AddItemToArray(groups_array, cJSON_CreateNumber(i));
+            }
+        }
+        cJSON_AddItemToObject(root, "groups", groups_array);
+
+        char* payload = cJSON_PrintUnformatted(root);
+        if (payload) {
+            mqtt.publish(topic, payload, 1, true);
+            free(payload);
+            ESP_LOGD(TAG, "Published groups for %s", addr_str.data());
+        }
+        cJSON_Delete(root);
+    }
+
+    void DaliGroupManagement::publishAllGroups() const {
+        std::lock_guard lock(m_mutex);
+        for (const auto& [longAddr, groups] : m_assignments) {
+            publishDeviceGroupState(longAddr, groups);
+        }
+    }
     void DaliGroupManagement::updateGroupState(const uint8_t group_id, const uint8_t level) {
         if (group_id >= 16) return;
 
@@ -300,4 +349,5 @@ namespace daliMQTT
             updateGroupState(group_id, new_level);
         }
     }
+
 }

@@ -16,6 +16,7 @@ namespace daliMQTT {
     static void dali_scan_task(void*) {
         ESP_LOGI(TAG, "Starting background DALI scan...");
         DaliDeviceController::getInstance().performScan();
+        DaliGroupManagement::getInstance().refreshAssignmentsFromBus();
         ESP_LOGI(TAG, "Background DALI scan finished.");
         g_dali_task_status = DaliTaskStatus::IDLE;
         vTaskDelete(nullptr);
@@ -80,6 +81,7 @@ namespace daliMQTT {
     static void dali_init_task(void*) {
         ESP_LOGI(TAG, "Starting background DALI initialization...");
         DaliDeviceController::getInstance().performFullInitialization();
+        DaliGroupManagement::getInstance().refreshAssignmentsFromBus();
         ESP_LOGI(TAG, "Background DALI initialization finished.");
         g_dali_task_status = DaliTaskStatus::IDLE;
         vTaskDelete(nullptr);

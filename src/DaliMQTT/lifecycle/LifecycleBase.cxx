@@ -120,6 +120,8 @@ namespace daliMQTT
         hass_discovery.publishAllDevices();
         ESP_LOGI(TAG, "MQTT discovery messages published.");
 
+        DaliGroupManagement::getInstance().publishAllGroups();
+
         DaliDeviceController::getInstance().start();
     }
 } // daliMQTT
