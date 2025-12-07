@@ -36,7 +36,9 @@ namespace daliMQTT
     private:
         DaliDeviceController() = default;
 
-        void processDaliFrame(const dali_frame_t& frame);
+        void SnifferProcessFrame(const dali_frame_t& frame);
+        void ProcessInputDeviceFrame(const dali_frame_t& frame) const;
+
         std::bitset<64> discoverAndMapDevices();
         bool validateAddressMap();
         void pollSingleDevice(uint8_t shortAddr);

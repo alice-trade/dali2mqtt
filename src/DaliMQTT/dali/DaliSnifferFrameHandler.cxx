@@ -6,48 +6,7 @@
 
 namespace daliMQTT {
     static constexpr char TAG[] = "DaliSnifferFrameHandler";
-    void DaliDeviceController::processDaliFrame(const dali_frame_t& frame) {
-        #ifdef CONFIG_DALI2MQTT_SNIFFER_DEBUG_PUBLISH_MQTT
-            {
-                auto const& mqtt = MQTTClient::getInstance();
-                if (mqtt.getStatus() == MqttStatus::CONNECTED) {
-                    static std::string cached_topic;
-                    if (cached_topic.empty()) {
-                        cached_topic = ConfigManager::getInstance().getMqttBaseTopic() + "/debug/sniffer_raw";
-                    }
-
-                    char payload_buffer[128];
-                    int len = 0;
-                    uint32_t timestamp = esp_log_timestamp();
-
-                    if (frame.length == 8) {
-                        len = snprintf(payload_buffer, sizeof(payload_buffer),
-                            R"({"type":"backward","len":8,"data":%lu,"hex":"%02lX","ts":%lu})",
-                            frame.data, (frame.data & 0xFF), static_cast<unsigned long>(timestamp));
-                    } else if (frame.length == 24) {
-                        len = snprintf(payload_buffer, sizeof(payload_buffer),
-                            R"({"type":"forward","len":24,"data":%lu,"hex":"%06lX","ts":%lu})",
-                            frame.data, (frame.data & 0xFFFFFF), static_cast<unsigned long>(timestamp));
-                    } else {
-                        len = snprintf(payload_buffer, sizeof(payload_buffer),
-                            R"({"type":"forward","len":%u,"data":%lu,"hex":"%04lX","ts":%lu})",
-                            frame.length, frame.data, (frame.data & 0xFFFF), static_cast<unsigned long>(timestamp));
-                    }
-
-                    if (len > 0 && len < sizeof(payload_buffer)) {
-                        mqtt.publish(cached_topic, std::string(payload_buffer, len), 0, false);
-                    }
-                }
-            }
-        #endif
-
-        if (frame.length != 16) {
-            if (frame.length == 24) {
-                ESP_LOGD(TAG, "Ignored 24-bit frame 0x%06lX in device controller (input device event)", frame.data);
-            }
-            return;
-        }
-
+    void DaliDeviceController::SnifferProcessFrame(const dali_frame_t& frame) {
         if (frame.is_backward_frame) {
             ESP_LOGD(TAG, "Process sniffed backward frame 0x%02X", frame.data & 0xFF);
             return;

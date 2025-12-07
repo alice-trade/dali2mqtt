@@ -206,15 +206,123 @@ namespace daliMQTT
 
         while (true) {
             if (xQueueReceive(queue, &frame, portMAX_DELAY) == pdPASS) {
-                self->processDaliFrame(frame);
+                #ifdef CONFIG_DALI2MQTT_SNIFFER_DEBUG_PUBLISH_MQTT
+                    {
+                        auto const& mqtt = MQTTClient::getInstance();
+                        if (mqtt.getStatus() == MqttStatus::CONNECTED) {
+                            static std::string cached_topic;
+                            if (cached_topic.empty()) {
+                                cached_topic = ConfigManager::getInstance().getMqttBaseTopic() + "/debug/sniffer_raw";
+                            }
+
+                            char payload_buffer[128];
+                            int len = 0;
+                            uint32_t timestamp = esp_log_timestamp();
+
+                            if (frame.length == 8) {
+                                len = snprintf(payload_buffer, sizeof(payload_buffer),
+                                    R"({"type":"backward","len":8,"data":%lu,"hex":"%02lX","ts":%lu})",
+                                    frame.data, (frame.data & 0xFF), static_cast<unsigned long>(timestamp));
+                            } else if (frame.length == 24) {
+                                len = snprintf(payload_buffer, sizeof(payload_buffer),
+                                    R"({"type":"forward","len":24,"data":%lu,"hex":"%06lX","ts":%lu})",
+                                    frame.data, (frame.data & 0xFFFFFF), static_cast<unsigned long>(timestamp));
+                            } else {
+                                len = snprintf(payload_buffer, sizeof(payload_buffer),
+                                    R"({"type":"forward","len":%u,"data":%lu,"hex":"%04lX","ts":%lu})",
+                                    frame.length, frame.data, (frame.data & 0xFFFF), static_cast<unsigned long>(timestamp));
+                            }
+
+                            if (len > 0 && len < sizeof(payload_buffer)) {
+                                mqtt.publish(cached_topic, std::string(payload_buffer, len), 0, false);
+                            }
+                        }
+                    }
+                #endif
+
+
+                if (frame.length == 24) {
+                    self->ProcessInputDeviceFrame(frame);
+                } else self->SnifferProcessFrame(frame);
             }
+        }
+    }
+
+    void DaliDeviceController::ProcessInputDeviceFrame(const dali_frame_t& frame) const {
+        const uint32_t data = frame.data;
+        const uint8_t addr_byte = (data >> 16) & 0xFF;
+        const uint8_t instance_byte = (data >> 8) & 0xFF;
+        const uint8_t event_byte = data & 0xFF;
+
+        bool is_event_scheme = (addr_byte & 0x01) == 0x01;
+        std::string addr_type_str = "unknown";
+        uint8_t address = 0;
+
+        if (is_event_scheme) {
+            if ((addr_byte & 0x80) == 0) {
+                // Short Address (0AAAAAA1)
+                addr_type_str = "short";
+                address = (addr_byte >> 1) & 0x3F;
+            } else if ((addr_byte & 0xE0) == 0x80) {
+                // Group Address (100AAAA1)
+                addr_type_str = "group";
+                address = (addr_byte >> 1) & 0x0F;
+            } else if (addr_byte == 0xC1) {
+                // Instance Group (11000001)
+                addr_type_str = "instance_group";
+                address = 0;
+            } else if (addr_byte == 0xFD || addr_byte == 0xFF) {
+                // Device Groups broadcast
+                 addr_type_str = "broadcast";
+            }
+        } else {
+             // 24-bit Command
+             addr_type_str = "command";
+             address = (addr_byte >> 1) & 0x3F;
+        }
+
+        cJSON* root = cJSON_CreateObject();
+        cJSON_AddStringToObject(root, "type", "input_device_event");
+        cJSON_AddStringToObject(root, "address_type", addr_type_str.c_str());
+        cJSON_AddNumberToObject(root, "address", address);
+        cJSON_AddNumberToObject(root, "instance", instance_byte);
+        cJSON_AddNumberToObject(root, "event_code", event_byte);
+
+        #ifdef CONFIG_DALI2MQTT_SNIFFER_DEBUG_PUBLISH_MQTT
+            char hex_buf[10];
+            snprintf(hex_buf, sizeof(hex_buf), "%06lX", data);
+            cJSON_AddStringToObject(root, "raw_hex", hex_buf);
+        #endif
+        // Long addr
+        if (addr_type_str == "short") {
+            auto long_addr_opt = getLongAddress(address);
+            if (long_addr_opt.has_value()) {
+                auto la_str = utils::longAddressToString(long_addr_opt.value());
+                cJSON_AddStringToObject(root, "long_addr", la_str.data());
+            }
+        }
+        char* json_payload = cJSON_PrintUnformatted(root);
+        cJSON_Delete(root);
+
+        if (json_payload) {
+            auto const& mqtt = MQTTClient::getInstance();
+            const auto config = ConfigManager::getInstance().getConfig();
+
+            std::string topic = utils::stringFormat("%s/event/%s/%d", // base/event/{address_type}/{address}
+                config.mqtt_base_topic.c_str(),
+                addr_type_str.c_str(),
+                address
+            );
+            mqtt.publish(topic, json_payload, 0, false);
+            ESP_LOGD(TAG, "Input Device Event Published: %s -> %s", topic.c_str(), json_payload);
+            free(json_payload);
         }
     }
 
     void DaliDeviceController::requestDeviceSync(uint8_t shortAddress, uint32_t delay_ms) {
         if (shortAddress >= 64) return;
-        std::lock_guard lock(m_queue_mutex);
 
+        std::lock_guard<std::mutex> lock(m_queue_mutex);
         if (delay_ms == 0) {
             if (!m_priority_set.contains(shortAddress)) {
                 m_priority_queue.push_back(shortAddress);
