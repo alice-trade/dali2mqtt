@@ -53,12 +53,15 @@ namespace daliMQTT
         bool available{false};                // Runtime Availability flag
         bool initial_sync_needed{true};       // First sync flag
         bool static_data_loaded{false};       // Static data load flag
+        int64_t last_color_poll_ts{0};
     };
 
     struct DaliGroup {
         uint8_t id{};                    // Group ID
         uint8_t current_level{0};      // Current Level
         uint8_t last_level{254};       // Last level
+        std::optional<uint16_t> color_temp;
+        std::optional<DaliRGB> rgb;
     };
     using DaliLongAddrStr = std::array<char, 7>; // DALI Long Str: 6 hex chars + null
     struct DeferredRequest {

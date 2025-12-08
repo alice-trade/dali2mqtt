@@ -193,7 +193,10 @@ namespace daliMQTT
             }
         }
 
-        for (const auto&[expected_long_addr, short_address] : devices_to_validate) {
+        for (const auto& mapping : devices_to_validate) {
+            const auto expected_long_addr = mapping.long_address;
+            const auto short_address = mapping.short_address;
+
             if (auto status_opt = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, short_address, DALI_COMMAND_QUERY_STATUS); status_opt.has_value()) {
 
                 if (auto long_addr_from_bus_opt = dali.getLongAddress(short_address)) {
@@ -410,16 +413,91 @@ namespace daliMQTT
 
         const auto status_opt = dali.getDeviceStatus(shortAddr);
         uint8_t current_cached_level = 0;
+
+        bool is_dt8 = false;
+        bool features_known = false;
+        bool supports_tc = false;
+        bool supports_rgb = false;
+
         {
              std::lock_guard lock(m_devices_mutex);
-             if(m_devices.contains(long_addr)) current_cached_level = m_devices[long_addr].current_level;
-        }
+             if(m_devices.contains(long_addr)) {
+                 const auto& dev = m_devices[long_addr];
 
+                 current_cached_level = dev.current_level;
+                 if (dev.device_type.has_value() && dev.device_type.value() == 8) {
+                     is_dt8 = true;
+                     features_known = dev.static_data_loaded;
+                     supports_tc = dev.supports_tc;
+                     supports_rgb = dev.supports_rgb;
+                 }
+             }
+        }
+        if (is_dt8 && !features_known) {
+            auto features_opt = dali.getDT8Features(shortAddr);
+            if (features_opt.has_value()) {
+                uint8_t feat = *features_opt;
+                supports_tc = (feat & 0x02) != 0;
+                supports_rgb = (feat & 0x08) != 0;
+
+                ESP_LOGD(TAG, "DT8 Device %d features: Tc=%d, RGB=%d (Raw: 0x%02X)",
+                    shortAddr, supports_tc, supports_rgb, feat);
+
+                {
+                    std::lock_guard lock(m_devices_mutex);
+                    if (m_devices.contains(long_addr)) {
+                        m_devices[long_addr].supports_tc = supports_tc;
+                        m_devices[long_addr].supports_rgb = supports_rgb;
+                        m_nvs_dirty = true;
+                        m_last_nvs_change_ts = esp_timer_get_time() / 1000;
+                    }
+                }
+            }
+        }
         const uint8_t actual_level = (level_opt.value() == 255) ? current_cached_level : level_opt.value();
 
-        // TODO: GT8 rgb/tc pool
+        std::optional<uint16_t> polled_tc = std::nullopt;
+        std::optional<DaliRGB> polled_rgb = std::nullopt;
+        const int64_t now_sec = esp_timer_get_time() / 1000000;
+        constexpr int64_t COLOR_POLL_INTERVAL_SEC = 60;
 
-        updateDeviceState(long_addr, actual_level, status_opt);
+        bool should_poll_color = false;
+        int64_t last_poll_ts = 0;
+
+        {
+            std::lock_guard lock(m_devices_mutex);
+            if(m_devices.contains(long_addr)) {
+                const auto& dev = m_devices[long_addr];
+                last_poll_ts = dev.last_color_poll_ts;
+                if (actual_level > 0 && (dev.supports_tc || dev.supports_rgb)) {
+                    if ((now_sec - last_poll_ts) > COLOR_POLL_INTERVAL_SEC) {
+                        should_poll_color = true;
+                    }
+                }
+            }
+        }
+
+        if (should_poll_color) {
+            if (supports_tc) {
+                polled_tc = dali.getDT8ColorTemp(shortAddr);
+                if (polled_tc) ESP_LOGD(TAG, "Polled Tc for SA %d: %d mireds", shortAddr, *polled_tc);
+            }
+
+            if (supports_rgb) {
+                polled_rgb = dali.getDT8RGB(shortAddr);
+                if (polled_rgb) ESP_LOGD(TAG, "Polled RGB for SA %d: %d,%d,%d", shortAddr, polled_rgb->r, polled_rgb->g, polled_rgb->b);
+            }
+
+            {
+                std::lock_guard lock(m_devices_mutex);
+                if(m_devices.contains(long_addr)) {
+                    m_devices[long_addr].last_color_poll_ts = now_sec;
+                }
+            }
+        }
+
+        updateDeviceState(long_addr, actual_level, status_opt, polled_tc, polled_rgb);
+
         bool needs_static_data = false;
         {
             std::lock_guard lock(m_devices_mutex);
@@ -434,9 +512,21 @@ namespace daliMQTT
                 {
                     std::lock_guard lock(m_devices_mutex);
                     if(m_devices.contains(long_addr)) {
-                        m_devices[long_addr].gtin = gtin_opt.value_or("");
-                        m_devices[long_addr].device_type = dt_opt;
+                        bool changed = false;
+                        if (gtin_opt.has_value()) {
+                            m_devices[long_addr].gtin = gtin_opt.value();
+                            changed = true;
+                        }
+                        if (dt_opt.has_value()) {
+                            m_devices[long_addr].device_type = dt_opt;
+                            changed = true;
+                        }
                         m_devices[long_addr].static_data_loaded = true;
+
+                        if (changed) {
+                            m_nvs_dirty = true;
+                            m_last_nvs_change_ts = esp_timer_get_time() / 1000;
+                        }
                     }
                 }
                 publishAttributes(long_addr);
@@ -446,7 +536,7 @@ namespace daliMQTT
 
     [[noreturn]] void DaliDeviceController::daliSyncTask(void* pvParameters) {
         auto* self = static_cast<DaliDeviceController*>(pvParameters);
-
+        const int64_t NVS_SAVE_DEBOUNCE_MS = 20000;
         ESP_LOGI(TAG, "Dali Adaptive Sync Task Started.");
 
         const auto config = ConfigManager::getInstance().getConfig();
@@ -460,6 +550,19 @@ namespace daliMQTT
             uint8_t priority_addr = 255;
             bool has_priority = false;
             int64_t now = esp_timer_get_time() / 1000;
+
+            if (self->m_nvs_dirty) {
+                if ((now - self->m_last_nvs_change_ts) > NVS_SAVE_DEBOUNCE_MS) {
+                    ESP_LOGI(TAG, "Autosaving updated device map to NVS...");
+                    std::map<DaliLongAddress_t, DaliDevice> copy_devs;
+                    {
+                        std::lock_guard lock(self->m_devices_mutex);
+                        copy_devs = self->m_devices;
+                        self->m_nvs_dirty = false;
+                    }
+                    DaliAddressMap::save(copy_devs);
+                }
+            }
 
             {
                 std::lock_guard lock(self->m_queue_mutex);
@@ -582,6 +685,7 @@ namespace daliMQTT
             ESP_LOGI(TAG, "Discovery finished. Mapped %zu DALI devices.", m_devices.size());
 
             DaliAddressMap::save(m_devices);
+            m_nvs_dirty = false;
 
         }
         return found_devices;

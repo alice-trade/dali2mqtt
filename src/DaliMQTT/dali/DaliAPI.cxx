@@ -350,46 +350,116 @@ namespace daliMQTT
     }
 
      esp_err_t DaliAPI::sendSpecialCmdDT8(const uint8_t shortAddr, const uint8_t cmd) {
-        m_dali_impl.cmd(DALI_SPECIAL_COMMAND_ENABLE_DEVICE_TYPE_X, 8, false); // 0xC1 0x08
-        const uint8_t dali_arg = (shortAddr << 1) | 1;
-        m_dali_impl.cmd(cmd, dali_arg, false);
+        m_dali_impl.cmd(DALI_SPECIAL_COMMAND_ENABLE_DEVICE_TYPE_X, 8, false);
+        m_dali_impl.cmd(cmd, shortAddr, false);
         return ESP_OK;
     }
-
-    esp_err_t DaliAPI::setDT8ColorTemp(const uint8_t shortAddress, const uint16_t mireds) {
+    static uint8_t make_dali_command_address(const dali_addressType_t type, const uint8_t addr) {
+        switch (type) {
+            case DALI_ADDRESS_TYPE_SHORT:
+                return (addr << 1) | 1;
+            case DALI_ADDRESS_TYPE_GROUP:
+                return 0x80 | (addr << 1) | 1; // 100AAAA1
+            case DALI_ADDRESS_TYPE_BROADCAST:
+                return 0xFF; // 11111111
+            default:
+                return 0;
+        }
+    }
+    esp_err_t DaliAPI::setDT8ColorTemp(const dali_addressType_t addr_type, const uint8_t addr, const uint16_t mireds) {
         std::lock_guard lock(bus_mutex);
-        // DTR1 (High), DTR0 (Low)
-        m_dali_impl.set_dtr1((mireds >> 8) & 0xFF, (shortAddress << 1) | 1);
-        m_dali_impl.set_dtr0(mireds & 0xFF, (shortAddress << 1) | 1);
 
-        sendSpecialCmdDT8(shortAddress, DALI_COMMAND_DT8_SET_COLOUR_TEMP_TC);
-        sendSpecialCmdDT8(shortAddress, DALI_COMMAND_DT8_ACTIVATE);
+        m_dali_impl.cmd(DALI_SPECIAL_COMMAND_DATA_TRANSFER_REGISTER_1, (mireds >> 8) & 0xFF, false);
+        m_dali_impl.cmd(DALI_SPECIAL_COMMAND_DATA_TRANSFER_REGISTER, mireds & 0xFF, false);
+        const uint8_t target_addr_byte = make_dali_command_address(addr_type, addr);
 
-        ESP_LOGI(TAG, "DT8 Set TC: %d mireds to %d", mireds, shortAddress);
+        sendSpecialCmdDT8(target_addr_byte, DALI_COMMAND_DT8_SET_COLOUR_TEMP_TC);
+        sendSpecialCmdDT8(target_addr_byte, DALI_COMMAND_DT8_ACTIVATE);
+
+        ESP_LOGD(TAG, "DT8 Set Tc: %d mireds to AddrType %d, Val %d", mireds, addr_type, addr);
         vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
         return ESP_OK;
     }
 
-    esp_err_t DaliAPI::setDT8RGB(const uint8_t shortAddress, const uint8_t r, const uint8_t g, const uint8_t b) {
+    esp_err_t DaliAPI::setDT8RGB(const dali_addressType_t addr_type, const uint8_t addr, const uint8_t r, const uint8_t g, const uint8_t b) {
         std::lock_guard lock(bus_mutex);
-        m_dali_impl.set_dtr1(0x01, (shortAddress << 1) | 1); // Mask R
-        m_dali_impl.set_dtr0(r, (shortAddress << 1) | 1); // Value R
-        sendSpecialCmdDT8(shortAddress, DALI_COMMAND_DT8_SET_TEMPORARY_RGB_DIMLEVEL);
+        const uint8_t target_addr_byte = make_dali_command_address(addr_type, addr);
 
-        m_dali_impl.set_dtr1(0x02, (shortAddress << 1) | 1); // Mask G
-        m_dali_impl.set_dtr0(g, (shortAddress << 1) | 1); // Value G
-        sendSpecialCmdDT8(shortAddress, DALI_COMMAND_DT8_SET_TEMPORARY_RGB_DIMLEVEL);
+        m_dali_impl.cmd(DALI_SPECIAL_COMMAND_DATA_TRANSFER_REGISTER_1, 0x01, false); // DTR1 = Mask R
+        m_dali_impl.cmd(DALI_SPECIAL_COMMAND_DATA_TRANSFER_REGISTER, r, false);      // DTR0 = Value R
+        sendSpecialCmdDT8(target_addr_byte, DALI_COMMAND_DT8_SET_TEMPORARY_RGB_DIMLEVEL);
 
-        m_dali_impl.set_dtr1(0x04, (shortAddress << 1) | 1); // Mask B
-        m_dali_impl.set_dtr0(b, (shortAddress << 1) | 1); // Value B
-        sendSpecialCmdDT8(shortAddress, DALI_COMMAND_DT8_SET_TEMPORARY_RGB_DIMLEVEL);
+        m_dali_impl.cmd(DALI_SPECIAL_COMMAND_DATA_TRANSFER_REGISTER_1, 0x02, false); // DTR1 = Mask G
+        m_dali_impl.cmd(DALI_SPECIAL_COMMAND_DATA_TRANSFER_REGISTER, g, false);      // DTR0 = Value G
+        sendSpecialCmdDT8(target_addr_byte, DALI_COMMAND_DT8_SET_TEMPORARY_RGB_DIMLEVEL);
 
-        // Activate
-        sendSpecialCmdDT8(shortAddress, DALI_COMMAND_DT8_ACTIVATE);
+        m_dali_impl.cmd(DALI_SPECIAL_COMMAND_DATA_TRANSFER_REGISTER_1, 0x04, false); // DTR1 = Mask B
+        m_dali_impl.cmd(DALI_SPECIAL_COMMAND_DATA_TRANSFER_REGISTER, b, false);      // DTR0 = Value B
+        sendSpecialCmdDT8(target_addr_byte, DALI_COMMAND_DT8_SET_TEMPORARY_RGB_DIMLEVEL);
 
-        ESP_LOGD(TAG, "DT8 Set RGB: %d,%d,%d to %d", r, g, b, shortAddress);
+        sendSpecialCmdDT8(target_addr_byte, DALI_COMMAND_DT8_ACTIVATE);
+        ESP_LOGD(TAG, "DT8 Set RGB: %d,%d,%d to AddrType %d, Val %d", r, g, b, addr_type, addr);
         vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
         return ESP_OK;
+    }
+
+    std::optional<uint8_t> DaliAPI::getDT8Features(const uint8_t shortAddress) {
+        std::lock_guard lock(bus_mutex);
+        m_dali_impl.cmd(DALI_SPECIAL_COMMAND_ENABLE_DEVICE_TYPE_X, 8, false);
+
+        const uint8_t dali_arg = (shortAddress << 1) | 1;
+        const int16_t result = m_dali_impl.cmd(DALI_COMMAND_DT8_QUERY_COLOUR_TYPE_FEATURES, dali_arg);
+
+        vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
+
+        if (result >= 0) {
+            return static_cast<uint8_t>(result);
+        }
+        return std::nullopt;
+    }
+
+      std::optional<uint8_t> DaliAPI::readMemoryLocation(const uint8_t shortAddress, const uint8_t bank, const uint8_t offset) {
+        std::lock_guard lock(bus_mutex);
+
+        m_dali_impl.set_dtr1(bank, (shortAddress << 1) | 1);
+        m_dali_impl.set_dtr0(offset, (shortAddress << 1) | 1);
+        const int16_t result = m_dali_impl.cmd(DALI_READ_MEMORY_LOCATION, (shortAddress << 1) | 1);
+
+        vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
+
+        if (result >= 0) {
+            return static_cast<uint8_t>(result);
+        }
+        ESP_LOGW(TAG, "Failed to read memory loc: SA=%d, Bank=%d, Off=%d, Res=%d", shortAddress, bank, offset, result);
+        return std::nullopt;
+    }
+
+    std::optional<uint16_t> DaliAPI::getDT8ColorTemp(const uint8_t shortAddress) {
+        // Memory Bank 205 (Colour Control), Offsets 0x0E (MSB), 0x0F (LSB)
+        constexpr uint8_t bank = 205;
+
+        const auto msb = readMemoryLocation(shortAddress, bank, 0x0E);
+        if (!msb) return std::nullopt;
+
+        const auto lsb = readMemoryLocation(shortAddress, bank, 0x0F);
+        if (!lsb) return std::nullopt;
+
+        return (static_cast<uint16_t>(*msb) << 8) | *lsb;
+    }
+
+    std::optional<DaliRGB> DaliAPI::getDT8RGB(const uint8_t shortAddress) {
+        constexpr uint8_t bank = 205;
+
+        const auto r = readMemoryLocation(shortAddress, bank, 0x10);
+        if (!r) return std::nullopt;
+
+        const auto g = readMemoryLocation(shortAddress, bank, 0x11);
+        if (!g) return std::nullopt;
+
+        const auto b = readMemoryLocation(shortAddress, bank, 0x12);
+        if (!b) return std::nullopt;
+
+        return DaliRGB{ *r, *g, *b };
     }
 
     bool DaliAPI::isInitialized() const {

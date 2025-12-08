@@ -13,7 +13,8 @@ namespace daliMQTT {
     static std::atomic<bool> g_mqtt_bus_busy{false};
 
     void MQTTCommandHandler::publishLightState(dali_addressType_t addr_type, uint8_t target_id,
-                                               const std::string &state, std::optional<uint8_t> brightness, std::optional<uint16_t> color_temp, std::optional<DaliRGB> rgb) {
+                                               const std::string &state, std::optional<uint8_t> brightness,
+                                               std::optional<uint16_t> color_temp, std::optional<DaliRGB> rgb) {
         auto &device_controller = DaliDeviceController::getInstance();
 
         auto update_device = [&](const DaliLongAddress_t long_addr) {
@@ -41,7 +42,7 @@ namespace daliMQTT {
                     new_level = (grp.last_level > 0) ? grp.last_level : 254;
                 }
             }
-            DaliGroupManagement::getInstance().updateGroupState(target_id, new_level);
+            DaliGroupManagement::getInstance().updateGroupState(target_id, new_level, color_temp, rgb);
         }
 
         switch (addr_type) {
@@ -150,12 +151,12 @@ namespace daliMQTT {
             }
         }
 
-        if (target_color_temp.has_value() && addr_type == DALI_ADDRESS_TYPE_SHORT) {
-            dali.setDT8ColorTemp(target_id, *target_color_temp);
+        if (target_color_temp.has_value()) {
+            dali.setDT8ColorTemp(addr_type, target_id, *target_color_temp);
         }
 
-        if (target_rgb.has_value() && addr_type == DALI_ADDRESS_TYPE_SHORT) {
-            dali.setDT8RGB(target_id, target_rgb->r, target_rgb->g, target_rgb->b);
+        if (target_rgb.has_value()) {
+            dali.setDT8RGB(addr_type, target_id, target_rgb->r, target_rgb->g, target_rgb->b);
         }
 
         if (target_on_state.has_value() && !(*target_on_state)) {

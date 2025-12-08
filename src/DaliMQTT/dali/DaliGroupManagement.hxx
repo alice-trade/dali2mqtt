@@ -38,8 +38,9 @@ namespace daliMQTT
         [[nodiscard]] DaliGroup getGroupState(uint8_t group_id) const;
 
         // Обновить состояние группы
-        void updateGroupState(uint8_t group_id, uint8_t level);
-
+        void updateGroupState(uint8_t group_id, uint8_t level,
+                                    std::optional<uint16_t> color_temp = std::nullopt,
+                                    std::optional<DaliRGB> rgb = std::nullopt);
         // Восстановить уровень
         void restoreGroupLevel(uint8_t group_id);
 
@@ -58,7 +59,9 @@ namespace daliMQTT
         void loadFromConfig();
         esp_err_t saveToConfig();
 
-        void publishGroupState(uint8_t group_id, uint8_t level) const;
+        void publishGroupState(uint8_t group_id, uint8_t level,
+                                       std::optional<uint16_t> color_temp,
+                                       std::optional<DaliRGB> rgb) const;
         void publishDeviceGroupState(DaliLongAddress_t longAddr, const std::bitset<16>& groups) const;
 
         GroupAssignments m_assignments;

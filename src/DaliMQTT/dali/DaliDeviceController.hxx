@@ -63,6 +63,8 @@ namespace daliMQTT
         std::set<uint8_t> m_priority_set;
         mutable std::mutex m_queue_mutex;
         uint8_t m_round_robin_index{0};
+        bool m_nvs_dirty{false};
+        int64_t m_last_nvs_change_ts{0};
     };
 
 } // daliMQTT

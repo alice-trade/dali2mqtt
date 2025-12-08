@@ -1,4 +1,5 @@
 #include "HADiscovery.hxx"
+#include <DaliGroupManagement.hxx>
 #include "MQTTClient.hxx"
 #include "ConfigManager.hxx"
 #include "DaliDeviceController.hxx"
@@ -63,11 +64,13 @@ namespace daliMQTT
         cJSON* root = cJSON_CreateObject();
         if (!root) return;
 
-        DaliDevice dev_copy; // FIXME???
+        DaliDevice dev_copy;
         {
             auto devices = DaliDeviceController::getInstance().getDevices();
             if (devices.contains(long_addr)) {
                 dev_copy = devices.at(long_addr);
+            } else {
+                return;
             }
         }
 
@@ -80,11 +83,27 @@ namespace daliMQTT
 
         if (dev_copy.device_type.has_value() && dev_copy.device_type.value() == 8) {
             cJSON* color_modes = cJSON_CreateArray();
-            cJSON_AddItemToArray(color_modes, cJSON_CreateString("color_temp"));
-            cJSON_AddItemToArray(color_modes, cJSON_CreateString("rgb"));
+            bool mode_added = false;
+            if (dev_copy.supports_tc) {
+                cJSON_AddItemToArray(color_modes, cJSON_CreateString("color_temp"));
+                cJSON_AddNumberToObject(root, "min_mireds", 153); // ~6500K
+                cJSON_AddNumberToObject(root, "max_mireds", 500); // ~2000K
+                mode_added = true;
+            }
+
+            if (dev_copy.supports_rgb) {
+                cJSON_AddItemToArray(color_modes, cJSON_CreateString("rgb"));
+                mode_added = true;
+            }
+
+            if (!mode_added) {
+                cJSON_AddItemToArray(color_modes, cJSON_CreateString("color_temp"));
+                cJSON_AddItemToArray(color_modes, cJSON_CreateString("rgb"));
+                cJSON_AddNumberToObject(root, "min_mireds", 153);
+                cJSON_AddNumberToObject(root, "max_mireds", 500);
+            }
+
             cJSON_AddItemToObject(root, "supported_color_modes", color_modes);
-            cJSON_AddNumberToObject(root, "min_mireds", 153); // ~6500K
-            cJSON_AddNumberToObject(root, "max_mireds", 500); // ~2000K
         }
 
         cJSON* av_list = cJSON_CreateArray();
@@ -139,6 +158,38 @@ namespace daliMQTT
                                 utils::stringFormat("%s/light/group/%d/state", base_topic.c_str(), group_id).c_str());
 
         cJSON_AddTrueToObject(root, "brightness");
+
+        bool group_supports_tc = false;
+        bool group_supports_rgb = false;
+
+        {
+            const auto devices = DaliDeviceController::getInstance().getDevices();
+            auto assignments = DaliGroupManagement::getInstance().getAllAssignments();
+
+            for (const auto& [long_addr, groups] : assignments) {
+                if (groups.test(group_id)) {
+                    if (devices.contains(long_addr)) {
+                        const auto& dev = devices.at(long_addr);
+                        if (dev.supports_tc) group_supports_tc = true;
+                        if (dev.supports_rgb) group_supports_rgb = true;
+                    }
+                }
+            }
+        }
+
+        if (group_supports_tc || group_supports_rgb) {
+            cJSON* color_modes = cJSON_CreateArray();
+            if (group_supports_tc) {
+                cJSON_AddItemToArray(color_modes, cJSON_CreateString("color_temp"));
+                cJSON_AddNumberToObject(root, "min_mireds", 153);
+                cJSON_AddNumberToObject(root, "max_mireds", 500);
+            }
+            if (group_supports_rgb) {
+                cJSON_AddItemToArray(color_modes, cJSON_CreateString("rgb"));
+            }
+            cJSON_AddItemToObject(root, "supported_color_modes", color_modes);
+        }
+
         cJSON_AddStringToObject(root, "availability_topic", availability_topic.c_str());
         cJSON_AddStringToObject(root, "payload_available", CONFIG_DALI2MQTT_MQTT_PAYLOAD_ONLINE);
         cJSON_AddStringToObject(root, "payload_not_available", CONFIG_DALI2MQTT_MQTT_PAYLOAD_OFFLINE);
