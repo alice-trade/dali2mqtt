@@ -38,14 +38,16 @@ namespace daliMQTT
         [[nodiscard]] std::string getIpAddress() const;
 
         // Callbacks
-        std::function<void()> onConnected;
-        std::function<void()> onDisconnected;
+        std::function<void()> onConnected{};
+        std::function<void()> onDisconnected{};
 
     private:
         Wifi() = default;
 
         static void wifiEventHandler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data);
         void startMdns();
+
+        uint8_t s_retry_count;
         std::atomic<Status> status{Status::DISCONNECTED};
         bool initialized{false};
         bool mdns_started{false};

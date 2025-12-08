@@ -50,13 +50,11 @@ namespace daliMQTT
         const auto addr_str = utils::longAddressToString(long_addr);
         const std::string state_topic = utils::stringFormat("%s/light/%s/state", config.mqtt_base_topic.c_str(), addr_str.data());
         if (level == 255) return;
-        const bool lamp_failure = (status_byte >> 1) & 0x01;
 
         const std::string payload = utils::stringFormat(
-                R"({"state":"%s","brightness":%d,"lamp_failure":%s,"status_byte":%d})",
+                R"({"state":"%s","brightness":%d,"status_byte":%d})",
                 (level > 0 ? "ON" : "OFF"),
                 level,
-                (lamp_failure ? "true" : "false"),
                 status_byte
             );
         ESP_LOGD(TAG, "Publishing to %s: %s", state_topic.c_str(), payload.c_str());
@@ -127,11 +125,6 @@ namespace daliMQTT
         if (dev_copy.device_type.has_value()) {
             uint8_t dt = dev_copy.device_type.value();
             cJSON_AddNumberToObject(root, "device_type", dt);
-
-            auto type_str = "Unknown";
-            if (dt == 6) type_str = "LED Module (DT6)";
-            else if (dt == 8) type_str = "Colour Control (DT8)";
-            cJSON_AddStringToObject(root, "device_type_str", type_str);
         }
 
         if (!dev_copy.gtin.empty()) {
@@ -385,10 +378,6 @@ namespace daliMQTT
         if (!is_device_responding) return;
 
         const auto status_opt = dali.getDeviceStatus(shortAddr);
-        bool lamp_failure = false;
-        if (status_opt.has_value()) {
-            lamp_failure = (*status_opt >> 1) & 0x01;
-        }
 
         uint8_t current_cached_level = 0;
         {
@@ -398,7 +387,7 @@ namespace daliMQTT
 
         const uint8_t actual_level = (level_opt.value() == 255) ? current_cached_level : level_opt.value();
 
-        updateDeviceState(long_addr, actual_level, lamp_failure);
+        updateDeviceState(long_addr, actual_level, status_opt);
 
         bool needs_static_data = false;
         {

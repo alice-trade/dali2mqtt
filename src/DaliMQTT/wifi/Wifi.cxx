@@ -138,31 +138,15 @@ namespace daliMQTT
             manager->status = Status::DISCONNECTED;
             if(manager->onDisconnected) manager->onDisconnected();
 
-            const NvsHandle nvs_handle("wifi_state", NVS_READWRITE);
-            if (!nvs_handle) {
-                ESP_LOGE(TAG, "Failed to open NVS for WiFi state. Retrying connection without counter.");
-                esp_wifi_connect();
-                return;
-            }
+            manager->s_retry_count++;
 
-            uint8_t retry_count = 0;
-            nvs_get_u8(nvs_handle.get(), "retry_cnt", &retry_count);
-            retry_count++;
-
-            if (retry_count >= CONFIG_DALI2MQTT_WIFI_MAX_RETRY) {
+            if (manager->s_retry_count >= CONFIG_DALI2MQTT_WIFI_MAX_RETRY) {
                 ESP_LOGE(TAG, "WiFi connection failed after %d attempts. Entering deep sleep for %d seconds.",
-                         retry_count, CONFIG_DALI2MQTT_WIFI_DEEP_SLEEP_S);
-
-                nvs_set_u8(nvs_handle.get(), "retry_cnt", 0);
-                nvs_commit(nvs_handle.get());
-
+                    manager->s_retry_count, CONFIG_DALI2MQTT_WIFI_DEEP_SLEEP_S);
                 esp_deep_sleep(1000000LL * CONFIG_DALI2MQTT_WIFI_DEEP_SLEEP_S);
             } else {
                 ESP_LOGW(TAG, "STA_DISCONNECTED: connection failed. Attempt %d of %d. Retrying...",
-                         retry_count, CONFIG_DALI2MQTT_WIFI_MAX_RETRY);
-
-                nvs_set_u8(nvs_handle.get(), "retry_cnt", retry_count);
-                nvs_commit(nvs_handle.get());
+                         manager->s_retry_count, CONFIG_DALI2MQTT_WIFI_MAX_RETRY);
 
                 esp_wifi_connect();
             }
@@ -171,12 +155,8 @@ namespace daliMQTT
             ip_event_got_ip_t const* event = static_cast<ip_event_got_ip_t*>(event_data);
             ESP_LOGI(TAG, "GOT_IP: " IPSTR, IP2STR(&event->ip_info.ip));
 
-            const NvsHandle nvs_handle("wifi_state", NVS_READWRITE);
-            if (nvs_handle) {
-                ESP_LOGI(TAG, "WiFi connected successfully. Resetting failure counter.");
-                nvs_set_u8(nvs_handle.get(), "retry_cnt", 0);
-                nvs_commit(nvs_handle.get());
-            }
+            manager->s_retry_count = 0;
+
 
             manager->status = Status::CONNECTED;
             manager->startMdns();
