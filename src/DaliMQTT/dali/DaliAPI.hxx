@@ -28,6 +28,10 @@ namespace daliMQTT
         [[nodiscard]] std::optional<uint8_t> sendQuery(dali_addressType_t addr_type, uint8_t addr, uint8_t command);
         // Raw send command
         [[nodiscard]] std::optional<uint8_t> sendRaw(uint32_t data, uint8_t bits = 16);
+        // DT8 Set Color Temperature (Tc)
+        esp_err_t setDT8ColorTemp(uint8_t shortAddress, uint16_t mireds);
+        // DT8 Set RGB (Basic implementation)
+        esp_err_t setDT8RGB(uint8_t shortAddress, uint8_t r, uint8_t g, uint8_t b);
 
         /**
       * @brief Starts the DALI bus sniffer.
@@ -78,6 +82,9 @@ namespace daliMQTT
     private:
         DaliAPI() = default;
         [[noreturn]] static void dali_sniffer_task(void* arg);
+        esp_err_t sendSpecialCmdDT8(uint8_t shortAddr, uint8_t cmd);
+
+
         Dali m_dali_impl;
         gptimer_handle_t m_dali_timer{nullptr};
         TaskHandle_t m_sniffer_task_handle{nullptr};

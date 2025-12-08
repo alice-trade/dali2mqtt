@@ -13,7 +13,7 @@ namespace daliMQTT {
     static std::atomic<bool> g_mqtt_bus_busy{false};
 
     void MQTTCommandHandler::publishLightState(dali_addressType_t addr_type, uint8_t target_id,
-                                               const std::string &state, std::optional<uint8_t> brightness) {
+                                               const std::string &state, std::optional<uint8_t> brightness, std::optional<uint16_t> color_temp, std::optional<DaliRGB> rgb) {
         auto &device_controller = DaliDeviceController::getInstance();
 
         auto update_device = [&](const DaliLongAddress_t long_addr) {
@@ -29,7 +29,7 @@ namespace daliMQTT {
                 }
             }
 
-            device_controller.updateDeviceState(long_addr, level_to_set);
+            device_controller.updateDeviceState(long_addr, level_to_set, std::nullopt, color_temp, rgb);
         };
 
         if (addr_type == DALI_ADDRESS_TYPE_GROUP) {
@@ -115,6 +115,8 @@ namespace daliMQTT {
         auto &dali = DaliAPI::getInstance();
         std::optional<bool> target_on_state;
         std::optional<uint8_t> target_brightness;
+        std::optional<uint16_t> target_color_temp;
+        std::optional<DaliRGB> target_rgb;
 
         cJSON *state_item = cJSON_GetObjectItem(root, "state");
         if (state_item && cJSON_IsString(state_item)) {
@@ -129,19 +131,45 @@ namespace daliMQTT {
             target_brightness = static_cast<uint8_t>(std::clamp(brightness_item->valueint, 0, 254));
         }
 
+        cJSON *ct_item = cJSON_GetObjectItem(root, "color_temp");
+        if (ct_item && cJSON_IsNumber(ct_item)) {
+            target_color_temp = static_cast<uint16_t>(ct_item->valueint);
+        }
+
+        cJSON *color_item = cJSON_GetObjectItem(root, "color");
+        if (color_item && cJSON_IsObject(color_item)) {
+            cJSON *r = cJSON_GetObjectItem(color_item, "r");
+            cJSON *g = cJSON_GetObjectItem(color_item, "g");
+            cJSON *b = cJSON_GetObjectItem(color_item, "b");
+            if (cJSON_IsNumber(r) && cJSON_IsNumber(g) && cJSON_IsNumber(b)) {
+                target_rgb = DaliRGB{
+                    static_cast<uint8_t>(r->valueint),
+                    static_cast<uint8_t>(g->valueint),
+                    static_cast<uint8_t>(b->valueint)
+                };
+            }
+        }
+
+        if (target_color_temp.has_value() && addr_type == DALI_ADDRESS_TYPE_SHORT) {
+            dali.setDT8ColorTemp(target_id, *target_color_temp);
+        }
+
+        if (target_rgb.has_value() && addr_type == DALI_ADDRESS_TYPE_SHORT) {
+            dali.setDT8RGB(target_id, target_rgb->r, target_rgb->g, target_rgb->b);
+        }
 
         if (target_on_state.has_value() && !(*target_on_state)) {
             // OFF
             ESP_LOGD(TAG, "MQTT Command: OFF for target %u (type %d)", target_id, addr_type);
             dali.sendCommand(addr_type, target_id, DALI_COMMAND_OFF);
-            publishLightState(addr_type, target_id, "OFF", 0);
+            publishLightState(addr_type, target_id, "OFF", 0, std::nullopt, std::nullopt);
         } else if (target_on_state.has_value() && *target_on_state) {
             if (target_brightness.has_value() && *target_brightness > 0) {
                 // ON + Level
                 ESP_LOGD(TAG, "MQTT Command: ON with brightness %d for target %u (type %d)", *target_brightness,
                          target_id, addr_type);
                 dali.sendDACP(addr_type, target_id, *target_brightness);
-                publishLightState(addr_type, target_id, "ON", *target_brightness);
+                publishLightState(addr_type, target_id, "ON", *target_brightness, target_color_temp, target_rgb);
             } else {
                 // ON (Restore)
                 std::optional<uint8_t> restore_level;
@@ -159,12 +187,12 @@ namespace daliMQTT {
                     uint8_t level = *restore_level;
                     ESP_LOGD(TAG, "MQTT Command: ON (Restore) -> restoring level %d for target %u", level, target_id);
                     dali.sendDACP(addr_type, target_id, level);
-                    publishLightState(addr_type, target_id, "ON", level);
+                    publishLightState(addr_type, target_id, "ON", level, target_color_temp, target_rgb);
                 } else {
                     ESP_LOGD(TAG, "MQTT Command: ON (Default) -> RECALL_MAX_LEVEL for target %u (type %d)", target_id,
                              addr_type);
                     dali.sendCommand(addr_type, target_id, DALI_COMMAND_RECALL_MAX_LEVEL);
-                    publishLightState(addr_type, target_id, "ON", 254);
+                    publishLightState(addr_type, target_id, "ON", 254, target_color_temp, target_rgb);
                 }
             }
         } else if (target_brightness.has_value()) {
@@ -174,12 +202,14 @@ namespace daliMQTT {
                 ESP_LOGD(TAG, "MQTT Command: Set brightness to %d for target %u (type %d)", level, target_id,
                          addr_type);
                 dali.sendDACP(addr_type, target_id, level);
-                publishLightState(addr_type, target_id, "ON", level);
+                publishLightState(addr_type, target_id, "ON", level, target_color_temp, target_rgb);
             } else {
                 ESP_LOGD(TAG, "MQTT Command: Set brightness to 0 (OFF) for target %u (type %d)", target_id, addr_type);
                 dali.sendCommand(addr_type, target_id, DALI_COMMAND_OFF);
-                publishLightState(addr_type, target_id, "OFF", 0);
+                publishLightState(addr_type, target_id, "OFF", 0, target_color_temp, target_rgb);
             }
+        } else if (target_color_temp.has_value() || target_rgb.has_value()) {
+            publishLightState(addr_type, target_id, "ON", std::nullopt, target_color_temp, target_rgb);
         }
 
         cJSON_Delete(root);

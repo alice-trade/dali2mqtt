@@ -29,7 +29,7 @@ namespace daliMQTT {
         static void backgroundInitTask(void* arg);
 
         // Publishing Light state
-        static void publishLightState(dali_addressType_t addr_type, uint8_t target_id, const std::string& state, std::optional<uint8_t> brightness);
+        static void publishLightState(dali_addressType_t addr_type, uint8_t target_id, const std::string& state, std::optional<uint8_t> brightness, std::optional<uint16_t> color_temp, std::optional<DaliRGB> rgb);
     };
 
 } // namespace daliMQTT

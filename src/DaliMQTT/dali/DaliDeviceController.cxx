@@ -43,22 +43,37 @@ namespace daliMQTT
             ESP_LOGE(TAG, "Cannot start DALI tasks: DaliAPI not initialized.");
         }
     }
-    void DaliDeviceController::publishState(const DaliLongAddress_t long_addr, const uint8_t level, const uint8_t status_byte) {
+    void DaliDeviceController::publishState(const DaliLongAddress_t long_addr, const DaliDevice& device) {
         auto const& mqtt = MQTTClient::getInstance();
         const auto config = ConfigManager::getInstance().getConfig();
 
         const auto addr_str = utils::longAddressToString(long_addr);
         const std::string state_topic = utils::stringFormat("%s/light/%s/state", config.mqtt_base_topic.c_str(), addr_str.data());
-        if (level == 255) return;
+        if (device.current_level == 255) return;
 
-        const std::string payload = utils::stringFormat(
-                R"({"state":"%s","brightness":%d,"status_byte":%d})",
-                (level > 0 ? "ON" : "OFF"),
-                level,
-                status_byte
-            );
-        ESP_LOGD(TAG, "Publishing to %s: %s", state_topic.c_str(), payload.c_str());
-        mqtt.publish(state_topic, payload, 0, false);
+        cJSON* root = cJSON_CreateObject();
+        cJSON_AddStringToObject(root, "state", (device.current_level > 0 ? "ON" : "OFF"));
+        cJSON_AddNumberToObject(root, "brightness", device.current_level);
+        cJSON_AddNumberToObject(root, "status_byte", device.status_byte);
+
+        if (device.color_temp.has_value()) {
+            cJSON_AddNumberToObject(root, "color_temp", device.color_temp.value());
+        }
+        if (device.rgb.has_value()) {
+            cJSON* color = cJSON_CreateObject();
+            cJSON_AddNumberToObject(color, "r", device.rgb->r);
+            cJSON_AddNumberToObject(color, "g", device.rgb->g);
+            cJSON_AddNumberToObject(color, "b", device.rgb->b);
+            cJSON_AddItemToObject(root, "color", color);
+        }
+
+        char* payload = cJSON_PrintUnformatted(root);
+        if (payload) {
+            ESP_LOGD(TAG, "Publishing to %s: %s", state_topic.c_str(), payload);
+            mqtt.publish(state_topic, payload, 0, false);
+            free(payload);
+        }
+        cJSON_Delete(root);
     }
 
     void DaliDeviceController::publishAvailability(const DaliLongAddress_t long_addr, const bool is_available) {
@@ -74,7 +89,7 @@ namespace daliMQTT
         mqtt.publish(status_topic, payload, 1, true);
     }
 
-    void DaliDeviceController::updateDeviceState(DaliLongAddress_t longAddr, uint8_t level, std::optional<uint8_t> status_byte) {
+  void DaliDeviceController::updateDeviceState(DaliLongAddress_t longAddr, uint8_t level, std::optional<uint8_t> status_byte, std::optional<uint16_t> mireds, std::optional<DaliRGB> rgb) {
         std::lock_guard lock(m_devices_mutex);
         const auto it = m_devices.find(longAddr);
         if (it != m_devices.end()) {
@@ -97,11 +112,21 @@ namespace daliMQTT
                 state_changed = true;
             }
 
+            if (mireds.has_value() && it->second.color_temp != mireds) {
+                it->second.color_temp = mireds;
+                state_changed = true;
+            }
+
+            if (rgb.has_value() && it->second.rgb != rgb) {
+                it->second.rgb = rgb;
+                state_changed = true;
+            }
+
             if (state_changed || it->second.initial_sync_needed) {
                 ESP_LOGD(TAG, "State update for %s: Level=%d, Status=%d (InitSync: %d)",
                          utils::longAddressToString(longAddr).data(), level, actual_status_byte, it->second.initial_sync_needed);
 
-                publishState(longAddr, level, actual_status_byte);
+                publishState(longAddr, it->second);
 
                 it->second.initial_sync_needed = false;
             }
@@ -391,6 +416,9 @@ namespace daliMQTT
         }
 
         const uint8_t actual_level = (level_opt.value() == 255) ? current_cached_level : level_opt.value();
+
+        // TODO: GT8 rgb/tc pool
+
         updateDeviceState(long_addr, actual_level, status_opt);
         bool needs_static_data = false;
         {

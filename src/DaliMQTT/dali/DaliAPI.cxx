@@ -349,6 +349,49 @@ namespace daliMQTT
         return gtin_res;
     }
 
+     esp_err_t DaliAPI::sendSpecialCmdDT8(const uint8_t shortAddr, const uint8_t cmd) {
+        m_dali_impl.cmd(DALI_SPECIAL_COMMAND_ENABLE_DEVICE_TYPE_X, 8, false); // 0xC1 0x08
+        const uint8_t dali_arg = (shortAddr << 1) | 1;
+        m_dali_impl.cmd(cmd, dali_arg, false);
+        return ESP_OK;
+    }
+
+    esp_err_t DaliAPI::setDT8ColorTemp(const uint8_t shortAddress, const uint16_t mireds) {
+        std::lock_guard lock(bus_mutex);
+        // DTR1 (High), DTR0 (Low)
+        m_dali_impl.set_dtr1((mireds >> 8) & 0xFF, (shortAddress << 1) | 1);
+        m_dali_impl.set_dtr0(mireds & 0xFF, (shortAddress << 1) | 1);
+
+        sendSpecialCmdDT8(shortAddress, DALI_COMMAND_DT8_SET_COLOUR_TEMP_TC);
+        sendSpecialCmdDT8(shortAddress, DALI_COMMAND_DT8_ACTIVATE);
+
+        ESP_LOGI(TAG, "DT8 Set TC: %d mireds to %d", mireds, shortAddress);
+        vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
+        return ESP_OK;
+    }
+
+    esp_err_t DaliAPI::setDT8RGB(const uint8_t shortAddress, const uint8_t r, const uint8_t g, const uint8_t b) {
+        std::lock_guard lock(bus_mutex);
+        m_dali_impl.set_dtr1(0x01, (shortAddress << 1) | 1); // Mask R
+        m_dali_impl.set_dtr0(r, (shortAddress << 1) | 1); // Value R
+        sendSpecialCmdDT8(shortAddress, DALI_COMMAND_DT8_SET_TEMPORARY_RGB_DIMLEVEL);
+
+        m_dali_impl.set_dtr1(0x02, (shortAddress << 1) | 1); // Mask G
+        m_dali_impl.set_dtr0(g, (shortAddress << 1) | 1); // Value G
+        sendSpecialCmdDT8(shortAddress, DALI_COMMAND_DT8_SET_TEMPORARY_RGB_DIMLEVEL);
+
+        m_dali_impl.set_dtr1(0x04, (shortAddress << 1) | 1); // Mask B
+        m_dali_impl.set_dtr0(b, (shortAddress << 1) | 1); // Value B
+        sendSpecialCmdDT8(shortAddress, DALI_COMMAND_DT8_SET_TEMPORARY_RGB_DIMLEVEL);
+
+        // Activate
+        sendSpecialCmdDT8(shortAddress, DALI_COMMAND_DT8_ACTIVATE);
+
+        ESP_LOGD(TAG, "DT8 Set RGB: %d,%d,%d to %d", r, g, b, shortAddress);
+        vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
+        return ESP_OK;
+    }
+
     bool DaliAPI::isInitialized() const {
         return m_initialized;
     }

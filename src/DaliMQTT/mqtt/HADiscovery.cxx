@@ -63,12 +63,29 @@ namespace daliMQTT
         cJSON* root = cJSON_CreateObject();
         if (!root) return;
 
+        DaliDevice dev_copy; // FIXME???
+        {
+            auto devices = DaliDeviceController::getInstance().getDevices();
+            if (devices.contains(long_addr)) {
+                dev_copy = devices.at(long_addr);
+            }
+        }
+
         cJSON_AddStringToObject(root, "name", readable_name.c_str());
         cJSON_AddStringToObject(root, "unique_id", object_id.c_str());
         cJSON_AddStringToObject(root, "schema", "json");
         cJSON_AddStringToObject(root, "command_topic", utils::stringFormat("%s/light/%s/set", base_topic.c_str(), addr_str.c_str()).c_str());
         cJSON_AddStringToObject(root, "state_topic", utils::stringFormat("%s/light/%s/state", base_topic.c_str(), addr_str.c_str()).c_str());
         cJSON_AddTrueToObject(root, "brightness");
+
+        if (dev_copy.device_type.has_value() && dev_copy.device_type.value() == 8) {
+            cJSON* color_modes = cJSON_CreateArray();
+            cJSON_AddItemToArray(color_modes, cJSON_CreateString("color_temp"));
+            cJSON_AddItemToArray(color_modes, cJSON_CreateString("rgb"));
+            cJSON_AddItemToObject(root, "supported_color_modes", color_modes);
+            cJSON_AddNumberToObject(root, "min_mireds", 153); // ~6500K
+            cJSON_AddNumberToObject(root, "max_mireds", 500); // ~2000K
+        }
 
         cJSON* av_list = cJSON_CreateArray();
         cJSON* av_bridge = cJSON_CreateObject();
