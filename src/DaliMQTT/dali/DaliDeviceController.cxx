@@ -277,12 +277,21 @@ namespace daliMQTT
             }
         } else {
              // 24-bit Command
-             addr_type_str = "command";
-             address = (addr_byte >> 1) & 0x3F;
+             return;
         }
+        std::string topic_addr_type = addr_type_str;
+        std::string topic_addr_val = std::to_string(address);
 
+        if (addr_type_str == "short") {
+            auto long_addr_opt = getLongAddress(address);
+            if (long_addr_opt.has_value()) {
+                topic_addr_type = "long";
+                auto la_str = utils::longAddressToString(long_addr_opt.value());
+                topic_addr_val = std::string(la_str.data());
+            }
+        }
         cJSON* root = cJSON_CreateObject();
-        cJSON_AddStringToObject(root, "type", "input_device_event");
+        cJSON_AddStringToObject(root, "type", "event");
         cJSON_AddStringToObject(root, "address_type", addr_type_str.c_str());
         cJSON_AddNumberToObject(root, "address", address);
         cJSON_AddNumberToObject(root, "instance", instance_byte);
@@ -293,13 +302,9 @@ namespace daliMQTT
             snprintf(hex_buf, sizeof(hex_buf), "%06lX", data);
             cJSON_AddStringToObject(root, "raw_hex", hex_buf);
         #endif
-        // Long addr
-        if (addr_type_str == "short") {
-            auto long_addr_opt = getLongAddress(address);
-            if (long_addr_opt.has_value()) {
-                auto la_str = utils::longAddressToString(long_addr_opt.value());
-                cJSON_AddStringToObject(root, "long_addr", la_str.data());
-            }
+
+        if (topic_addr_type == "long") {
+            cJSON_AddStringToObject(root, "long_addr", topic_addr_val.c_str());
         }
         char* json_payload = cJSON_PrintUnformatted(root);
         cJSON_Delete(root);
@@ -308,10 +313,10 @@ namespace daliMQTT
             auto const& mqtt = MQTTClient::getInstance();
             const auto config = ConfigManager::getInstance().getConfig();
 
-            std::string topic = utils::stringFormat("%s/event/%s/%d", // base/event/{address_type}/{address}
+            std::string topic = utils::stringFormat("%s/event/%s/%s", // base/event/{address_type}/{address_str}
                 config.mqtt_base_topic.c_str(),
-                addr_type_str.c_str(),
-                address
+                topic_addr_type.c_str(),
+                topic_addr_val.c_str()
             );
             mqtt.publish(topic, json_payload, 0, false);
             ESP_LOGD(TAG, "Input Device Event Published: %s -> %s", topic.c_str(), json_payload);
