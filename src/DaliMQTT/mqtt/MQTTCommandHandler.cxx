@@ -10,6 +10,7 @@
 namespace daliMQTT {
     static constexpr char TAG[] = "MQTTCommandHandler";
 
+    static std::atomic<bool> g_mqtt_bus_busy{false};
 
     void MQTTCommandHandler::publishLightState(dali_addressType_t addr_type, uint8_t target_id,
                                                const std::string &state, std::optional<uint8_t> brightness) {
@@ -361,7 +362,60 @@ namespace daliMQTT {
 
         cJSON_Delete(root);
     }
+    void MQTTCommandHandler::backgroundScanTask(void* arg) {
+        ESP_LOGI(TAG, "Starting MQTT-initiated DALI scan...");
+        auto const& mqtt = MQTTClient::getInstance();
+        auto config = ConfigManager::getInstance().getConfig();
+        std::string status_topic = config.mqtt_base_topic + "/config/bus/sync_status";
 
+        mqtt.publish(status_topic, R"({"status":"scanning"})", 0, false);
+
+        DaliDeviceController::getInstance().performScan();
+        DaliGroupManagement::getInstance().refreshAssignmentsFromBus();
+
+        mqtt.publish(status_topic, R"({"status":"idle", "last_action":"scan_complete"})", 0, false);
+        ESP_LOGI(TAG, "MQTT-initiated DALI scan finished.");
+
+        g_mqtt_bus_busy = false;
+        vTaskDelete(nullptr);
+    }
+
+    void MQTTCommandHandler::backgroundInitTask(void* arg) {
+        ESP_LOGI(TAG, "Starting MQTT-initiated DALI initialization...");
+        auto const& mqtt = MQTTClient::getInstance();
+        auto config = ConfigManager::getInstance().getConfig();
+        std::string status_topic = config.mqtt_base_topic + "/config/bus/sync_status";
+
+        mqtt.publish(status_topic, R"({"status":"initializing"})", 0, false);
+
+        DaliDeviceController::getInstance().performFullInitialization();
+        DaliGroupManagement::getInstance().refreshAssignmentsFromBus();
+
+        mqtt.publish(status_topic, R"({"status":"idle", "last_action":"init_complete"})", 0, false);
+        ESP_LOGI(TAG, "MQTT-initiated DALI initialization finished.");
+        g_mqtt_bus_busy = false;
+        vTaskDelete(nullptr);
+    }
+    void MQTTCommandHandler::handleScanCommand() {
+        if (g_mqtt_bus_busy.exchange(true)) {
+            ESP_LOGW(TAG, "Bus operation already in progress. Ignoring scan request.");
+            return;
+        }
+        if (xTaskCreate(backgroundScanTask, "mqtt_scan_task", 4096, nullptr, 4, nullptr) != pdPASS) {
+            ESP_LOGE(TAG, "Failed to create scan task");
+            g_mqtt_bus_busy = false;
+        }
+    }
+    void MQTTCommandHandler::handleInitializeCommand() {
+        if (g_mqtt_bus_busy.exchange(true)) {
+            ESP_LOGW(TAG, "Bus operation already in progress. Ignoring init request.");
+            return;
+        }
+        if (xTaskCreate(backgroundInitTask, "mqtt_init_task", 4096, nullptr, 4, nullptr) != pdPASS) {
+            ESP_LOGE(TAG, "Failed to create init task");
+            g_mqtt_bus_busy = false;
+        }
+    }
     void MQTTCommandHandler::handle(const std::string &topic, const std::string &data) {
         ESP_LOGD(TAG, "MQTT Rx: %s -> %s", topic.c_str(), data.c_str());
 
@@ -380,8 +434,17 @@ namespace daliMQTT {
 
         if (parts[0] == "light") {
             handleLightCommand(parts, data);
-        } else if (parts[0] == "config" && parts.size() > 2 && parts[1] == "group" && parts[2] == "set") {
-            handleGroupCommand(data);
+        } else if (parts[0] == "config") {
+            if (parts.size() > 2 && parts[1] == "group" && parts[2] == "set") {
+                handleGroupCommand(data);
+            }
+            else if (parts.size() > 2 && parts[1] == "bus") {
+                if (parts[2] == "scan") {
+                    handleScanCommand();
+                } else if (parts[2] == "initialize") {
+                    handleInitializeCommand();
+                }
+            }
         } else if (parts[0] == "scene" && parts.size() > 1 && parts[1] == "set") {
             std::string scene_str = data;
             // HASS Scene Select
@@ -394,6 +457,9 @@ namespace daliMQTT {
             }
         } else if (parts[0] == "cmd" && parts.size() > 1 && parts[1] == "raw") {
             processSendDALICommand(data);
+        } else if (parts[0] == "cmd" && parts.size() > 1 && parts[1] == "sync") {
+            handleSyncCommand(data);
         }
+
     }
 } // namespace daliMQTT

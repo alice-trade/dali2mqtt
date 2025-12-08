@@ -342,11 +342,11 @@ namespace daliMQTT
         }
     }
     void DaliDeviceController::requestBroadcastSync(const uint32_t base_delay_ms, const uint32_t stagger_ms) {
-        auto devices = getDevices();
-        ESP_LOGI(TAG, "Scheduling broadcast sync for %zu devices (Base: %ums, Stagger: %ums)", devices.size(), base_delay_ms, stagger_ms);
-
+        std::lock_guard lock(m_devices_mutex);
+        ESP_LOGI(TAG, "Scheduling broadcast sync for %zu devices (Base: %ums, Stagger: %ums)",
+                         m_devices.size(), base_delay_ms, stagger_ms);
         uint32_t current_delay = base_delay_ms;
-        for (const auto &dev: devices | std::views::values) {
+        for (const auto &dev: m_devices | std::views::values) {
             requestDeviceSync(dev.short_address, current_delay);
             current_delay += stagger_ms;
         }
@@ -362,15 +362,12 @@ namespace daliMQTT
                 known_device = true;
             }
         }
-
         if (!known_device) {
             return;
         }
 
         auto& dali = DaliAPI::getInstance();
-
         const auto level_opt = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddr, DALI_COMMAND_QUERY_ACTUAL_LEVEL);
-
         const bool is_device_responding = level_opt.has_value();
         {
             std::lock_guard lock(m_devices_mutex);
@@ -387,7 +384,6 @@ namespace daliMQTT
         if (!is_device_responding) return;
 
         const auto status_opt = dali.getDeviceStatus(shortAddr);
-
         uint8_t current_cached_level = 0;
         {
              std::lock_guard lock(m_devices_mutex);
@@ -395,9 +391,7 @@ namespace daliMQTT
         }
 
         const uint8_t actual_level = (level_opt.value() == 255) ? current_cached_level : level_opt.value();
-
         updateDeviceState(long_addr, actual_level, status_opt);
-
         bool needs_static_data = false;
         {
             std::lock_guard lock(m_devices_mutex);
