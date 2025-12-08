@@ -43,7 +43,7 @@ namespace daliMQTT
             devices[long_address] = DaliDevice{
                 .long_address = long_address,
                 .short_address = short_address,
-                .is_present = false
+                .is_present = true
             };
             short_to_long[short_address] = long_address;
         }
