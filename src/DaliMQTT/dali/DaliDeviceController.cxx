@@ -365,20 +365,26 @@ namespace daliMQTT
 
         const auto level_opt = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddr, DALI_COMMAND_QUERY_ACTUAL_LEVEL);
 
-        const bool is_present = level_opt.has_value();
+        const bool is_device_responding = level_opt.has_value();
         {
             std::lock_guard lock(m_devices_mutex);
             if (m_devices.contains(long_addr)) {
-                if (m_devices[long_addr].available != is_present) {
-                    m_devices[long_addr].available = is_present;
-                    publishAvailability(long_addr, is_present);
+                auto& device = m_devices[long_addr];
+
+                if (is_device_responding) {
+                    device.is_present = true;
+                }
+
+                if (device.available != is_device_responding) {
+                    device.available = is_device_responding;
+                    publishAvailability(long_addr, is_device_responding);
                 }
             } else {
                 return;
             }
         }
 
-        if (!is_present) return;
+        if (!is_device_responding) return;
 
         const auto status_opt = dali.getDeviceStatus(shortAddr);
         bool lamp_failure = false;
