@@ -43,7 +43,6 @@ namespace daliMQTT
             devices[long_address] = DaliDevice{
                 .long_address = long_address,
                 .short_address = short_address,
-                .is_present = true
             };
             short_to_long[short_address] = long_address;
         }
@@ -62,9 +61,7 @@ namespace daliMQTT
         std::vector<AddressMapping> mappings;
         mappings.reserve(devices.size());
         for (const auto& [long_addr, device] : devices) {
-            if (device.is_present) {
-                 mappings.push_back({.long_address = long_addr, .short_address = device.short_address});
-            }
+            mappings.push_back({.long_address = long_addr, .short_address = device.short_address});
         }
 
         esp_err_t err = nvs_set_blob(nvs_handle.get(), MAP_KEY, mappings.data(), mappings.size() * sizeof(AddressMapping));

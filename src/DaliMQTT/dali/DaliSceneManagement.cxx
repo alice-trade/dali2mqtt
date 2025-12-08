@@ -70,7 +70,7 @@ namespace daliMQTT
         ESP_LOGI(TAG, "Querying levels for Scene %d...", sceneId);
 
         for (const auto& device : devices | std::views::values) {
-            if (!device.is_present) continue;
+            if (!device.available) continue;
 
             auto level_opt = dali.sendQuery(
                 DALI_ADDRESS_TYPE_SHORT,

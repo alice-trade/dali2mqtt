@@ -65,7 +65,7 @@ namespace daliMQTT {
             case DALI_ADDRESS_TYPE_BROADCAST: {
                 auto devices = device_controller.getDevices();
                 for (const auto &[long_addr, device]: devices) {
-                    if (device.is_present) {
+                    if (device.available) {
                         update_device(long_addr);
                     }
                 }

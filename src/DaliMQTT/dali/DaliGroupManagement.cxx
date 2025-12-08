@@ -205,7 +205,7 @@ namespace daliMQTT
         auto& dali = DaliAPI::getInstance();
 
         for (const auto& [long_addr, device] : devices) {
-            if (!device.is_present) continue;
+            if (!device.available) continue;
 
             if (auto groups_opt = dali.getDeviceGroups(device.short_address)) {
                 new_assignments[long_addr] = *groups_opt;

@@ -175,28 +175,32 @@ namespace daliMQTT
             }
         }
 
-        std::vector<DaliLongAddress_t> validated_devices;
-        for (const auto&[long_address, short_address] : devices_to_validate) {
+        for (const auto&[expected_long_addr, short_address] : devices_to_validate) {
             if (auto status_opt = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, short_address, DALI_COMMAND_QUERY_STATUS); status_opt.has_value()) {
-                if (auto long_addr_from_bus_opt = dali.getLongAddress(short_address); long_addr_from_bus_opt && *long_addr_from_bus_opt == long_address) {
-                    validated_devices.push_back(long_address);
+
+                if (auto long_addr_from_bus_opt = dali.getLongAddress(short_address)) {
+                    if (*long_addr_from_bus_opt != expected_long_addr) {
+                        ESP_LOGW(TAG, "Validation CONFLICT: Short Addr %d has Long Addr %lX, expected %lX. Full scan required.",
+                            short_address, *long_addr_from_bus_opt, expected_long_addr);
+                        return false;
+                    }
+                    {
+                        std::lock_guard lock(m_devices_mutex);
+                        if (m_devices.contains(expected_long_addr)) {
+                            auto& dev = m_devices[expected_long_addr];
+                            if (!dev.available) {
+                                dev.available = true;
+                                publishAvailability(expected_long_addr, true);
+                            }
+                        }
+                    }
                 } else {
-                    ESP_LOGW(TAG, "Validation failed: Device at short address %d has a different long address now.", short_address);
-                    return false;
+                    ESP_LOGW(TAG, "Device at SA %d responded to Status but failed Long Addr query. Skipping check.", short_address);
                 }
             } else {
-                ESP_LOGW(TAG, "Validation failed: Device at short address %d did not respond.", short_address);
+                ESP_LOGD(TAG, "Device at SA %d did not respond (Offline).", short_address);
             }
             vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_POLL_DELAY_MS));
-        }
-
-        {
-            std::lock_guard lock(m_devices_mutex);
-            for (const auto& long_addr : validated_devices) {
-                if (m_devices.contains(long_addr)) {
-                    m_devices.at(long_addr).is_present = true;
-                }
-            }
         }
         return true;
     }
@@ -369,14 +373,8 @@ namespace daliMQTT
         {
             std::lock_guard lock(m_devices_mutex);
             if (m_devices.contains(long_addr)) {
-                auto& device = m_devices[long_addr];
-
-                if (is_device_responding) {
-                    device.is_present = true;
-                }
-
-                if (device.available != is_device_responding) {
-                    device.available = is_device_responding;
+                if (m_devices[long_addr].available != is_device_responding) {
+                    m_devices[long_addr].available = is_device_responding;
                     publishAvailability(long_addr, is_device_responding);
                 }
             } else {
@@ -484,7 +482,7 @@ namespace daliMQTT
                     {
                         std::lock_guard lock(self->m_devices_mutex);
                         for(const auto& [addr, dev] : self->m_devices) {
-                            if(dev.is_present && dev.available) current_levels[addr] = dev.current_level;
+                            if(dev.available) current_levels[addr] = dev.current_level;
                         }
                     }
                     std::map<uint8_t, uint8_t> group_sync_levels;
@@ -547,7 +545,7 @@ namespace daliMQTT
                     new_devices[long_addr] = DaliDevice{
                         .long_address = long_addr,
                         .short_address = sa,
-                        .is_present = true
+                        .available = true
                     };
                     new_short_to_long_map[sa] = long_addr;
                 } else {

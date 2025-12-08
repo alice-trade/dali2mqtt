@@ -29,7 +29,6 @@ namespace daliMQTT
         uint8_t status_byte{0};               // Current status
         std::optional<uint8_t> device_type{}; // Device Type
         std::string gtin{};                   // GTIN
-        bool is_present{false};               // Presence flag
         bool available{false};                // Runtime Availability flag
         bool initial_sync_needed{true};       // First sync flag
         bool static_data_loaded{false};       // Static data load flag
