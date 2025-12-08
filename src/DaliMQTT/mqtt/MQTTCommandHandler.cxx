@@ -307,6 +307,60 @@ namespace daliMQTT {
         cJSON_Delete(root);
     }
 
+    void MQTTCommandHandler::handleSyncCommand(const std::string& data) {
+        cJSON* root = cJSON_Parse(data.c_str());
+        if (!root) {
+            ESP_LOGE(TAG, "Failed to parse sync command JSON");
+            return;
+        }
+
+        cJSON* addr_type_item = cJSON_GetObjectItem(root, "addr_type");
+        cJSON* addr_item = cJSON_GetObjectItem(root, "address");
+        cJSON* delay_item = cJSON_GetObjectItem(root, "delay_ms");
+        cJSON* stagger_item = cJSON_GetObjectItem(root, "stagger_ms");
+
+        uint32_t delay_ms = 0;
+        if (cJSON_IsNumber(delay_item)) {
+            delay_ms = static_cast<uint32_t>(delay_item->valueint);
+        }
+
+        bool is_broadcast = false;
+        if (cJSON_IsString(addr_type_item) && addr_type_item->valuestring != nullptr) {
+            if (strcmp(addr_type_item->valuestring, "broadcast") == 0) {
+                is_broadcast = true;
+            }
+        }
+
+        auto& controller = DaliDeviceController::getInstance();
+
+        if (is_broadcast) {
+            uint32_t stagger = 100;
+            if (cJSON_IsNumber(stagger_item)) {
+                stagger = static_cast<uint32_t>(stagger_item->valueint);
+            }
+            controller.requestBroadcastSync(delay_ms, stagger);
+        } else {
+            if (cJSON_IsString(addr_item) && addr_item->valuestring != nullptr) {
+                std::string addr_str = addr_item->valuestring;
+                auto long_addr_opt = utils::stringToLongAddress(addr_str);
+
+                if (long_addr_opt) {
+                    auto short_addr_opt = controller.getShortAddress(*long_addr_opt);
+                    if (short_addr_opt) {
+                        controller.requestDeviceSync(*short_addr_opt, delay_ms);
+                    } else {
+                         ESP_LOGD(TAG, "Sync requested for unknown device long address: %s", addr_str.c_str());
+                    }
+                } else {
+                    ESP_LOGD(TAG, "Invalid address format in sync command: %s", addr_str.c_str());
+                }
+            } else {
+                ESP_LOGD(TAG, "Sync command missing 'addr' field for device sync");
+            }
+        }
+
+        cJSON_Delete(root);
+    }
 
     void MQTTCommandHandler::handle(const std::string &topic, const std::string &data) {
         ESP_LOGD(TAG, "MQTT Rx: %s -> %s", topic.c_str(), data.c_str());

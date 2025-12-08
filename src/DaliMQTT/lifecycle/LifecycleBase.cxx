@@ -116,6 +116,11 @@ namespace daliMQTT
         mqtt.subscribe(cmd_topic);
         ESP_LOGW(TAG, "DEBUG INTERFACE ENABLED. Subscribed to: %s", cmd_topic.c_str());
 
+        // base/cmd/sync
+        std::string sync_topic = utils::stringFormat("%s/cmd/sync", config.mqtt_base_topic.c_str());
+        mqtt.subscribe(sync_topic);
+        ESP_LOGI(TAG, "Subscribed to sync: %s", sync_topic.c_str());
+
         MQTTHomeAssistantDiscovery hass_discovery;
         hass_discovery.publishAllDevices();
         ESP_LOGI(TAG, "MQTT discovery messages published.");

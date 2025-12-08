@@ -341,7 +341,16 @@ namespace daliMQTT
             ESP_LOGD(TAG, "Scheduled DELAYED poll for SA: %d in %u ms", shortAddress, delay_ms);
         }
     }
+    void DaliDeviceController::requestBroadcastSync(const uint32_t base_delay_ms, const uint32_t stagger_ms) {
+        auto devices = getDevices();
+        ESP_LOGI(TAG, "Scheduling broadcast sync for %zu devices (Base: %ums, Stagger: %ums)", devices.size(), base_delay_ms, stagger_ms);
 
+        uint32_t current_delay = base_delay_ms;
+        for (const auto &dev: devices | std::views::values) {
+            requestDeviceSync(dev.short_address, current_delay);
+            current_delay += stagger_ms;
+        }
+    }
     void DaliDeviceController::pollSingleDevice(const uint8_t shortAddr) {
         DaliLongAddress_t long_addr = 0;
         bool known_device = false;

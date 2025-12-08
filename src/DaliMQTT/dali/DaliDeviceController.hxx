@@ -32,6 +32,8 @@ namespace daliMQTT
         void publishAttributes(DaliLongAddress_t longAddr);
         [[nodiscard]] std::optional<uint8_t> getLastLevel(DaliLongAddress_t longAddress) const;
         void requestDeviceSync(uint8_t shortAddress, uint32_t delay_ms = 0);
+        void requestBroadcastSync(uint32_t base_delay_ms, uint32_t stagger_ms);
+
 
     private:
         DaliDeviceController() = default;
