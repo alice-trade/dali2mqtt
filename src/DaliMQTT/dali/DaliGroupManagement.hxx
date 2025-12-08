@@ -43,6 +43,10 @@ namespace daliMQTT
         // Восстановить уровень
         void restoreGroupLevel(uint8_t group_id);
 
+        // Публикация текущей конфигурации групп в MQTT
+        void publishAllGroups() const;
+
+
         /**
         * @brief Относительное изменение уровня
         * @param is_up: true для увеличения, false для уменьшения
@@ -55,6 +59,7 @@ namespace daliMQTT
         esp_err_t saveToConfig();
 
         void publishGroupState(uint8_t group_id, uint8_t level) const;
+        void publishDeviceGroupState(DaliLongAddress_t longAddr, const std::bitset<16>& groups) const;
 
         GroupAssignments m_assignments;
         std::array<DaliGroup, 16> m_group_states;
