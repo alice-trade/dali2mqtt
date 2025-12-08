@@ -43,19 +43,21 @@ namespace daliMQTT
             ESP_LOGE(TAG, "Cannot start DALI tasks: DaliAPI not initialized.");
         }
     }
-    void DaliDeviceController::publishState(const DaliLongAddress_t long_addr, const uint8_t level, const bool lamp_failure) {
+    void DaliDeviceController::publishState(const DaliLongAddress_t long_addr, const uint8_t level, const uint8_t status_byte) {
         auto const& mqtt = MQTTClient::getInstance();
         const auto config = ConfigManager::getInstance().getConfig();
 
         const auto addr_str = utils::longAddressToString(long_addr);
         const std::string state_topic = utils::stringFormat("%s/light/%s/state", config.mqtt_base_topic.c_str(), addr_str.data());
         if (level == 255) return;
+        const bool lamp_failure = (status_byte >> 1) & 0x01;
 
         const std::string payload = utils::stringFormat(
-                R"({"state":"%s","brightness":%d,"lamp_failure":%s})",
+                R"({"state":"%s","brightness":%d,"lamp_failure":%s,"status_byte":%d})",
                 (level > 0 ? "ON" : "OFF"),
                 level,
-                (lamp_failure ? "true" : "false")
+                (lamp_failure ? "true" : "false"),
+                status_byte
             );
         ESP_LOGD(TAG, "Publishing to %s: %s", state_topic.c_str(), payload.c_str());
         mqtt.publish(state_topic, payload, 0, false);
@@ -74,7 +76,7 @@ namespace daliMQTT
         mqtt.publish(status_topic, payload, 1, true);
     }
 
-    void DaliDeviceController::updateDeviceState(DaliLongAddress_t longAddr, uint8_t level, std::optional<bool> lamp_failure) {
+    void DaliDeviceController::updateDeviceState(DaliLongAddress_t longAddr, uint8_t level, std::optional<uint8_t> status_byte) {
         std::lock_guard lock(m_devices_mutex);
         const auto it = m_devices.find(longAddr);
         if (it != m_devices.end()) {
@@ -88,19 +90,20 @@ namespace daliMQTT
                 it->second.current_level = level;
                 state_changed = true;
             }
-            bool actual_failure_status = lamp_failure.has_value() ? *lamp_failure : it->second.lamp_failure;
 
-            if (it->second.lamp_failure != actual_failure_status) {
-                ESP_LOGW(TAG, "Lamp failure status changed for %s: %d", utils::longAddressToString(longAddr).data(), actual_failure_status);
-                it->second.lamp_failure = actual_failure_status;
+            uint8_t actual_status_byte = status_byte.has_value() ? *status_byte : it->second.status_byte;
+
+            if (it->second.status_byte != actual_status_byte) {
+                ESP_LOGD(TAG, "Status byte changed for %s: %d -> %d", utils::longAddressToString(longAddr).data(), it->second.status_byte, actual_status_byte);
+                it->second.status_byte = actual_status_byte;
                 state_changed = true;
             }
 
             if (state_changed || it->second.initial_sync_needed) {
-                ESP_LOGI(TAG, "State update for %s: Level=%d, Fail=%d (InitSync: %d)",
-                         utils::longAddressToString(longAddr).data(), level, actual_failure_status, it->second.initial_sync_needed);
+                ESP_LOGD(TAG, "State update for %s: Level=%d, Status=%d (InitSync: %d)",
+                         utils::longAddressToString(longAddr).data(), level, actual_status_byte, it->second.initial_sync_needed);
 
-                publishState(longAddr, level, actual_failure_status);
+                publishState(longAddr, level, actual_status_byte);
 
                 it->second.initial_sync_needed = false;
             }

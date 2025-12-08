@@ -28,7 +28,7 @@ namespace daliMQTT
         [[nodiscard]] std::optional<uint8_t> getShortAddress(DaliLongAddress_t longAddress) const;
         [[nodiscard]] std::optional<DaliLongAddress_t> getLongAddress(uint8_t shortAddress) const;
 
-        void updateDeviceState(DaliLongAddress_t longAddr, uint8_t level, std::optional<bool> lamp_failure = std::nullopt);
+        void updateDeviceState(DaliLongAddress_t longAddr, uint8_t level, std::optional<uint8_t> status_byte = std::nullopt);
         void publishAttributes(DaliLongAddress_t longAddr);
         [[nodiscard]] std::optional<uint8_t> getLastLevel(DaliLongAddress_t longAddress) const;
         void requestDeviceSync(uint8_t shortAddress, uint32_t delay_ms = 0);
@@ -46,7 +46,7 @@ namespace daliMQTT
         [[noreturn]] static void daliEventHandlerTask(void* pvParameters);
         [[noreturn]] static void daliSyncTask(void* pvParameters);
 
-        static void publishState(DaliLongAddress_t long_addr, uint8_t level, bool lamp_failure);
+        static void publishState(DaliLongAddress_t long_addr, uint8_t level, uint8_t status_byte);
         static void publishAvailability(DaliLongAddress_t long_addr, bool is_available);
 
         TaskHandle_t m_event_handler_task{nullptr};
