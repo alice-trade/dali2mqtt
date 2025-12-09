@@ -10,6 +10,7 @@ namespace daliMQTT {
             uint8_t short_address;
             uint8_t device_type;
             char gtin[GTIN_STORAGE_SIZE];
+            bool is_input_device;
             bool supports_rgb;
             bool supports_tc;
             uint8_t _padding;

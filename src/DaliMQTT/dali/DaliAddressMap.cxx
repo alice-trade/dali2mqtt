@@ -49,7 +49,7 @@ namespace daliMQTT
             }
 
             dev.gtin = std::string(record.gtin, strnlen(record.gtin, GTIN_STORAGE_SIZE));
-
+            dev.is_input_device = record.is_input_device;
 
             dev.supports_rgb = record.supports_rgb;
             dev.supports_tc = record.supports_tc;
@@ -82,6 +82,7 @@ namespace daliMQTT
             record.device_type = device.device_type.value_or(0xFF);
             record.supports_rgb = device.supports_rgb;
             record.supports_tc = device.supports_tc;
+            record.is_input_device = device.is_input_device;
             record._padding = 0;
             if (!device.gtin.empty()) {
                 strncpy(record.gtin, device.gtin.c_str(), GTIN_STORAGE_SIZE - 1);

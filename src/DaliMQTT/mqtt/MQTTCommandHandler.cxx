@@ -476,6 +476,13 @@ namespace daliMQTT {
                     handleInitializeCommand();
                 }
             }
+            else if (parts.size() > 2 && parts[1] == "input_device") {
+                if (parts[2] == "scan") {
+                    handleScanCommand();
+                } else if (parts[2] == "initialize") {
+                    handleInitializeCommand();
+                }
+            }
         } else if (parts[0] == "scene" && parts.size() > 1 && parts[1] == "set") {
             std::string scene_str = data;
             // HASS Scene Select

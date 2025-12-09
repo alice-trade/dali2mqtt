@@ -26,6 +26,7 @@ namespace daliMQTT
         esp_err_t sendDACP(dali_addressType_t addr_type, uint8_t addr, uint8_t level);
         // Отправка запроса с ожиданием ответа
         [[nodiscard]] std::optional<uint8_t> sendQuery(dali_addressType_t addr_type, uint8_t addr, uint8_t command);
+        std::optional<uint8_t> sendInputDeviceCommand(uint8_t shortAddress, uint8_t opcode, std::optional<uint8_t> param = std::nullopt);
         // Raw send command
         [[nodiscard]] std::optional<uint8_t> sendRaw(uint32_t data, uint8_t bits = 16);
         // DT8 Set Color Temperature (Tc)
@@ -68,6 +69,8 @@ namespace daliMQTT
         [[nodiscard]] std::optional<std::bitset<16>> getDeviceGroups(uint8_t shortAddress);
 
         [[nodiscard]] std::optional<uint8_t> getDT8Features(uint8_t shortAddress);
+
+        [[nodiscard]] std::optional<uint8_t> readInputDeviceMemory(uint8_t shortAddress, uint8_t bank, uint8_t offset);
 
         std::optional<uint8_t> getDeviceType(uint8_t shortAddress);
 

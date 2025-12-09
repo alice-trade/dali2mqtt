@@ -275,7 +275,6 @@ namespace daliMQTT
             }
         }
     }
-
     void DaliDeviceController::ProcessInputDeviceFrame(const dali_frame_t& frame) const {
         const uint32_t data = frame.data;
         const uint8_t addr_byte = (data >> 16) & 0xFF;
@@ -311,7 +310,7 @@ namespace daliMQTT
         std::string topic_addr_val = std::to_string(address);
 
         if (addr_type_str == "short") {
-            auto long_addr_opt = getLongAddress(address);
+            auto long_addr_opt = getLongAddress(address, true);
             if (long_addr_opt.has_value()) {
                 topic_addr_type = "long";
                 auto la_str = utils::longAddressToString(long_addr_opt.value());
@@ -659,22 +658,45 @@ namespace daliMQTT
         for (uint8_t sa = 0; sa < 64; ++sa) {
             if (auto status_opt = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, sa, DALI_COMMAND_QUERY_STATUS); status_opt.has_value()) {
                 found_devices.set(sa);
-                ESP_LOGI(TAG, "Device found at short address %d. Querying long address...", sa);
+                ESP_LOGI(TAG, "Gear found at SA %d", sa);
+
                 if (auto long_addr_opt = dali.getLongAddress(sa)) {
                     DaliLongAddress_t long_addr = *long_addr_opt;
-                    const auto addr_str = utils::longAddressToString(long_addr);
-                    ESP_LOGI(TAG, "  -> Long address: %s (0x%lX)", addr_str.data(), long_addr);
-
                     new_devices[long_addr] = DaliDevice{
                         .long_address = long_addr,
                         .short_address = sa,
+                        .is_input_device = false,
                         .available = true
                     };
                     new_short_to_long_map[sa] = long_addr;
-                } else {
-                    ESP_LOGW(TAG, "  -> Failed to query long address for short address %d.", sa);
                 }
             }
+
+            if (auto status_input_opt = dali.sendInputDeviceCommand(sa, DALI_COMMAND_QUERY_STATUS); status_input_opt.has_value()) {
+                ESP_LOGI(TAG, "Input Device found at SA %d", sa);
+
+                auto long_addr_opt = getInputDeviceLongAddress(sa);
+
+                DaliLongAddress_t long_addr;
+
+                if (long_addr_opt.has_value()) {
+                    long_addr = *long_addr_opt;
+                    ESP_LOGI(TAG, "  -> Read Long Address: 0x%lX", long_addr);
+                } else {
+                    long_addr = 0xFE0000 | sa;
+                    ESP_LOGW(TAG, "  -> Failed to read memory. Using pseudo-addr: 0x%lX", long_addr);
+                }
+
+                new_devices[long_addr] = DaliDevice{
+                    .long_address = long_addr,
+                    .short_address = sa,
+                    .is_input_device = true,
+                    .available = true
+                };
+
+                new_short_to_long_map[sa | 0x80] = long_addr;
+            }
+
             vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_POLL_DELAY_MS));
         }
 
@@ -686,11 +708,34 @@ namespace daliMQTT
 
             DaliAddressMap::save(m_devices);
             m_nvs_dirty = false;
-
         }
         return found_devices;
     }
 
+    std::optional<DaliLongAddress_t> DaliDeviceController::getInputDeviceLongAddress(uint8_t shortAddress) {
+        auto& dali = DaliAPI::getInstance();
+        auto readByte = [&](uint8_t offset) -> std::optional<uint8_t> {
+            // 1. SET DTR1 (Bank 0)
+            dali.sendInputDeviceCommand(shortAddress, 0x31, 0x00);
+            // 2. SET DTR0 (Offset)
+            dali.sendInputDeviceCommand(shortAddress, 0x30, offset);
+            // 3. READ MEMORY LOCATION
+            return dali.sendInputDeviceCommand(shortAddress, 0xC5);
+        };
+
+        const auto h_opt = readByte(0x00);
+        if (!h_opt) return std::nullopt;
+
+        const auto m_opt = readByte(0x01);
+        if (!m_opt) return std::nullopt;
+
+        const auto l_opt = readByte(0x02);
+        if (!l_opt) return std::nullopt;
+
+        return (static_cast<DaliLongAddress_t>(*h_opt) << 16) |
+               (static_cast<DaliLongAddress_t>(*m_opt) << 8) |
+               (*l_opt);
+    }
 
     std::map<DaliLongAddress_t, DaliDevice> DaliDeviceController::getDevices() const {
         std::lock_guard lock(m_devices_mutex);
@@ -705,12 +750,14 @@ namespace daliMQTT
         return std::nullopt;
     }
 
-    std::optional<DaliLongAddress_t> DaliDeviceController::getLongAddress(const uint8_t shortAddress) const {
-        {
-            std::lock_guard lock(m_devices_mutex);
-            if (const auto it = m_short_to_long_map.find(shortAddress); it != m_short_to_long_map.end()) {
-                return it->second;
-            }
+    std::optional<DaliLongAddress_t> DaliDeviceController::getLongAddress(const uint8_t shortAddress, const bool is24bitSpace) const {
+        std::lock_guard lock(m_devices_mutex);
+        uint8_t search_key = shortAddress;
+        if (is24bitSpace) {
+            search_key |= 0x80;
+        }
+        if (const auto it = m_short_to_long_map.find(search_key); it != m_short_to_long_map.end()) {
+            return it->second;
         }
         return std::nullopt;
     }

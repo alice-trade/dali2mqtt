@@ -40,6 +40,7 @@ namespace daliMQTT
         uint8_t status_byte{0};               // Current status
 
         std::optional<uint8_t> device_type{}; // Device Type
+        bool is_input_device{false};          // Input Device flag
         std::string gtin{};                   // GTIN
 
         std::optional<uint16_t> min_mireds{}; // Min CT

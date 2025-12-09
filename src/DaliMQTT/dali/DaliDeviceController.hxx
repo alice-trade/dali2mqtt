@@ -26,7 +26,7 @@ namespace daliMQTT
 
         [[nodiscard]] std::map<DaliLongAddress_t, DaliDevice> getDevices() const;
         [[nodiscard]] std::optional<uint8_t> getShortAddress(DaliLongAddress_t longAddress) const;
-        [[nodiscard]] std::optional<DaliLongAddress_t> getLongAddress(uint8_t shortAddress) const;
+        [[nodiscard]] std::optional<DaliLongAddress_t> getLongAddress(uint8_t shortAddress, bool is24bitSpace = false) const;
 
         void updateDeviceState(DaliLongAddress_t longAddr, uint8_t level, std::optional<uint8_t> status_byte = std::nullopt, std::optional<uint16_t> mireds = std::nullopt, std::optional<DaliRGB> rgb = std::nullopt);
         void publishAttributes(DaliLongAddress_t longAddr);
@@ -50,6 +50,7 @@ namespace daliMQTT
 
         static void publishState(DaliLongAddress_t long_addr, const DaliDevice& device);
         static void publishAvailability(DaliLongAddress_t long_addr, bool is_available);
+        [[nodiscard]] std::optional<DaliLongAddress_t> getInputDeviceLongAddress(uint8_t shortAddress);
 
         TaskHandle_t m_event_handler_task{nullptr};
         TaskHandle_t m_sync_task_handle{nullptr};

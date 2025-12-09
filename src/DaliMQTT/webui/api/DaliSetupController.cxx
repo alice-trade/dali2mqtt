@@ -37,7 +37,7 @@ namespace daliMQTT {
 
             cJSON_AddNumberToObject(device_obj, "level", device.current_level);
             cJSON_AddBoolToObject(device_obj, "available", device.available);
-
+            cJSON_AddBoolToObject(device_obj, "is_input_device", device.is_input_device);
             const bool is_failure = (device.status_byte >> 1) & 0x01;
             cJSON_AddBoolToObject(device_obj, "lamp_failure", is_failure);
 

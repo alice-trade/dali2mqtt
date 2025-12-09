@@ -216,7 +216,21 @@ namespace daliMQTT
         }
         return std::nullopt;
     }
+    std::optional<uint8_t> DaliAPI::sendInputDeviceCommand(const uint8_t shortAddress, const uint8_t opcode, const std::optional<uint8_t> param) {
+        std::lock_guard lock(bus_mutex);
+        const uint8_t addr_byte = (shortAddress << 1) | 1;
+        const uint8_t param_byte = param.value_or(0x00);
 
+        const int16_t result = m_dali_impl.tx_wait_rx(addr_byte, opcode, param_byte);
+
+        vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
+
+
+        if (result >= 0) {
+            return static_cast<uint8_t>(result);
+        }
+        return std::nullopt;
+    }
     uint8_t DaliAPI::initializeBus() {
         std::lock_guard lock(bus_mutex);
         ESP_LOGI(TAG, "Starting DALI commissioning process...");
