@@ -826,4 +826,100 @@ uint8_t Dali::read_memory_bank(uint8_t bank, uint8_t adr)
     return 0;
 }
 
+void Dali::set_searchaddr_id(const uint32_t adr)
+{
+    tx_wait_rx(0xFF, DALI_COMMAND_INPUT_SEARCHADDRH, (adr >> 16) & 0xFF, 100);
+    tx_wait_rx(0xFF, DALI_COMMAND_INPUT_SEARCHADDRM, (adr >> 8) & 0xFF, 100);
+    tx_wait_rx(0xFF, DALI_COMMAND_INPUT_SEARCHADDRL, adr & 0xFF, 100);
+}
+void Dali::set_searchaddr_id_diff(const uint32_t adr_new, const uint32_t adr_current)
+{
+    if ((uint8_t)(adr_new >> 16) != (uint8_t)(adr_current >> 16))
+        tx_wait_rx(0xFF, DALI_COMMAND_INPUT_SEARCHADDRH, (adr_new >> 16) & 0xFF, 100);
+    if ((uint8_t)(adr_new >> 8) != (uint8_t)(adr_current >> 8))
+        tx_wait_rx(0xFF, DALI_COMMAND_INPUT_SEARCHADDRM, (adr_new >> 8) & 0xFF, 100);
+    if ((uint8_t)(adr_new) != (uint8_t)(adr_current))
+        tx_wait_rx(0xFF, DALI_COMMAND_INPUT_SEARCHADDRL, adr_new & 0xFF, 100);
+}
+uint8_t Dali::compare_id() {
+    uint8_t retry = 2;
+    while (retry > 0) {
+        const int16_t rv = tx_wait_rx(0xFF, DALI_COMMAND_INPUT_COMPARE, 0x00, 100);
+        if (rv == -DALI_RESULT_COLLISION) return 1;
+        if (rv == -DALI_RESULT_INVALID_REPLY) return 1;
+        if (rv >= 0) return 1; // Valid byte received (0xFF)
+        retry--;
+    }
+    return 0;
+}
+void Dali::program_short_address_id(uint8_t shortadr)
+{
+    tx_wait_rx(0xFF, DALI_COMMAND_INPUT_PROGRAM_SHORT_ADDR, (shortadr << 1) | 0x01, 100);
+}
+uint32_t Dali::find_addr_id() {
+    uint32_t adr = 0x800000;
+    uint32_t addsub = 0x400000;
+    uint32_t adr_last = adr;
+    set_searchaddr_id(adr);
+    while (addsub) {
+        set_searchaddr_id_diff(adr, adr_last);
+        adr_last = adr;
+        const uint8_t cmp = compare_id(); // returns 1 if searchadr > adr (active reply)
+        if (cmp)
+            adr -= addsub;
+        else
+            adr += addsub;
+        addsub >>= 1;
+    }
+    set_searchaddr_id_diff(adr, adr_last);
+    adr_last = adr;
+    if (!compare_id()) {
+        adr++;
+        set_searchaddr_id_diff(adr, adr_last);
+    }
+    return adr;
+}
+uint8_t Dali::commission_id(const uint8_t init_arg) {
+    uint8_t cnt = 0;
+    uint8_t arr[64];
+    uint8_t sa;
+    for (sa = 0; sa < 64; sa++)
+        arr[sa] = 0;
+    tx_wait_rx(0xFF, DALI_COMMAND_INPUT_TERMINATE, 0x00, 100);
+    tx_wait_rx(0xFF, DALI_COMMAND_INPUT_INITIALISE, init_arg, 100);
+    tx_wait_rx(0xFF, DALI_COMMAND_INPUT_RANDOMISE, 0x00, 100);
+
+    vTaskDelay(pdMS_TO_TICKS(100));
+
+    for (sa = 0; sa < 64; sa++) {
+        const int16_t rv = tx_wait_rx((sa << 1) | 1, DALI_QUERY_STATUS, 0x00, 50);
+        if (rv >= 0) {
+            arr[sa] = 1;
+        }
+        vTaskDelay(1);
+    }
+
+    while (1) {
+        const uint32_t adr = find_addr_id();
+        if (adr > 0xffffff)
+            break; // No more random addresses found
+
+        for (sa = 0; sa < 64; sa++) {
+            if (arr[sa] == 0)
+                break;
+        }
+        if (sa >= 64)
+            break;
+
+        arr[sa] = 1;
+        cnt++;
+
+        program_short_address_id(sa);
+        tx_wait_rx(0xFF, DALI_COMMAND_INPUT_WITHDRAW, 0x00, 100);
+        vTaskDelay(1);
+    }
+    tx_wait_rx(0xFF, DALI_COMMAND_INPUT_TERMINATE, 0x00, 100);
+    return cnt;
+}
+
 //======================================================================

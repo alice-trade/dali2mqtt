@@ -637,7 +637,15 @@ namespace daliMQTT
         const std::bitset<64> devices = discoverAndMapDevices();
         return devices;
     }
-
+    std::bitset<64> DaliDeviceController::perform24BitDeviceInitialization() {
+        if (!DaliAPI::getInstance().isInitialized()) {
+            ESP_LOGE(TAG, "Cannot initialize DALI bus: DALI driver is not initialized.");
+            return {};
+        }
+        DaliAPI::getInstance().initialize24BitDevicesBus();
+        const std::bitset<64> devices = discoverAndMapDevices();
+        return devices;
+    }
     std::bitset<64> DaliDeviceController::performScan() {
         if (!DaliAPI::getInstance().isInitialized()) {
             ESP_LOGE(TAG, "Cannot scan DALI bus: DALI driver is not initialized (device might be in provisioning mode).");
@@ -712,7 +720,7 @@ namespace daliMQTT
         return found_devices;
     }
 
-    std::optional<DaliLongAddress_t> DaliDeviceController::getInputDeviceLongAddress(uint8_t shortAddress) {
+    std::optional<DaliLongAddress_t> DaliDeviceController::getInputDeviceLongAddress(const uint8_t shortAddress) {
         auto& dali = DaliAPI::getInstance();
         auto readByte = [&](uint8_t offset) -> std::optional<uint8_t> {
             // 1. SET DTR1 (Bank 0)

@@ -58,6 +58,7 @@ namespace daliMQTT
 
         // Процесс инициализации и адресации новых устройств на шине
         uint8_t initializeBus();
+        uint8_t initialize24BitDevicesBus();
 
         // Добавить в группу
         esp_err_t assignToGroup(uint8_t shortAddress, uint8_t group);

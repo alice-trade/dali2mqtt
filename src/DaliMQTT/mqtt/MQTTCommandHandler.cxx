@@ -427,6 +427,22 @@ namespace daliMQTT {
         g_mqtt_bus_busy = false;
         vTaskDelete(nullptr);
     }
+    void MQTTCommandHandler::backgroundInputInitTask(void* arg) {
+        ESP_LOGI(TAG, "Starting MQTT-initiated DALI Input Device initialization...");
+        auto const& mqtt = MQTTClient::getInstance();
+        auto config = ConfigManager::getInstance().getConfig();
+        std::string status_topic = config.mqtt_base_topic + "/config/input_device/sync_status";
+
+        mqtt.publish(status_topic, R"({"status":"initializing"})", 0, false);
+
+        DaliDeviceController::getInstance().perform24BitDeviceInitialization();
+        DaliGroupManagement::getInstance().refreshAssignmentsFromBus();
+
+        mqtt.publish(status_topic, R"({"status":"idle", "last_action":"init_complete"})", 0, false);
+        ESP_LOGI(TAG, "MQTT-initiated DALI Input Device initialization finished.");
+        g_mqtt_bus_busy = false;
+        vTaskDelete(nullptr);
+    }
     void MQTTCommandHandler::handleScanCommand() {
         if (g_mqtt_bus_busy.exchange(true)) {
             ESP_LOGW(TAG, "Bus operation already in progress. Ignoring scan request.");
@@ -480,7 +496,14 @@ namespace daliMQTT {
                 if (parts[2] == "scan") {
                     handleScanCommand();
                 } else if (parts[2] == "initialize") {
-                    handleInitializeCommand();
+                    if (g_mqtt_bus_busy.exchange(true)) {
+                        ESP_LOGW(TAG, "Bus operation already in progress. Ignoring input init request.");
+                        return;
+                    }
+                    if (xTaskCreate(backgroundInputInitTask, "mqtt_input_init", 4096, nullptr, 4, nullptr) != pdPASS) {
+                        ESP_LOGE(TAG, "Failed to create input init task");
+                        g_mqtt_bus_busy = false;
+                    }
                 }
             }
         } else if (parts[0] == "scene" && parts.size() > 1 && parts[1] == "set") {

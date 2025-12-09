@@ -22,6 +22,7 @@ namespace daliMQTT
         void start();
 
         std::bitset<64> performFullInitialization();
+        std::bitset<64> perform24BitDeviceInitialization();
         std::bitset<64> performScan();
 
         [[nodiscard]] std::map<DaliLongAddress_t, DaliDevice> getDevices() const;

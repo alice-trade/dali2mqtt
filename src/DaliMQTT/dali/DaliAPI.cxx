@@ -238,7 +238,13 @@ namespace daliMQTT
         ESP_LOGI(TAG, "Commissioning finished. Assigned %u devices", assigned_devices);
         return assigned_devices;
     }
-
+    uint8_t DaliAPI::initialize24BitDevicesBus() {
+        std::lock_guard lock(bus_mutex);
+        ESP_LOGI(TAG, "Starting DALI commissioning process (Input Devices)...");
+        uint8_t assigned_devices = m_dali_impl.commission_id(0xff);
+        ESP_LOGI(TAG, "Input Device Commissioning finished. Assigned %u devices", assigned_devices);
+        return assigned_devices;
+    }
     esp_err_t DaliAPI::assignToGroup(const uint8_t shortAddress, const uint8_t group) {
         if (group >= 16) return ESP_ERR_INVALID_ARG;
         ESP_LOGD(TAG, "Process group addition of %u to %u", shortAddress, group);
