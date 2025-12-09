@@ -38,9 +38,8 @@ namespace daliMQTT
         [[nodiscard]] DaliGroup getGroupState(uint8_t group_id) const;
 
         // Обновить состояние группы
-        void updateGroupState(uint8_t group_id, uint8_t level,
-                                    std::optional<uint16_t> color_temp = std::nullopt,
-                                    std::optional<DaliRGB> rgb = std::nullopt);
+        void updateGroupState(uint8_t group_id, const DaliState& state);
+
         // Восстановить уровень
         void restoreGroupLevel(uint8_t group_id);
 

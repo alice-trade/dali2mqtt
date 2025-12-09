@@ -269,9 +269,7 @@ namespace daliMQTT
             publishDeviceGroupState(longAddr, groups);
         }
     }
-    void DaliGroupManagement::updateGroupState(const uint8_t group_id, const uint8_t level,
-                                                const std::optional<uint16_t> color_temp,
-                                                const std::optional<DaliRGB> rgb) {
+    void DaliGroupManagement::updateGroupState(const uint8_t group_id, const DaliState& state) {
         if (group_id >= 16) return;
 
         bool changed = false;
@@ -279,26 +277,29 @@ namespace daliMQTT
             std::lock_guard lock(m_mutex);
             auto& group = m_group_states[group_id];
 
-            if (level > 0) {
-                group.last_level = level;
+            if (state.level.has_value()) {
+                const uint8_t lvl = state.level.value();
+                if (lvl > 0) {
+                    group.last_level = lvl;
+                }
+                if (group.current_level != lvl) {
+                    group.current_level = lvl;
+                    changed = true;
+                }
             }
 
-            if (group.current_level != level) {
-                group.current_level = level;
+            if (state.color_temp.has_value() && group.color_temp != state.color_temp) {
+                group.color_temp = state.color_temp;
                 changed = true;
             }
-
-            if (color_temp.has_value() && group.color_temp != color_temp) {
-                group.color_temp = color_temp;
-                changed = true;
-            }
-            if (rgb.has_value() && group.rgb != rgb) {
-                group.rgb = rgb;
+            if (state.rgb.has_value() && group.rgb != state.rgb) {
+                group.rgb = state.rgb;
                 changed = true;
             }
         }
 
-        publishGroupState(group_id, level,
+        publishGroupState(group_id,
+                          m_group_states[group_id].current_level,
                           m_group_states[group_id].color_temp,
                           m_group_states[group_id].rgb);
     }
@@ -312,7 +313,7 @@ namespace daliMQTT
                      ? m_group_states[group_id].last_level
                      : 254;
         }
-        updateGroupState(group_id, target);
+        updateGroupState(group_id, {.level = target});
     }
 
     void DaliGroupManagement::publishGroupState(const uint8_t group_id, const uint8_t level,
@@ -378,7 +379,7 @@ namespace daliMQTT
         }
 
         if (should_update) {
-            updateGroupState(group_id, new_level);
+            updateGroupState(group_id, {.level = new_level});
         }
     }
 

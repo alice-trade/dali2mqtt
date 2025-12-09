@@ -17,6 +17,7 @@ namespace daliMQTT
         uint8_t length;
         bool is_backward_frame;
     };
+
     struct DaliRGB {
         uint8_t r{0};
         uint8_t g{0};
@@ -28,6 +29,14 @@ namespace daliMQTT
             return !(*this == other);
         }
     };
+
+    struct DaliState {
+        std::optional<uint8_t> level;
+        std::optional<uint8_t> status_byte;
+        std::optional<uint16_t> color_temp;
+        std::optional<DaliRGB> rgb;
+    };
+
     // 24bit long dali addr type
     using DaliLongAddress_t = uint32_t;
 

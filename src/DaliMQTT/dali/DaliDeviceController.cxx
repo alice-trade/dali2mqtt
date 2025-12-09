@@ -89,45 +89,44 @@ namespace daliMQTT
         mqtt.publish(status_topic, payload, 1, true);
     }
 
-  void DaliDeviceController::updateDeviceState(DaliLongAddress_t longAddr, uint8_t level, std::optional<uint8_t> status_byte, std::optional<uint16_t> mireds, std::optional<DaliRGB> rgb) {
+    void DaliDeviceController::updateDeviceState(const DaliLongAddress_t longAddr, const DaliState& state) {
         std::lock_guard lock(m_devices_mutex);
         const auto it = m_devices.find(longAddr);
         if (it != m_devices.end()) {
             bool state_changed = false;
 
-            if (level > 0) {
-                it->second.last_level = level;
+            if (state.level.has_value()) {
+                const uint8_t lvl = state.level.value();
+                if (lvl > 0) {
+                    it->second.last_level = lvl;
+                }
+                if (it->second.current_level != lvl) {
+                    it->second.current_level = lvl;
+                    state_changed = true;
+                }
             }
 
-            if (it->second.current_level != level) {
-                it->second.current_level = level;
+            if (state.status_byte.has_value()) {
+                const uint8_t sb = state.status_byte.value();
+                if (it->second.status_byte != sb) {
+                    it->second.status_byte = sb;
+                    state_changed = true;
+                }
+            }
+
+            if (state.color_temp.has_value() && it->second.color_temp != state.color_temp) {
+                it->second.color_temp = state.color_temp;
                 state_changed = true;
             }
 
-            uint8_t actual_status_byte = status_byte.has_value() ? *status_byte : it->second.status_byte;
-
-            if (it->second.status_byte != actual_status_byte) {
-                ESP_LOGD(TAG, "Status byte changed for %s: %d -> %d", utils::longAddressToString(longAddr).data(), it->second.status_byte, actual_status_byte);
-                it->second.status_byte = actual_status_byte;
-                state_changed = true;
-            }
-
-            if (mireds.has_value() && it->second.color_temp != mireds) {
-                it->second.color_temp = mireds;
-                state_changed = true;
-            }
-
-            if (rgb.has_value() && it->second.rgb != rgb) {
-                it->second.rgb = rgb;
+            if (state.rgb.has_value() && it->second.rgb != state.rgb) {
+                it->second.rgb = state.rgb;
                 state_changed = true;
             }
 
             if (state_changed || it->second.initial_sync_needed) {
-                ESP_LOGD(TAG, "State update for %s: Level=%d, Status=%d (InitSync: %d)",
-                         utils::longAddressToString(longAddr).data(), level, actual_status_byte, it->second.initial_sync_needed);
-
+                ESP_LOGD(TAG, "State update for %s", utils::longAddressToString(longAddr).data());
                 publishState(longAddr, it->second);
-
                 it->second.initial_sync_needed = false;
             }
         }
@@ -495,7 +494,12 @@ namespace daliMQTT
             }
         }
 
-        updateDeviceState(long_addr, actual_level, status_opt, polled_tc, polled_rgb);
+        updateDeviceState(long_addr, {
+            .level = actual_level,
+            .status_byte = status_opt,
+            .color_temp = polled_tc,
+            .rgb = polled_rgb,
+        });
 
         bool needs_static_data = false;
         {
@@ -600,27 +604,43 @@ namespace daliMQTT
                 {
                     self->m_round_robin_index = 0;
                     auto all_assignments = DaliGroupManagement::getInstance().getAllAssignments();
-                    std::map<DaliLongAddress_t, uint8_t> current_levels;
+                    std::map<DaliLongAddress_t, DaliDevice> devices_snapshot;
                     {
                         std::lock_guard lock(self->m_devices_mutex);
-                        for(const auto& [addr, dev] : self->m_devices) {
-                            if(dev.available) current_levels[addr] = dev.current_level;
-                        }
+                        devices_snapshot = self->m_devices;
                     }
-                    std::map<uint8_t, uint8_t> group_sync_levels;
+                    std::map<uint8_t, DaliState> group_sync_states;
                     for (const auto& [long_addr, groups] : all_assignments) {
-                        if (!current_levels.contains(long_addr)) continue;
-                        uint8_t level = current_levels.at(long_addr);
+                        if (!devices_snapshot.contains(long_addr)) continue;
+                        const auto& dev = devices_snapshot.at(long_addr);
+                        if (!dev.available) continue;
+
                         for (uint8_t group = 0; group < 16; ++group) {
                             if (groups.test(group)) {
-                                if (!group_sync_levels.contains(group)) group_sync_levels[group] = level;
-                                else if (level > group_sync_levels[group]) group_sync_levels[group] = level;
+                                if (!group_sync_states.contains(group)) {
+                                    group_sync_states[group] = DaliState{ .level = 0, .status_byte = std::nullopt, .color_temp = std::nullopt, .rgb = std::nullopt };
+                                }
+
+                                auto& g_state = group_sync_states[group];
+
+                                if (dev.current_level > g_state.level.value_or(0)) {
+                                    g_state.level = dev.current_level;
+                                }
+
+                                if (dev.current_level > 0) {
+                                    if (dev.supports_tc && dev.color_temp.has_value()) {
+                                        g_state.color_temp = dev.color_temp;
+                                    }
+                                    if (dev.supports_rgb && dev.rgb.has_value()) {
+                                        g_state.rgb = dev.rgb;
+                                    }
+                                }
                             }
                         }
                     }
 
-                    for(const auto& [group_id, level] : group_sync_levels) {
-                        DaliGroupManagement::getInstance().updateGroupState(group_id, level);
+                    for(const auto& [group_id, state] : group_sync_states) {
+                        DaliGroupManagement::getInstance().updateGroupState(group_id, state);
                     }
                 }
                 vTaskDelay(rr_delay_ticks);

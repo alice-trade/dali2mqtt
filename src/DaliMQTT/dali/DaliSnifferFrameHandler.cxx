@@ -62,20 +62,19 @@ namespace daliMQTT {
         if (target_group_id.has_value()) {
             auto& group_mgr = DaliGroupManagement::getInstance();
             const uint8_t gid = target_group_id.value();
-
             if ((addr_byte & 0x01) == 0) { // DACP
-                group_mgr.updateGroupState(gid, cmd_byte);
+                group_mgr.updateGroupState(gid, {.level = cmd_byte});
             } else {                       // Command
                 switch (cmd_byte) {
                 case DALI_COMMAND_OFF:
                 case DALI_COMMAND_STEP_DOWN_AND_OFF:
-                    group_mgr.updateGroupState(gid, 0);
+                    group_mgr.updateGroupState(gid, {.level = 0});
                     break;
                 case DALI_COMMAND_RECALL_MAX_LEVEL:
-                    group_mgr.updateGroupState(gid, 254);
+                    group_mgr.updateGroupState(gid, {.level = 254});
                     break;
                 case DALI_COMMAND_RECALL_MIN_LEVEL:
-                    group_mgr.updateGroupState(gid, 1);
+                    group_mgr.updateGroupState(gid, {.level = 1});
                     break;
                 case DALI_COMMAND_ON_AND_STEP_UP:
                     group_mgr.restoreGroupLevel(gid);
@@ -131,7 +130,7 @@ namespace daliMQTT {
                     for (const auto& [addr, lvl] : optimistic_updates) {
                         ESP_LOGD(TAG, "Sniffer: Optimistic ON_AND_STEP_UP for %s to level %d",
                                  utils::longAddressToString(addr).data(), lvl);
-                        updateDeviceState(addr, lvl);
+                        updateDeviceState(addr, {.level = *known_level});
                     }
 
                     if (any_requires_query) {
@@ -176,7 +175,7 @@ namespace daliMQTT {
         if (known_level.has_value()) {
             ESP_LOGD(TAG, "Sniffer: Applying known level %d to %zu devices.", *known_level, affected_devices.size());
             for (const auto& long_addr : affected_devices) {
-                updateDeviceState(long_addr, *known_level);
+                updateDeviceState(long_addr, {.level = *known_level});
             }
         } else if (needs_query) {
             uint32_t current_delay_ms = 400;
