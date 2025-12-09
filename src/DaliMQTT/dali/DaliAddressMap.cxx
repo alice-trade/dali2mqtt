@@ -39,12 +39,27 @@ namespace daliMQTT
         devices.clear();
         short_to_long.clear();
 
-        for (const auto&[long_address, short_address] : mappings) {
-            devices[long_address] = DaliDevice{
-                .long_address = long_address,
-                .short_address = short_address,
-            };
-            short_to_long[short_address] = long_address;
+        for (const auto& record : mappings) {
+            DaliDevice dev;
+            dev.long_address = record.long_address;
+            dev.short_address = record.short_address;
+
+            if (record.device_type != 0xFF) {
+                dev.device_type = record.device_type;
+            }
+
+            dev.gtin = std::string(record.gtin, strnlen(record.gtin, GTIN_STORAGE_SIZE));
+            dev.is_input_device = record.is_input_device;
+
+            dev.supports_rgb = record.supports_rgb;
+            dev.supports_tc = record.supports_tc;
+
+            if (dev.device_type.has_value() || !dev.gtin.empty()) {
+                dev.static_data_loaded = true;
+            }
+
+            devices[record.long_address] = dev;
+            short_to_long[record.short_address] = record.long_address;
         }
         
         ESP_LOGI(TAG, "Successfully loaded %zu DALI address mappings from NVS.", devices.size());
@@ -61,7 +76,19 @@ namespace daliMQTT
         std::vector<AddressMapping> mappings;
         mappings.reserve(devices.size());
         for (const auto& [long_addr, device] : devices) {
-            mappings.push_back({.long_address = long_addr, .short_address = device.short_address});
+            AddressMapping record{};
+            record.long_address = long_addr;
+            record.short_address = device.short_address;
+            record.device_type = device.device_type.value_or(0xFF);
+            record.supports_rgb = device.supports_rgb;
+            record.supports_tc = device.supports_tc;
+            record.is_input_device = device.is_input_device;
+            record._padding = 0;
+            if (!device.gtin.empty()) {
+                strncpy(record.gtin, device.gtin.c_str(), GTIN_STORAGE_SIZE - 1);
+                record.gtin[GTIN_STORAGE_SIZE - 1] = '\0';
+            }
+            mappings.push_back(record);
         }
 
         esp_err_t err = nvs_set_blob(nvs_handle.get(), MAP_KEY, mappings.data(), mappings.size() * sizeof(AddressMapping));

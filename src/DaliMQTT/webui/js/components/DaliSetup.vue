@@ -7,6 +7,7 @@ import DaliSceneEditor from './DaliSceneEditor.vue';
 interface DaliDevice {
   long_address: string;
   short_address: number;
+  is_input_device?: boolean;
 }
 
 type GroupAssignments = Record<string, number[]>; // key: long_address
@@ -239,9 +240,14 @@ onMounted(loadData);
         <div class="devices-grid">
           <div v-for="device in devices" :key="device.long_address" class="device-card">
             <header class="card-header">
-              <div>
-                <strong>Устройство {{ device.short_address }}</strong>
-                <small class="long-address-text">{{ device.long_address }}</small>
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                  <strong>Устройство {{ device.short_address }}</strong>
+                  <small class="long-address-text">{{ device.long_address }}</small>
+                </div>
+                <div v-if="device.is_input_device">
+                  <span style="font-size: 0.7em; background-color: var(--pico-primary-background); color: var(--pico-primary); padding: 2px 6px; border-radius: 4px;">Input Device</span>
+                </div>
               </div>
             </header>
             <div class="card-body">

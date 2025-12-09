@@ -22,13 +22,14 @@ namespace daliMQTT
         void start();
 
         std::bitset<64> performFullInitialization();
+        std::bitset<64> perform24BitDeviceInitialization();
         std::bitset<64> performScan();
 
         [[nodiscard]] std::map<DaliLongAddress_t, DaliDevice> getDevices() const;
         [[nodiscard]] std::optional<uint8_t> getShortAddress(DaliLongAddress_t longAddress) const;
-        [[nodiscard]] std::optional<DaliLongAddress_t> getLongAddress(uint8_t shortAddress) const;
+        [[nodiscard]] std::optional<DaliLongAddress_t> getLongAddress(uint8_t shortAddress, bool is24bitSpace = false) const;
 
-        void updateDeviceState(DaliLongAddress_t longAddr, uint8_t level, std::optional<uint8_t> status_byte = std::nullopt);
+        void updateDeviceState(DaliLongAddress_t longAddr, const DaliState& state);
         void publishAttributes(DaliLongAddress_t longAddr);
         [[nodiscard]] std::optional<uint8_t> getLastLevel(DaliLongAddress_t longAddress) const;
         void requestDeviceSync(uint8_t shortAddress, uint32_t delay_ms = 0);
@@ -48,8 +49,9 @@ namespace daliMQTT
         [[noreturn]] static void daliEventHandlerTask(void* pvParameters);
         [[noreturn]] static void daliSyncTask(void* pvParameters);
 
-        static void publishState(DaliLongAddress_t long_addr, uint8_t level, uint8_t status_byte);
+        static void publishState(DaliLongAddress_t long_addr, const DaliDevice& device);
         static void publishAvailability(DaliLongAddress_t long_addr, bool is_available);
+        [[nodiscard]] std::optional<DaliLongAddress_t> getInputDeviceLongAddress(uint8_t shortAddress);
 
         TaskHandle_t m_event_handler_task{nullptr};
         TaskHandle_t m_sync_task_handle{nullptr};
@@ -63,6 +65,8 @@ namespace daliMQTT
         std::set<uint8_t> m_priority_set;
         mutable std::mutex m_queue_mutex;
         uint8_t m_round_robin_index{0};
+        bool m_nvs_dirty{false};
+        int64_t m_last_nvs_change_ts{0};
     };
 
 } // daliMQTT

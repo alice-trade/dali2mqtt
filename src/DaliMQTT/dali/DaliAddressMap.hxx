@@ -4,9 +4,16 @@
 #include "DaliTypes.hxx"
 
 namespace daliMQTT {
+    constexpr size_t GTIN_STORAGE_SIZE = 16;
     struct AddressMapping {
             DaliLongAddress_t long_address;
             uint8_t short_address;
+            uint8_t device_type;
+            char gtin[GTIN_STORAGE_SIZE];
+            bool is_input_device;
+            bool supports_rgb;
+            bool supports_tc;
+            uint8_t _padding;
     };
 
     class DaliAddressMap {
@@ -19,7 +26,7 @@ namespace daliMQTT {
 
         private:
             static constexpr char  NVS_NAMESPACE[] = "dali_state";
-            static constexpr char  MAP_KEY[] = "addr_map";
+            static constexpr char  MAP_KEY[] = "DALIAddrMap";
         };
     };
 

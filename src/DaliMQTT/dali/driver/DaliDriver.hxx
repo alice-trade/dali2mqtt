@@ -96,6 +96,13 @@ public:
   uint8_t  query_short_address();
   uint32_t find_addr();
 
+  uint8_t commission_id(uint8_t init_arg=0xff);
+  void set_searchaddr_id(uint32_t adr);
+  void set_searchaddr_id_diff(uint32_t adr_new, uint32_t adr_current);
+  uint8_t compare_id();
+  void program_short_address_id(uint8_t shortadr);
+  uint32_t find_addr_id();
+
 private:
   //-------------------------------------------------
   //LOW LEVEL DRIVER PRIVATE
@@ -228,6 +235,19 @@ private:
 #define DALI_DATA_TRANSFER_REGISTER2 0x01C5 //274  - Stores data XXXX into DTR2.
 #define DALI_WRITE_MEMORY_LOCATION 0x01C7 //275  - Write data into the specified address of the specified memory bank. (There is BW) (DTR(DTR0)：address, DTR1：memory bank number)
 #define DALI_WRITE_MEMORY_LOCATION_NO_REPLY 0x01C9 //276 DALI-2 - Write data into the specified address of the specified memory bank.
+
+#define DALI_COMMAND_INPUT_INITIALISE 0x00
+#define DALI_COMMAND_INPUT_RANDOMISE 0x01
+#define DALI_COMMAND_INPUT_COMPARE 0x02
+#define DALI_COMMAND_INPUT_WITHDRAW 0x03
+#define DALI_COMMAND_INPUT_PING 0x04
+#define DALI_COMMAND_INPUT_RESET 0x05
+#define DALI_COMMAND_INPUT_TERMINATE 0x06
+#define DALI_COMMAND_INPUT_PROGRAM_SHORT_ADDR 0x07
+#define DALI_COMMAND_INPUT_SEARCHADDRH 0x08
+#define DALI_COMMAND_INPUT_SEARCHADDRM 0x09
+#define DALI_COMMAND_INPUT_SEARCHADDRL 0x0A
+#define DALI_COMMAND_INPUT_QUERY_SHORT_ADDR 0x0B
 /*
 SIGNAL CHARACTERISTICS
 High Level: 9.5 to 22.5 V (Typical 16 V)

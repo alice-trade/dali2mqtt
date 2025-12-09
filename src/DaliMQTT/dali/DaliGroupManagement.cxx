@@ -269,7 +269,7 @@ namespace daliMQTT
             publishDeviceGroupState(longAddr, groups);
         }
     }
-    void DaliGroupManagement::updateGroupState(const uint8_t group_id, const uint8_t level) {
+    void DaliGroupManagement::updateGroupState(const uint8_t group_id, const DaliState& state) {
         if (group_id >= 16) return;
 
         bool changed = false;
@@ -277,20 +277,31 @@ namespace daliMQTT
             std::lock_guard lock(m_mutex);
             auto& group = m_group_states[group_id];
 
-            if (level > 0) {
-                group.last_level = level;
+            if (state.level.has_value()) {
+                const uint8_t lvl = state.level.value();
+                if (lvl > 0) {
+                    group.last_level = lvl;
+                }
+                if (group.current_level != lvl) {
+                    group.current_level = lvl;
+                    changed = true;
+                }
             }
 
-            if (group.current_level != level) {
-                group.current_level = level;
+            if (state.color_temp.has_value() && group.color_temp != state.color_temp) {
+                group.color_temp = state.color_temp;
                 changed = true;
-                ESP_LOGI(TAG, "Group %d state updated: %d", group_id, level);
+            }
+            if (state.rgb.has_value() && group.rgb != state.rgb) {
+                group.rgb = state.rgb;
+                changed = true;
             }
         }
 
-        if (changed) {
-            publishGroupState(group_id, level);
-        }
+        publishGroupState(group_id,
+                          m_group_states[group_id].current_level,
+                          m_group_states[group_id].color_temp,
+                          m_group_states[group_id].rgb);
     }
 
     void DaliGroupManagement::restoreGroupLevel(const uint8_t group_id) {
@@ -302,20 +313,42 @@ namespace daliMQTT
                      ? m_group_states[group_id].last_level
                      : 254;
         }
-        updateGroupState(group_id, target);
+        updateGroupState(group_id, {.level = target});
     }
 
-    void DaliGroupManagement::publishGroupState(const uint8_t group_id, const uint8_t level) const {
+    void DaliGroupManagement::publishGroupState(const uint8_t group_id, const uint8_t level,
+                                                std::optional<uint16_t> color_temp,
+                                                std::optional<DaliRGB> rgb) const {
         auto const& mqtt = MQTTClient::getInstance();
         const auto config = ConfigManager::getInstance().getConfig();
 
         // Topic: base/light/group/+/state
         const std::string state_topic = utils::stringFormat("%s/light/group/%d/state", config.mqtt_base_topic.c_str(), group_id);
-        const std::string payload = utils::stringFormat(R"({"state":"%s","brightness":%d})", (level > 0 ? "ON" : "OFF"), level);
 
-        ESP_LOGD(TAG, "Publishing Group %d State: %s", group_id, payload.c_str());
-        mqtt.publish(state_topic, payload, 0,false);
+        cJSON* root = cJSON_CreateObject();
+        cJSON_AddStringToObject(root, "state", (level > 0 ? "ON" : "OFF"));
+        cJSON_AddNumberToObject(root, "brightness", level);
+
+        if (color_temp.has_value()) {
+            cJSON_AddNumberToObject(root, "color_temp", *color_temp);
+        }
+        if (rgb.has_value()) {
+            cJSON* color = cJSON_CreateObject();
+            cJSON_AddNumberToObject(color, "r", rgb->r);
+            cJSON_AddNumberToObject(color, "g", rgb->g);
+            cJSON_AddNumberToObject(color, "b", rgb->b);
+            cJSON_AddItemToObject(root, "color", color);
+        }
+
+        char* payload = cJSON_PrintUnformatted(root);
+        if (payload) {
+            ESP_LOGD(TAG, "Publishing Group %d State: %s", group_id, payload);
+            mqtt.publish(state_topic, payload, 0, false);
+            free(payload);
+        }
+        cJSON_Delete(root);
     }
+
     void DaliGroupManagement::stepGroupLevel(const uint8_t group_id, const bool is_up) {
         if (group_id >= 16) return;
         constexpr int STEP_SIZE = 10; // FIXME: hard coded step
@@ -346,7 +379,7 @@ namespace daliMQTT
         }
 
         if (should_update) {
-            updateGroupState(group_id, new_level);
+            updateGroupState(group_id, {.level = new_level});
         }
     }
 

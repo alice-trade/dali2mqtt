@@ -154,6 +154,13 @@
 // reserved
 #define DALI_COMMAND_QUERY_EXTENDED_VERSION_NUMBER        0xFF // dec. 255
 
+#define DALI_COMMAND_DT8_SET_COLOUR_TEMP_TC                   0xE7 // 231 (Requires Enable DT8)
+#define DALI_COMMAND_DT8_SET_TEMPORARY_RGB_DIMLEVEL           0xEB // 235 (Requires Enable DT8)
+#define DALI_COMMAND_DT8_ACTIVATE                             0xE2 // 226 (Activate temporary values)
+#define DALI_COMMAND_DT8_QUERY_COLOUR_STATUS                  0xF7 // 247
+#define DALI_COMMAND_DT8_QUERY_COLOUR_TYPE_FEATURES           0xF8 // 248
+#define DALI_COMMAND_DT8_QUERY_COLOUR_VALUE                   0xF9 // 249
+
 #define DALI_SPECIAL_COMMAND_TERMINATE                    0xA1 // bin. 1010 0001 0000 0000
 #define DALI_SPECIAL_COMMAND_DATA_TRANSFER_REGISTER       0xA3 // bin. 1010 0011 XXXX XXXX
 #define DALI_SPECIAL_COMMAND_INITIALISE                   0xA5 // bin. 1010 0101 XXXX XXXX
