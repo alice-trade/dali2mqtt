@@ -1,4 +1,3 @@
-#include <ConfigManager.hxx>
 #include "DaliDeviceController.hxx"
 #include <DaliGroupManagement.hxx>
 #include <MQTTClient.hxx>
@@ -114,7 +113,7 @@ namespace daliMQTT {
                     bool any_requires_query = false;
 
                     {
-                        std::lock_guard lock(m_devices_mutex);
+                        std::lock_guard<std::mutex> lock(m_devices_mutex);
                         for (const auto& long_addr : affected_devices) {
                             if (auto it = m_devices.find(long_addr); it != m_devices.end()) {
                                 if (it->second.current_level == 0) {

@@ -60,7 +60,7 @@ namespace daliMQTT
 
 
     esp_err_t ConfigManager::load() {
-        std::lock_guard lock(config_mutex);
+        std::lock_guard<std::mutex> lock(config_mutex);
 
         const NvsHandle nvs_handle(NVS_NAMESPACE, NVS_READWRITE);
         if (!nvs_handle) {
@@ -112,9 +112,9 @@ namespace daliMQTT
     }
 
     esp_err_t ConfigManager::saveMainConfig(const AppConfig& new_config) {
-        std::lock_guard lock(config_mutex);
+        std::lock_guard<std::mutex> lock(config_mutex);
 
-        NvsHandle nvs_handle(NVS_NAMESPACE, NVS_READWRITE);
+        const NvsHandle nvs_handle(NVS_NAMESPACE, NVS_READWRITE);
         if (!nvs_handle) {
             return ESP_FAIL;
         }
@@ -148,7 +148,7 @@ namespace daliMQTT
     }
 
     esp_err_t ConfigManager::saveDaliDeviceIdentificators(const std::string& identificators) {
-        std::lock_guard lock(config_mutex);
+        std::lock_guard<std::mutex> lock(config_mutex);
         config_cache.dali_device_identificators = identificators;
 
         const NvsHandle nvs_handle(NVS_NAMESPACE, NVS_READWRITE);
@@ -161,7 +161,7 @@ namespace daliMQTT
     }
 
     esp_err_t ConfigManager::saveDaliGroupAssignments(const std::string& assignments) {
-        std::lock_guard lock(config_mutex);
+        std::lock_guard<std::mutex> lock(config_mutex);
         config_cache.dali_group_assignments = assignments;
 
         const NvsHandle nvs_handle(NVS_NAMESPACE, NVS_READWRITE);
@@ -174,7 +174,7 @@ namespace daliMQTT
     }
 
     esp_err_t ConfigManager::save() {
-        std::lock_guard lock(config_mutex);
+        std::lock_guard<std::mutex> lock(config_mutex);
 
         const NvsHandle nvs_handle(NVS_NAMESPACE, NVS_READWRITE);
         if (!nvs_handle) {
@@ -210,7 +210,7 @@ namespace daliMQTT
     }
 
     esp_err_t ConfigManager::resetConfiguredFlag() {
-        std::lock_guard lock(config_mutex);
+        std::lock_guard<std::mutex> lock(config_mutex);
         const NvsHandle nvs_handle(NVS_NAMESPACE, NVS_READWRITE);
         if (!nvs_handle) {
             return ESP_FAIL;
@@ -253,18 +253,18 @@ namespace daliMQTT
 
 
     AppConfig ConfigManager::getConfig() const {
-        std::lock_guard lock(config_mutex);
+        std::lock_guard<std::mutex> lock(config_mutex);
         return config_cache;
     }
 
     void ConfigManager::setConfig(const AppConfig& new_config) {
-        std::lock_guard lock(config_mutex);
+        std::lock_guard<std::mutex> lock(config_mutex);
         config_cache = new_config;
     }
 
 
     bool ConfigManager::isConfigured() const {
-        std::lock_guard lock(config_mutex);
+        std::lock_guard<std::mutex> lock(config_mutex);
         return config_cache.configured;
     }
 
@@ -314,7 +314,7 @@ namespace daliMQTT
     }
 
     std::string ConfigManager::getMqttBaseTopic() const {
-        std::lock_guard lock(config_mutex);
+        std::lock_guard<std::mutex> lock(config_mutex);
         return config_cache.mqtt_base_topic;
     }
 }

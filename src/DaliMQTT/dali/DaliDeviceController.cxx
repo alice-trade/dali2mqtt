@@ -90,7 +90,7 @@ namespace daliMQTT
     }
 
     void DaliDeviceController::updateDeviceState(const DaliLongAddress_t longAddr, const DaliState& state) {
-        std::lock_guard lock(m_devices_mutex);
+        std::lock_guard<std::mutex> lock(m_devices_mutex);
         const auto it = m_devices.find(longAddr);
         if (it != m_devices.end()) {
             bool state_changed = false;
@@ -131,14 +131,14 @@ namespace daliMQTT
             }
         }
     }
-    void DaliDeviceController::publishAttributes(const DaliLongAddress_t long_addr) {
+    void DaliDeviceController::publishAttributes(const DaliLongAddress_t long_addr) const {
         auto const& mqtt = MQTTClient::getInstance();
         const auto config = ConfigManager::getInstance().getConfig();
         const auto addr_str = utils::longAddressToString(long_addr);
 
         DaliDevice dev_copy;
         {
-            std::lock_guard lock(m_devices_mutex);
+            std::lock_guard<std::mutex> lock(m_devices_mutex);
             if (!getInstance().m_devices.contains(long_addr)) return;
             dev_copy = getInstance().m_devices.at(long_addr);
         }
@@ -168,7 +168,7 @@ namespace daliMQTT
     }
 
     std::optional<uint8_t> DaliDeviceController::getLastLevel(const DaliLongAddress_t longAddress) const {
-        std::lock_guard lock(m_devices_mutex);
+        std::lock_guard<std::mutex> lock(m_devices_mutex);
         if (const auto it = m_devices.find(longAddress); it != m_devices.end()) {
             return it->second.last_level;
         }
@@ -181,7 +181,7 @@ namespace daliMQTT
 
         std::vector<AddressMapping> devices_to_validate;
         {
-            std::lock_guard lock(m_devices_mutex);
+            std::lock_guard<std::mutex> lock(m_devices_mutex);
             if (m_devices.empty()) {
                 ESP_LOGI(TAG, "Map is empty, validation skipped.");
                 return false;
@@ -205,7 +205,7 @@ namespace daliMQTT
                         return false;
                     }
                     {
-                        std::lock_guard lock(m_devices_mutex);
+                        std::lock_guard<std::mutex> lock(m_devices_mutex);
                         if (m_devices.contains(expected_long_addr)) {
                             auto& dev = m_devices[expected_long_addr];
                             if (!dev.available) {
@@ -368,7 +368,7 @@ namespace daliMQTT
         }
     }
     void DaliDeviceController::requestBroadcastSync(const uint32_t base_delay_ms, const uint32_t stagger_ms) {
-        std::lock_guard lock(m_devices_mutex);
+        std::lock_guard<std::mutex> lock(m_devices_mutex);
         ESP_LOGI(TAG, "Scheduling broadcast sync for %zu devices (Base: %ums, Stagger: %ums)",
                          m_devices.size(), base_delay_ms, stagger_ms);
         uint32_t current_delay = base_delay_ms;
@@ -382,7 +382,7 @@ namespace daliMQTT
         bool known_device = false;
 
         {
-            std::lock_guard lock(m_devices_mutex);
+            std::lock_guard<std::mutex> lock(m_devices_mutex);
             if (const auto it = m_short_to_long_map.find(shortAddr); it != m_short_to_long_map.end()) {
                 long_addr = it->second;
                 known_device = true;
@@ -396,7 +396,7 @@ namespace daliMQTT
         const auto level_opt = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddr, DALI_COMMAND_QUERY_ACTUAL_LEVEL);
         const bool is_device_responding = level_opt.has_value();
         {
-            std::lock_guard lock(m_devices_mutex);
+            std::lock_guard<std::mutex> lock(m_devices_mutex);
             if (m_devices.contains(long_addr)) {
                 if (m_devices[long_addr].available != is_device_responding) {
                     m_devices[long_addr].available = is_device_responding;
@@ -418,7 +418,7 @@ namespace daliMQTT
         bool supports_rgb = false;
 
         {
-             std::lock_guard lock(m_devices_mutex);
+             std::lock_guard<std::mutex> lock(m_devices_mutex);
              if(m_devices.contains(long_addr)) {
                  const auto& dev = m_devices[long_addr];
 
@@ -442,7 +442,7 @@ namespace daliMQTT
                     shortAddr, supports_tc, supports_rgb, feat);
 
                 {
-                    std::lock_guard lock(m_devices_mutex);
+                    std::lock_guard<std::mutex> lock(m_devices_mutex);
                     if (m_devices.contains(long_addr)) {
                         m_devices[long_addr].supports_tc = supports_tc;
                         m_devices[long_addr].supports_rgb = supports_rgb;
@@ -463,7 +463,7 @@ namespace daliMQTT
         int64_t last_poll_ts = 0;
 
         {
-            std::lock_guard lock(m_devices_mutex);
+            std::lock_guard<std::mutex> lock(m_devices_mutex);
             if(m_devices.contains(long_addr)) {
                 const auto& dev = m_devices[long_addr];
                 last_poll_ts = dev.last_color_poll_ts;
@@ -487,7 +487,7 @@ namespace daliMQTT
             }
 
             {
-                std::lock_guard lock(m_devices_mutex);
+                std::lock_guard<std::mutex> lock(m_devices_mutex);
                 if(m_devices.contains(long_addr)) {
                     m_devices[long_addr].last_color_poll_ts = now_sec;
                 }
@@ -503,7 +503,7 @@ namespace daliMQTT
 
         bool needs_static_data = false;
         {
-            std::lock_guard lock(m_devices_mutex);
+            std::lock_guard<std::mutex> lock(m_devices_mutex);
             if (m_devices.contains(long_addr) && !m_devices[long_addr].static_data_loaded) {
                 needs_static_data = true;
             }
@@ -513,7 +513,7 @@ namespace daliMQTT
                 const auto gtin_opt = dali.getGTIN(shortAddr);
                 const auto dt_opt = dali.getDeviceType(shortAddr);
                 {
-                    std::lock_guard lock(m_devices_mutex);
+                    std::lock_guard<std::mutex> lock(m_devices_mutex);
                     if(m_devices.contains(long_addr)) {
                         bool changed = false;
                         if (gtin_opt.has_value()) {
@@ -559,7 +559,7 @@ namespace daliMQTT
                     ESP_LOGI(TAG, "Autosaving updated device map to NVS...");
                     std::map<DaliLongAddress_t, DaliDevice> copy_devs;
                     {
-                        std::lock_guard lock(self->m_devices_mutex);
+                        std::lock_guard<std::mutex> lock(self->m_devices_mutex);
                         copy_devs = self->m_devices;
                         self->m_nvs_dirty = false;
                     }
@@ -568,7 +568,7 @@ namespace daliMQTT
             }
 
             {
-                std::lock_guard lock(self->m_queue_mutex);
+                std::lock_guard<std::mutex> lock(self->m_queue_mutex);
 
                 if (!self->m_deferred_requests.empty()) {
                     auto it = self->m_deferred_requests.begin();
@@ -606,7 +606,7 @@ namespace daliMQTT
                     auto all_assignments = DaliGroupManagement::getInstance().getAllAssignments();
                     std::map<DaliLongAddress_t, DaliDevice> devices_snapshot;
                     {
-                        std::lock_guard lock(self->m_devices_mutex);
+                        std::lock_guard<std::mutex> lock(self->m_devices_mutex);
                         devices_snapshot = self->m_devices;
                     }
                     std::map<uint8_t, DaliState> group_sync_states;
@@ -729,7 +729,7 @@ namespace daliMQTT
         }
 
         {
-            std::lock_guard lock(m_devices_mutex);
+            std::lock_guard<std::mutex> lock(m_devices_mutex);
             m_devices = std::move(new_devices);
             m_short_to_long_map = std::move(new_short_to_long_map);
             ESP_LOGI(TAG, "Discovery finished. Mapped %zu DALI devices.", m_devices.size());
@@ -766,12 +766,12 @@ namespace daliMQTT
     }
 
     std::map<DaliLongAddress_t, DaliDevice> DaliDeviceController::getDevices() const {
-        std::lock_guard lock(m_devices_mutex);
+        std::lock_guard<std::mutex> lock(m_devices_mutex);
         return m_devices;
     }
 
     std::optional<uint8_t> DaliDeviceController::getShortAddress(const DaliLongAddress_t longAddress) const {
-        std::lock_guard lock(m_devices_mutex);
+        std::lock_guard<std::mutex> lock(m_devices_mutex);
         if (const auto it = m_devices.find(longAddress); it != m_devices.end()) {
             return it->second.short_address;
         }
@@ -779,7 +779,7 @@ namespace daliMQTT
     }
 
     std::optional<DaliLongAddress_t> DaliDeviceController::getLongAddress(const uint8_t shortAddress, const bool is24bitSpace) const {
-        std::lock_guard lock(m_devices_mutex);
+        std::lock_guard<std::mutex> lock(m_devices_mutex);
         uint8_t search_key = shortAddress;
         if (is24bitSpace) {
             search_key |= 0x80;

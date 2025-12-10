@@ -59,7 +59,7 @@ namespace daliMQTT
         char* json_string = nullptr;
 
         {
-            std::lock_guard lock(m_mutex);
+            std::lock_guard<std::mutex> lock(m_mutex);
             root = cJSON_CreateObject();
             if (!root) return ESP_ERR_NO_MEM;
 
@@ -87,12 +87,12 @@ namespace daliMQTT
     }
 
     GroupAssignments DaliGroupManagement::getAllAssignments() const {
-        std::lock_guard lock(m_mutex);
+        std::lock_guard<std::mutex> lock(m_mutex);
         return m_assignments;
     }
 
     std::optional<std::bitset<16>> DaliGroupManagement::getGroupsForDevice(const DaliLongAddress_t longAddress) const {
-        std::lock_guard lock(m_mutex);
+        std::lock_guard<std::mutex> lock(m_mutex);
         if (const auto it = m_assignments.find(longAddress); it != m_assignments.end()) {
             return it->second;
         }
@@ -110,7 +110,7 @@ namespace daliMQTT
         uint8_t shortAddress = *short_address_opt;
 
         {
-            std::lock_guard lock(m_mutex);
+            std::lock_guard<std::mutex> lock(m_mutex);
             m_assignments[longAddress].set(group, assigned);
         }
         
@@ -130,7 +130,7 @@ namespace daliMQTT
 
             std::bitset<16> current_groups;
             {
-                std::lock_guard lock(m_mutex);
+                std::lock_guard<std::mutex> lock(m_mutex);
                 current_groups = m_assignments[longAddress];
             }
             publishDeviceGroupState(longAddress, current_groups);
@@ -138,7 +138,7 @@ namespace daliMQTT
             return ESP_OK;
         } else {
             {
-                std::lock_guard lock(m_mutex);
+                std::lock_guard<std::mutex> lock(m_mutex);
                 m_assignments[longAddress].set(group, !assigned);
             }
             return result;
@@ -153,7 +153,7 @@ namespace daliMQTT
         };
         std::vector<CommandToSend> commands_to_send;
         {
-            std::lock_guard lock(m_mutex);
+            std::lock_guard<std::mutex> lock(m_mutex);
             std::set<DaliLongAddress_t> all_addresses;
             for(const auto& long_addr : m_assignments | std::views::keys) all_addresses.insert(long_addr);
             for(const auto& long_addr : newAssignments | std::views::keys) all_addresses.insert(long_addr);
@@ -221,7 +221,7 @@ namespace daliMQTT
             vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
         }
         {
-            std::lock_guard lock(m_mutex);
+            std::lock_guard<std::mutex> lock(m_mutex);
             m_assignments = new_assignments;
             ESP_LOGI(TAG, "Finished refreshing group assignments. Found assignments for %zu devices.", m_assignments.size());
         }
@@ -230,7 +230,7 @@ namespace daliMQTT
         return saveToConfig();
     }
     DaliGroup DaliGroupManagement::getGroupState(const uint8_t group_id) const {
-        std::lock_guard lock(m_mutex);
+        std::lock_guard<std::mutex> lock(m_mutex);
         if (group_id < 16) {
             return m_group_states[group_id];
         }
@@ -264,7 +264,7 @@ namespace daliMQTT
     }
 
     void DaliGroupManagement::publishAllGroups() const {
-        std::lock_guard lock(m_mutex);
+        std::lock_guard<std::mutex> lock(m_mutex);
         for (const auto& [longAddr, groups] : m_assignments) {
             publishDeviceGroupState(longAddr, groups);
         }
@@ -274,7 +274,7 @@ namespace daliMQTT
 
         bool changed = false;
         {
-            std::lock_guard lock(m_mutex);
+            std::lock_guard<std::mutex> lock(m_mutex);
             auto& group = m_group_states[group_id];
 
             if (state.level.has_value()) {
@@ -308,7 +308,7 @@ namespace daliMQTT
         if (group_id >= 16) return;
         uint8_t target;
         {
-            std::lock_guard lock(m_mutex);
+            std::lock_guard<std::mutex> lock(m_mutex);
             target = (m_group_states[group_id].last_level > 0)
                      ? m_group_states[group_id].last_level
                      : 254;
@@ -356,7 +356,7 @@ namespace daliMQTT
         bool should_update = false;
 
         {
-            std::lock_guard lock(m_mutex);
+            std::lock_guard<std::mutex> lock(m_mutex);
             const uint8_t current = m_group_states[group_id].current_level;
 
             if (current == 0) {
