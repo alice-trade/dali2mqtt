@@ -212,7 +212,7 @@ onMounted(loadData);
     <div v-if="!loading">
       <nav>
         <ul>
-          <li><a href="#" :class="{ 'secondary': viewMode !== 'management' }" @click.prevent="viewMode = 'management'">Управление устройствами</a></li>
+          <li><a href="#" :class="{ 'secondary': viewMode !== 'management' }" @click.prevent="viewMode = 'management'">Управление группами</a></li>
           <li><a href="#" :class="{ 'secondary': viewMode !== 'scenes' }" @click.prevent="viewMode = 'scenes'">Редактор сцен</a></li>
         </ul>
       </nav>
