@@ -71,8 +71,6 @@ namespace daliMQTT
 
         [[nodiscard]] std::optional<uint8_t> getDT8Features(uint8_t shortAddress);
 
-        [[nodiscard]] std::optional<uint8_t> readInputDeviceMemory(uint8_t shortAddress, uint8_t bank, uint8_t offset);
-
         std::optional<uint8_t> getDeviceType(uint8_t shortAddress);
 
         std::optional<std::string> getGTIN(uint8_t shortAddress);
