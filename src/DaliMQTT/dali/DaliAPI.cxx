@@ -452,30 +452,41 @@ namespace daliMQTT
         ESP_LOGW(TAG, "Failed to read memory loc: SA=%d, Bank=%d, Off=%d, Res=%d", shortAddress, bank, offset, result);
         return std::nullopt;
     }
+    std::optional<uint8_t> DaliAPI::queryDT8Value(const uint8_t shortAddress, const uint8_t dtr0_selector) {
+        std::lock_guard lock(bus_mutex);
 
+        if (m_dali_impl.set_dtr0(dtr0_selector, shortAddress) != 0) {
+            ESP_LOGW(TAG, "Failed to set DTR0 for SA %d", shortAddress);
+            return std::nullopt;
+        }
+        m_dali_impl.cmd(DALI_SPECIAL_COMMAND_ENABLE_DEVICE_TYPE_X, 8, false);
+        const int16_t result = m_dali_impl.cmd(DALI_COMMAND_DT8_QUERY_COLOUR_VALUE, shortAddress);
+
+        vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
+
+        if (result >= 0) {
+            return static_cast<uint8_t>(result);
+        }
+        return std::nullopt;
+    }
     std::optional<uint16_t> DaliAPI::getDT8ColorTemp(const uint8_t shortAddress) {
-        // Memory Bank 205 (Colour Control), Offsets 0x0E (MSB), 0x0F (LSB)
-        constexpr uint8_t bank = 205;
-
-        const auto msb = readMemoryLocation(shortAddress, bank, 0x0E);
+        const auto msb = queryDT8Value(shortAddress, 0x02);
         if (!msb) return std::nullopt;
 
-        const auto lsb = readMemoryLocation(shortAddress, bank, 0x0F);
+        const auto lsb = queryDT8Value(shortAddress, 0x03);
         if (!lsb) return std::nullopt;
 
         return (static_cast<uint16_t>(*msb) << 8) | *lsb;
     }
 
     std::optional<DaliRGB> DaliAPI::getDT8RGB(const uint8_t shortAddress) {
-        constexpr uint8_t bank = 205;
-
-        const auto r = readMemoryLocation(shortAddress, bank, 0x10);
+        const auto r = queryDT8Value(shortAddress, 0x04);
         if (!r) return std::nullopt;
 
-        const auto g = readMemoryLocation(shortAddress, bank, 0x11);
+        const auto g = queryDT8Value(shortAddress, 0x05);
         if (!g) return std::nullopt;
 
-        const auto b = readMemoryLocation(shortAddress, bank, 0x12);
+        const auto b = queryDT8Value(shortAddress, 0x06);
         if (!b) return std::nullopt;
 
         return DaliRGB{ *r, *g, *b };

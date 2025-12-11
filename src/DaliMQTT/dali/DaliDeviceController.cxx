@@ -727,7 +727,7 @@ namespace daliMQTT
                 }
             }
 
-            if (auto status_input_opt = dali.sendInputDeviceCommand(sa, DALI_COMMAND_QUERY_STATUS); status_input_opt.has_value()) {
+            if (auto status_input_opt = dali.sendInputDeviceCommand(sa, DALI_COMMAND_INPUT_QUERY_STATUS); status_input_opt.has_value()) {
                 ESP_LOGI(TAG, "Input Device found at SA %d", sa);
 
                 auto long_addr_opt = getInputDeviceLongAddress(sa);
@@ -778,13 +778,13 @@ namespace daliMQTT
             return dali.sendInputDeviceCommand(shortAddress, 0xC5);
         };
 
-        const auto h_opt = readByte(0x00);
+        const auto h_opt = readByte(0x09); // Random Address H
         if (!h_opt) return std::nullopt;
 
-        const auto m_opt = readByte(0x01);
+        const auto m_opt = readByte(0x0A); // Random Address M
         if (!m_opt) return std::nullopt;
 
-        const auto l_opt = readByte(0x02);
+        const auto l_opt = readByte(0x0B); // Random Address L
         if (!l_opt) return std::nullopt;
 
         return (static_cast<DaliLongAddress_t>(*h_opt) << 16) |

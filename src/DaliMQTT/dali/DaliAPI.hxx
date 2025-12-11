@@ -96,7 +96,7 @@ namespace daliMQTT
         DaliAPI() = default;
         [[noreturn]] static void dali_sniffer_task(void* arg);
         esp_err_t sendSpecialCmdDT8(uint8_t shortAddr, uint8_t cmd);
-
+        std::optional<uint8_t> queryDT8Value(const uint8_t shortAddress, const uint8_t dtr0_selector);
 
         Dali m_dali_impl{};
         gptimer_handle_t m_dali_timer{nullptr};
