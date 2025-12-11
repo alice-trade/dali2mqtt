@@ -1,0 +1,35 @@
+{
+  "name": "dalimqx",
+  "version": "1.0.0",
+  "description": "Client library for communicating with DALI-MQTT4ESP bridges",
+  "author": "DALI-MQTT4ESP",
+  "main": "dist/dalimqx.cjs.js",
+  "module": "dist/dalimqx.esm.js",
+  "browser": "dist/dalimqx.umd.js",
+  "types": "dist/index.d.ts",
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^29.0.0",
+    "@rollup/plugin-json": "^6.1.0",
+    "@rollup/plugin-node-resolve": "^16.0.3",
+    "@rollup/plugin-terser": "^0.4.4",
+    "@rollup/plugin-typescript": "^12.3.0",
+    "@types/node": "^25.0.0",
+    "rollup": "^2.79.2",
+    "rollup-plugin-polyfill-node": "^0.13.0",
+    "tslib": "^2.6.0",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "events": "^3.3.0",
+    "mqtt": "^5.14.1"
+  },
+  "scripts": {
+    "build": "rollup -c",
+    "dev": "rollup -c -w",
+    "test": "node test/test.js",
+    "pretest": "npm run build"
+  },
+  "files": [
+    "dist"
+  ]
+}
