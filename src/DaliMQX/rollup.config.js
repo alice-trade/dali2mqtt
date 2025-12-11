@@ -8,7 +8,7 @@ import pkg from './package.json';
 
 export default [
     {
-        input: 'src/index.ts',
+        input: 'index.ts',
         output: [
             {
                 file: pkg.main,
@@ -35,7 +35,7 @@ export default [
         external: ['events', 'mqtt']
     },
     {
-        input: 'src/index.ts',
+        input: 'index.ts',
         output: {
             name: 'dalimqx',
             file: 'dist/dalimqx.browser.min.js',
