@@ -18,6 +18,7 @@ namespace daliMQTT {
             uint8_t system_failure_restore_level;
             bool supports_tc;
             uint8_t _padding;
+            uint8_t _padding_2;
     };
 
     class DaliAddressMap {
