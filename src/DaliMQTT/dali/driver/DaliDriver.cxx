@@ -36,8 +36,7 @@ Patched: daliMQTT Project
 #include "esp_log.h"
 
 // timing
-#define BEFORE_CMD_IDLE_MS 13 // require 13ms idle time before sending a cmd()
-
+#define BEFORE_CMD_IDLE_TICKS 100
 // busstate
 #define IDLE 0
 #define RX 1
@@ -409,7 +408,7 @@ uint8_t Dali::tx_wait(uint8_t* data, uint8_t bitlen, uint32_t timeout_ms)
         return DALI_RESULT_DATA_TOO_LONG;
     uint32_t start_ms = milli();
     while (1) {
-        while (idlecnt < BEFORE_CMD_IDLE_MS) {
+        while (idlecnt < BEFORE_CMD_IDLE_TICKS) {
             if (milli() - start_ms > timeout_ms)
                 return DALI_RESULT_TIMEOUT;
             vTaskDelay(1);
