@@ -29,12 +29,17 @@ namespace daliMQTT
             return !(*this == other);
         }
     };
-
+    enum class DaliColorMode {
+        Unknown,
+        Tc,     // Tunable White
+        Rgb     // RGB / RGBW
+    };
     struct DaliState {
         std::optional<uint8_t> level;
         std::optional<uint8_t> status_byte;
         std::optional<uint16_t> color_temp;
         std::optional<DaliRGB> rgb;
+        std::optional<DaliColorMode> active_mode;
     };
 
     // 24bit long dali addr type
@@ -61,6 +66,7 @@ namespace daliMQTT
         std::optional<uint16_t> max_mireds{}; // Max CT
         std::optional<uint16_t> color_temp{}; // Current CT in Mireds
         std::optional<DaliRGB> rgb{};         // Current RGB
+        DaliColorMode active_mode{DaliColorMode::Tc};
 
         bool supports_rgb{false};
         bool supports_tc{false};

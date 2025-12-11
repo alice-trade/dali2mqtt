@@ -142,13 +142,44 @@ namespace daliMQTT {
                 };
             }
         }
+        if (targetState.color_temp.has_value() || targetState.rgb.has_value()) {
+            DaliState stateUpdateForMode;
 
-        if (targetState.color_temp.has_value()) {
-            dali.setDT8ColorTemp(addr_type, target_id, *targetState.color_temp);
-        }
+            if (targetState.color_temp.has_value()) {
+                dali.setDT8ColorTemp(addr_type, target_id, *targetState.color_temp);
+                stateUpdateForMode.active_mode = DaliColorMode::Tc;
+            }
 
-        if (targetState.rgb.has_value()) {
-            dali.setDT8RGB(addr_type, target_id, targetState.rgb->r, targetState.rgb->g, targetState.rgb->b);
+            if (targetState.rgb.has_value()) {
+                dali.setDT8RGB(addr_type, target_id, targetState.rgb->r, targetState.rgb->g, targetState.rgb->b);
+                stateUpdateForMode.active_mode = DaliColorMode::Rgb;
+            }
+
+            if (stateUpdateForMode.active_mode.has_value()) {
+                auto& controller = DaliDeviceController::getInstance();
+
+                if (addr_type == DALI_ADDRESS_TYPE_SHORT) {
+                    if (auto long_addr = controller.getLongAddress(target_id)) {
+                        controller.updateDeviceState(*long_addr, stateUpdateForMode);
+                    }
+                }
+                else if (addr_type == DALI_ADDRESS_TYPE_GROUP) {
+                    auto all_assignments = DaliGroupManagement::getInstance().getAllAssignments();
+                    for (const auto& [long_addr, groups] : all_assignments) {
+                        if (groups.test(target_id)) {
+                            controller.updateDeviceState(long_addr, stateUpdateForMode);
+                        }
+                    }
+                }
+                else if (addr_type == DALI_ADDRESS_TYPE_BROADCAST) {
+                    auto devices = controller.getDevices();
+                    for (const auto& [long_addr, dev] : devices) {
+                        if (dev.available) {
+                            controller.updateDeviceState(long_addr, stateUpdateForMode);
+                        }
+                    }
+                }
+            }
         }
 
         if (target_on_state.has_value() && !(*target_on_state)) {

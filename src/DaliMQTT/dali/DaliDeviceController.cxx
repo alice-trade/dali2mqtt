@@ -123,7 +123,9 @@ namespace daliMQTT
                 it->second.rgb = state.rgb;
                 state_changed = true;
             }
-
+            if (state.active_mode.has_value()) {
+                it->second.active_mode = state.active_mode.value();
+            }
             if (state_changed || it->second.initial_sync_needed) {
                 ESP_LOGD(TAG, "State update for %s", utils::longAddressToString(longAddr).data());
                 publishState(longAddr, it->second);
@@ -481,12 +483,25 @@ namespace daliMQTT
         }
 
         if (should_poll_color) {
-            if (supports_tc) {
+            bool poll_tc = supports_tc;
+            bool poll_rgb = supports_rgb;
+            if (poll_tc && poll_rgb) {
+                std::lock_guard<std::mutex> lock(m_devices_mutex);
+                if (m_devices.contains(long_addr)) {
+                    if (m_devices[long_addr].active_mode == DaliColorMode::Rgb) {
+                        poll_tc = false;
+                    } else {
+                        poll_rgb = false;
+                    }
+                }
+            }
+
+            if (poll_tc) {
                 polled_tc = dali.getDT8ColorTemp(shortAddr);
                 if (polled_tc) ESP_LOGD(TAG, "Polled Tc for SA %d: %d mireds", shortAddr, *polled_tc);
             }
 
-            if (supports_rgb) {
+            if (poll_rgb) {
                 polled_rgb = dali.getDT8RGB(shortAddr);
                 if (polled_rgb) ESP_LOGD(TAG, "Polled RGB for SA %d: %d,%d,%d", shortAddr, polled_rgb->r, polled_rgb->g, polled_rgb->b);
             }
@@ -775,7 +790,7 @@ namespace daliMQTT
             // 2. SET DTR0 (Offset)
             dali.sendInputDeviceCommand(shortAddress, 0x30, offset);
             // 3. READ MEMORY LOCATION
-            return dali.sendInputDeviceCommand(shortAddress, 0xC5);
+            return dali.sendInputDeviceCommand(shortAddress, DALI_COMMAND_INPUT_READ_MEMORY_LOCATION);
         };
 
         const auto h_opt = readByte(0x09); // Random Address H
