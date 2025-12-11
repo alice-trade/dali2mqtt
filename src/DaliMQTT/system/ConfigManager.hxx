@@ -84,8 +84,8 @@ namespace daliMQTT
             static esp_err_t getU64(nvs_handle_t handle, const char* key, uint64_t& out_value, uint64_t default_value);
             static esp_err_t setString(nvs_handle_t handle, const char* key, const std::string& value);
 
-            AppConfig config_cache;
-            mutable std::mutex config_mutex;
+            AppConfig config_cache{};
+            mutable std::mutex config_mutex{};
             bool initialized{false};
     };
 }

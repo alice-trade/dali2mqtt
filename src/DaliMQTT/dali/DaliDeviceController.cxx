@@ -155,6 +155,11 @@ namespace daliMQTT
             cJSON_AddStringToObject(root, "gtin", dev_copy.gtin.c_str());
         }
 
+        cJSON_AddNumberToObject(root, "dev_min_level", dev_copy.min_level);
+        cJSON_AddNumberToObject(root, "dev_max_level", dev_copy.max_level);
+        cJSON_AddNumberToObject(root, "dev_power_on_level", dev_copy.power_on_level);
+        cJSON_AddNumberToObject(root, "dev_system_failure_level", dev_copy.system_failure_level);
+
         cJSON_AddNumberToObject(root, "short_address", dev_copy.short_address);
 
         char* json_str = cJSON_PrintUnformatted(root);
@@ -510,8 +515,12 @@ namespace daliMQTT
         }
 
         if (needs_static_data) {
-                const auto gtin_opt = dali.getGTIN(shortAddr);
-                const auto dt_opt = dali.getDeviceType(shortAddr);
+            const auto min_opt = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddr, DALI_COMMAND_QUERY_MIN_LEVEL);
+            const auto max_opt = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddr, DALI_COMMAND_QUERY_MAX_LEVEL);
+            const auto power_on_opt = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddr, DALI_COMMAND_QUERY_POWER_ON_LEVEL);
+            const auto fail_opt = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddr, DALI_COMMAND_QUERY_SYSTEM_FAILURE_LEVEL);
+            const auto gtin_opt = dali.getGTIN(shortAddr);
+            const auto dt_opt = dali.getDeviceType(shortAddr);
                 {
                     std::lock_guard<std::mutex> lock(m_devices_mutex);
                     if(m_devices.contains(long_addr)) {
@@ -524,6 +533,24 @@ namespace daliMQTT
                             m_devices[long_addr].device_type = dt_opt;
                             changed = true;
                         }
+
+                        if (min_opt.has_value()) {
+                            m_devices[long_addr].min_level = *min_opt;
+                            changed = true;
+                        }
+                        if (max_opt.has_value()) {
+                            m_devices[long_addr].max_level = *max_opt;
+                            changed = true;
+                        }
+                        if (power_on_opt.has_value()) {
+                            m_devices[long_addr].power_on_level = *power_on_opt;
+                            changed = true;
+                        }
+                        if (fail_opt.has_value()) {
+                            m_devices[long_addr].system_failure_level = *fail_opt;
+                            changed = true;
+                        }
+
                         m_devices[long_addr].static_data_loaded = true;
 
                         if (changed) {

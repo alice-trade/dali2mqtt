@@ -138,10 +138,26 @@ namespace daliMQTT {
                     break;
                 }
                 case DALI_COMMAND_RECALL_MAX_LEVEL:
-                    known_level = 254;
+                    {
+                        std::lock_guard<std::mutex> lock(m_devices_mutex);
+                        if (affected_devices.size() == 1) {
+                            const auto& dev = m_devices[affected_devices[0]];
+                            known_level = dev.max_level;
+                        } else {
+                            known_level = 254; // FIXME
+                        }
+                    }
                     break;
                 case DALI_COMMAND_RECALL_MIN_LEVEL:
-                    known_level = 1;
+                {
+                    std::lock_guard<std::mutex> lock(m_devices_mutex);
+                    if (affected_devices.size() == 1) {
+                        const auto& dev = m_devices[affected_devices[0]];
+                        known_level = dev.min_level;
+                    } else {
+                        known_level = 1; // FIXME
+                    }
+                }
                     break;
                 // Should be recalled
                 case DALI_COMMAND_UP:

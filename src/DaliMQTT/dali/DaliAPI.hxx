@@ -98,10 +98,10 @@ namespace daliMQTT
         esp_err_t sendSpecialCmdDT8(uint8_t shortAddr, uint8_t cmd);
 
 
-        Dali m_dali_impl;
+        Dali m_dali_impl{};
         gptimer_handle_t m_dali_timer{nullptr};
         TaskHandle_t m_sniffer_task_handle{nullptr};
-        std::recursive_mutex bus_mutex;
+        std::recursive_mutex bus_mutex{};
         std::atomic<bool> m_initialized{false};
         QueueHandle_t m_dali_event_queue{nullptr};
         static void IRAM_ATTR rx_complete_isr(void* arg);

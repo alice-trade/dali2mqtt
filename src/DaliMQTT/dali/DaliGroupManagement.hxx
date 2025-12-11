@@ -63,9 +63,9 @@ namespace daliMQTT
                                        std::optional<DaliRGB> rgb) const;
         void publishDeviceGroupState(DaliLongAddress_t longAddr, const std::bitset<16>& groups) const;
 
-        GroupAssignments m_assignments;
-        std::array<DaliGroup, 16> m_group_states;
-        mutable std::mutex m_mutex;
+        GroupAssignments m_assignments{};
+        std::array<DaliGroup, 16> m_group_states{};
+        mutable std::mutex m_mutex{};
     };
 
 } // namespace daliMQTT

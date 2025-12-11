@@ -54,6 +54,10 @@ namespace daliMQTT
             dev.supports_rgb = record.supports_rgb;
             dev.supports_tc = record.supports_tc;
 
+            dev.min_level = record.min_level;
+            dev.max_level = record.max_level;
+            dev.power_on_level = record.power_on_level;
+            dev.system_failure_level = record.system_failure_restore_level;
             if (dev.device_type.has_value() || !dev.gtin.empty()) {
                 dev.static_data_loaded = true;
             }
@@ -83,6 +87,10 @@ namespace daliMQTT
             record.supports_rgb = device.supports_rgb;
             record.supports_tc = device.supports_tc;
             record.is_input_device = device.is_input_device;
+            record.min_level = device.min_level;
+            record.max_level = device.max_level;
+            record.power_on_level = device.power_on_level;
+            record.system_failure_restore_level = device.system_failure_level;
             record._padding = 0;
             if (!device.gtin.empty()) {
                 strncpy(record.gtin, device.gtin.c_str(), GTIN_STORAGE_SIZE - 1);

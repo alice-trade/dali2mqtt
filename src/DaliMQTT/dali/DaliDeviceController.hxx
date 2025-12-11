@@ -56,14 +56,14 @@ namespace daliMQTT
         TaskHandle_t m_event_handler_task{nullptr};
         TaskHandle_t m_sync_task_handle{nullptr};
 
-        std::map<DaliLongAddress_t, DaliDevice> m_devices;
-        std::map<uint8_t, DaliLongAddress_t> m_short_to_long_map;
-        mutable std::mutex m_devices_mutex;
+        std::map<DaliLongAddress_t, DaliDevice> m_devices{};
+        std::map<uint8_t, DaliLongAddress_t> m_short_to_long_map{};
+        mutable std::mutex m_devices_mutex{};
 
-        std::vector<DeferredRequest> m_deferred_requests;
-        std::vector<uint8_t> m_priority_queue;
-        std::set<uint8_t> m_priority_set;
-        mutable std::mutex m_queue_mutex;
+        std::vector<DeferredRequest> m_deferred_requests{};
+        std::vector<uint8_t> m_priority_queue{};
+        std::set<uint8_t> m_priority_set{};
+        mutable std::mutex m_queue_mutex{};
         uint8_t m_round_robin_index{0};
         bool m_nvs_dirty{false};
         int64_t m_last_nvs_change_ts{0};

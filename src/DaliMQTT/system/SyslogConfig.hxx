@@ -23,10 +23,10 @@ namespace daliMQTT {
             static void syslog_task_entry(void* arg);
             [[noreturn]] void syslog_task_runner();
             void send_log_udp(const char* message, size_t len);
-            std::string m_server_addr;
+            std::string m_server_addr{};
             int m_sock {-1};
             vprintf_like_t m_original_logger {nullptr};
-            std::recursive_mutex m_sock_mutex;
+            std::recursive_mutex m_sock_mutex{};
             bool m_initialized {false};
             MessageBufferHandle_t m_log_buffer {nullptr};
             TaskHandle_t m_task_handle {nullptr};

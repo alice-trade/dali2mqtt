@@ -52,6 +52,11 @@ namespace daliMQTT
         bool is_input_device{false};          // Input Device flag
         std::string gtin{};                   // GTIN
 
+        uint8_t min_level{1};                 // Default DALI min
+        uint8_t max_level{254};               // Default DALI max
+        uint8_t power_on_level{254};          // Level after power cycle
+        uint8_t system_failure_level{254};    // System Failure Level
+
         std::optional<uint16_t> min_mireds{}; // Min CT
         std::optional<uint16_t> max_mireds{}; // Max CT
         std::optional<uint16_t> color_temp{}; // Current CT in Mireds

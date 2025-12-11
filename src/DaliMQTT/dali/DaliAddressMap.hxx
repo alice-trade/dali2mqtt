@@ -12,6 +12,10 @@ namespace daliMQTT {
             char gtin[GTIN_STORAGE_SIZE];
             bool is_input_device;
             bool supports_rgb;
+            uint8_t min_level;
+            uint8_t max_level;
+            uint8_t power_on_level;
+            uint8_t system_failure_restore_level;
             bool supports_tc;
             uint8_t _padding;
     };
