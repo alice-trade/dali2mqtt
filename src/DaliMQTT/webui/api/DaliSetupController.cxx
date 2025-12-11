@@ -68,7 +68,7 @@ namespace daliMQTT {
         }
 
         g_dali_task_status = DaliTaskStatus::SCANNING;
-        if (xTaskCreate(dali_scan_task, "dali_scan_task", 4096, nullptr, 4, nullptr) != pdPASS) {
+        if (xTaskCreate(dali_scan_task, "dali_scan_task", 8192, nullptr, 4, nullptr) != pdPASS) {
             g_dali_task_status = DaliTaskStatus::IDLE;
             httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to create scan task");
             return ESP_FAIL;
@@ -98,7 +98,7 @@ namespace daliMQTT {
         }
 
         g_dali_task_status = DaliTaskStatus::INITIALIZING;
-        if (xTaskCreate(dali_init_task, "dali_init_task", 4096, nullptr, 4, nullptr) != pdPASS) {
+        if (xTaskCreate(dali_init_task, "dali_init_task", 8192, nullptr, 4, nullptr) != pdPASS) {
             g_dali_task_status = DaliTaskStatus::IDLE;
             httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to create initialization task");
             return ESP_FAIL;

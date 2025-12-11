@@ -441,7 +441,7 @@ namespace daliMQTT {
             ESP_LOGW(TAG, "Bus operation already in progress. Ignoring scan request.");
             return;
         }
-        if (xTaskCreate(backgroundScanTask, "mqtt_scan_task", 4096, nullptr, 4, nullptr) != pdPASS) {
+        if (xTaskCreate(backgroundScanTask, "mqtt_scan_task", 8192, nullptr, 4, nullptr) != pdPASS) {
             ESP_LOGE(TAG, "Failed to create scan task");
             g_mqtt_bus_busy = false;
         }
@@ -451,7 +451,7 @@ namespace daliMQTT {
             ESP_LOGW(TAG, "Bus operation already in progress. Ignoring init request.");
             return;
         }
-        if (xTaskCreate(backgroundInitTask, "mqtt_init_task", 4096, nullptr, 4, nullptr) != pdPASS) {
+        if (xTaskCreate(backgroundInitTask, "mqtt_init_task", 8192, nullptr, 4, nullptr) != pdPASS) {
             ESP_LOGE(TAG, "Failed to create init task");
             g_mqtt_bus_busy = false;
         }

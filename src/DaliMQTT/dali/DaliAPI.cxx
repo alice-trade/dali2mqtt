@@ -355,7 +355,7 @@ namespace daliMQTT
         std::string gtin_res;
         for (uint8_t offset = 0x03; offset <= 0x08; ++offset) {
             m_dali_impl.set_dtr0(offset, shortAddress);
-            const int16_t byte_val = m_dali_impl.cmd(DALI_READ_MEMORY_LOCATION, (shortAddress << 1) | 1);
+            const int16_t byte_val = m_dali_impl.cmd(DALI_READ_MEMORY_LOCATION, shortAddress);
 
             if (byte_val >= 0) {
                 char buf[4];
@@ -377,13 +377,13 @@ namespace daliMQTT
     static uint8_t make_dali_command_address(const dali_addressType_t type, const uint8_t addr) {
         switch (type) {
             case DALI_ADDRESS_TYPE_SHORT:
-                return (addr << 1) | 1;
+                return addr;
             case DALI_ADDRESS_TYPE_GROUP:
-                return 0x80 | (addr << 1) | 1; // 100AAAA1
+                return 0x40 | (addr & 0x0F);
             case DALI_ADDRESS_TYPE_BROADCAST:
-                return 0xFF; // 11111111
+                return 0x7F;
             default:
-                return 0;
+                return addr;
         }
     }
     esp_err_t DaliAPI::setDT8ColorTemp(const dali_addressType_t addr_type, const uint8_t addr, const uint16_t mireds) {
@@ -427,8 +427,7 @@ namespace daliMQTT
         std::lock_guard lock(bus_mutex);
         m_dali_impl.cmd(DALI_SPECIAL_COMMAND_ENABLE_DEVICE_TYPE_X, 8, false);
 
-        const uint8_t dali_arg = (shortAddress << 1) | 1;
-        const int16_t result = m_dali_impl.cmd(DALI_COMMAND_DT8_QUERY_COLOUR_TYPE_FEATURES, dali_arg);
+        const int16_t result = m_dali_impl.cmd(DALI_COMMAND_DT8_QUERY_COLOUR_TYPE_FEATURES, shortAddress);
 
         vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
 
@@ -441,9 +440,9 @@ namespace daliMQTT
       std::optional<uint8_t> DaliAPI::readMemoryLocation(const uint8_t shortAddress, const uint8_t bank, const uint8_t offset) {
         std::lock_guard lock(bus_mutex);
 
-        m_dali_impl.set_dtr1(bank, (shortAddress << 1) | 1);
-        m_dali_impl.set_dtr0(offset, (shortAddress << 1) | 1);
-        const int16_t result = m_dali_impl.cmd(DALI_READ_MEMORY_LOCATION, (shortAddress << 1) | 1);
+        m_dali_impl.set_dtr1(bank, shortAddress);
+        m_dali_impl.set_dtr0(offset, shortAddress);
+        const int16_t result = m_dali_impl.cmd(DALI_READ_MEMORY_LOCATION, shortAddress);
 
         vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
 

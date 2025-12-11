@@ -81,7 +81,7 @@ public:
   uint8_t  set_power_on_level(uint8_t v, uint8_t adr=0xFF); //returns 0 on success
   uint8_t  tx_wait(uint8_t* data, uint8_t bitlen, uint32_t timeout_ms=500); //blocking transmit bytes
   int16_t  tx_wait_rx(uint8_t cmd0, uint8_t cmd1, uint32_t timeout_ms=500); //blocking transmit and receive
-  int16_t tx_wait_rx(uint8_t byte0, uint8_t byte1, uint8_t byte2, uint32_t timeout_ms);
+  int16_t tx_wait_rx(uint8_t byte0, uint8_t byte1, uint8_t byte2, uint32_t timeout_ms=500);
   uint8_t read_memory_bank(uint8_t bank, uint8_t adr);
   uint8_t set_dtr0(uint8_t value, uint8_t adr);
   uint8_t set_dtr1(uint8_t value, uint8_t adr);
