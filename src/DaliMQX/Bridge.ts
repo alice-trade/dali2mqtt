@@ -1,13 +1,12 @@
 import { EventEmitter } from 'events';
-import { IMqttDriver } from './interfaces/mqtt-driver';
-import { DaliDevice } from './entities/device';
-import { DaliGroup } from './entities/group';
-import { DaliInputDevice } from './entities/input';
-import { DaliBridgeOptions } from './types';
+import { IMqttDriver } from './interfaces/MqttDriver';
+import { DaliDevice } from './entities/Device';
+import { DaliGroup } from './entities/Group';
+import { DaliInputDevice } from './entities/Input';
+import { DaliBridgeOptions } from './interfaces/Common';
 
 interface RawCommandRequest {
-    addr: number;
-    cmd: number;
+    tag: string;
     resolve: (val: any) => void;
     reject: (err: Error) => void;
     timestamp: number;
@@ -22,8 +21,7 @@ export class DaliBridge extends EventEmitter {
     private groups = new Map<number, DaliGroup>();
     private inputDevices = new Map<string, DaliInputDevice>();
 
-    // Queue for Raw Command responses
-    private pendingCommands: RawCommandRequest[] = [];
+    private pendingCommands = new Map<string, RawCommandRequest>();
 
     constructor(
         private readonly mqtt: IMqttDriver,
@@ -31,8 +29,6 @@ export class DaliBridge extends EventEmitter {
     ) {
         super();
         this.baseTopic = options.baseTopic || 'dali_mqtt';
-
-        // Setup message routing
         this.mqtt.onMessage(this.handleMessage.bind(this));
     }
 
@@ -44,6 +40,8 @@ export class DaliBridge extends EventEmitter {
         const topics = [
             `${this.baseTopic}/light/+/state`,
             `${this.baseTopic}/light/+/status`,
+            `${this.baseTopic}/light/+/attributes`,
+            `${this.baseTopic}/light/+/groups`,
             `${this.baseTopic}/light/group/+/state`,
             `${this.baseTopic}/event/#`,
             `${this.baseTopic}/cmd/res`,
@@ -71,9 +69,13 @@ export class DaliBridge extends EventEmitter {
      * Get a Group entity.
      * @param groupId Group ID (0-15).
      */
+    public getAllDevices(): DaliDevice[] {
+        return Array.from(this.devices.values());
+    }
+
     public getGroup(groupId: number): DaliGroup {
         if (!this.groups.has(groupId)) {
-            this.groups.set(groupId, new DaliGroup(this.mqtt, this.baseTopic, groupId));
+            this.groups.set(groupId, new DaliGroup(this.mqtt, this.baseTopic, groupId, this));
         }
         return this.groups.get(groupId)!;
     }
@@ -98,27 +100,26 @@ export class DaliBridge extends EventEmitter {
      * @param twice Send twice (required for some config commands).
      * @returns Promise resolving to the response from the bus (if any).
      */
-    public async sendRawCommand(addr: number, cmd: number, bits: 16 | 24 = 16, twice: boolean = false): Promise<any> {
+    public async sendCommand(addr: number, cmd: number, bits: 16 | 24 = 16, twice: boolean = false): Promise<any> {
         return new Promise((resolve, reject) => {
-            const payload = { addr, cmd, bits, twice };
+            const tag = Math.random().toString(36).substring(7);
+            const payload = { addr, cmd, bits, twice, tag };
 
-            this.pendingCommands.push({
-                addr,
-                cmd,
+            this.pendingCommands.set(tag, {
+                tag,
                 resolve,
                 reject,
                 timestamp: Date.now()
             });
 
             setTimeout(() => {
-                const idx = this.pendingCommands.findIndex(c => c.addr === addr && c.cmd === cmd);
-                if (idx !== -1) {
-                    this.pendingCommands[idx].reject(new Error('DALI Command Timeout'));
-                    this.pendingCommands.splice(idx, 1);
+                if (this.pendingCommands.has(tag)) {
+                    this.pendingCommands.get(tag)?.reject(new Error('DALI Command Timeout'));
+                    this.pendingCommands.delete(tag);
                 }
             }, 3000);
 
-            this.mqtt.publish(`${this.baseTopic}/cmd/raw`, JSON.stringify(payload));
+            this.mqtt.publish(`${this.baseTopic}/cmd/send`, JSON.stringify(payload));
         });
     }
 
@@ -156,25 +157,36 @@ export class DaliBridge extends EventEmitter {
                 return;
             }
 
-            if (topic.includes('/light/') && topic.endsWith('/state')) {
+            if (topic.includes('/light/')) {
                 const parts = topic.split('/');
-                if (parts[parts.length - 3] === 'group') {
-                    // Group State
-                    const groupId = parseInt(parts[parts.length - 2]);
-                    this.getGroup(groupId).updateState(this.mapState(data));
-                } else {
-                    // Device State
-                    const addr = parts[parts.length - 2];
-                    this.getDevice(addr).updateState(this.mapState(data));
-                }
-            }
+                const suffix = parts[parts.length - 1];
 
-            else if (topic.endsWith('/status') && !topic.includes('sync_status')) {
-                const parts = topic.split('/');
-                if (parts[parts.length - 3] !== 'group') {
+                if (parts[parts.length - 3] === 'group') {
+                    const groupId = parseInt(parts[parts.length - 2]);
+                    if (suffix === 'state') {
+                        this.getGroup(groupId).updateState(this.mapState(data));
+                    }
+                } else {
                     const addr = parts[parts.length - 2];
-                    const isOnline = strPayload === 'online' || strPayload === 'ON' || strPayload === 'TRUE';
-                    this.getDevice(addr).updateState({ available: isOnline });
+                    const device = this.getDevice(addr);
+
+                    if (suffix === 'state') {
+                        device.updateState(this.mapState(data));
+                    } else if (suffix === 'status') {
+                        const isOnline = strPayload === 'online' || strPayload === 'ON' || strPayload === 'TRUE' || data?.state === 'ONLINE';
+                        device.updateState({ available: isOnline });
+                    } else if (suffix === 'attributes') {
+                        device.updateState({
+                            gtin: data.gtin,
+                            device_type: data.device_type,
+                            min_level: data.dev_min_level,
+                            max_level: data.dev_max_level
+                        });
+                    } else if (suffix === 'groups') {
+                        if (Array.isArray(data.groups)) {
+                            device.updateState({ groups: data.groups });
+                        }
+                    }
                 }
             }
 
@@ -191,20 +203,20 @@ export class DaliBridge extends EventEmitter {
             }
 
         } catch (err) {
+            // catch
         }
     }
 
     private handleCommandResponse(data: any) {
-        const idx = this.pendingCommands.findIndex(c => c.addr === data.addr && c.cmd === data.cmd);
-
-        if (idx !== -1) {
-            const cmd = this.pendingCommands[idx];
-            this.pendingCommands.splice(idx, 1);
+        if (data && data.tag && this.pendingCommands.has(data.tag)) {
+            const req = this.pendingCommands.get(data.tag)!;
+            this.pendingCommands.delete(data.tag);
 
             if (data.status === 'ok') {
-                cmd.resolve(data);
+                req.resolve(data);
             } else {
-                cmd.resolve(data);
+                // TODO: reject?
+                req.resolve(data);
             }
         }
     }

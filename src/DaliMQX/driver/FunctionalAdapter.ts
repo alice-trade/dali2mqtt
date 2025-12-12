@@ -1,4 +1,4 @@
-import { IMqttDriver } from '../interfaces/mqtt-driver';
+import { IMqttDriver } from '../interfaces/MqttDriver';
 
 type PublishFn = (topic: string, payload: string | Buffer, options?: any) => Promise<void> | void;
 type SubscribeFn = (topic: string) => Promise<void> | void;

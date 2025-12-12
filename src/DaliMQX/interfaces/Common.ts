@@ -9,6 +9,11 @@ export interface DaliState {
     };
     status_byte?: number;
     available?: boolean;
+    device_type?: number;
+    gtin?: string;
+    groups?: number[];
+    min_level?: number;
+    max_level?: number;
 }
 
 /**
@@ -16,7 +21,7 @@ export interface DaliState {
  */
 export interface DaliBridgeOptions {
     /**
-     * The base topic configured in the ESP32 firmware.
+     * Base topic
      */
     baseTopic?: string;
 }

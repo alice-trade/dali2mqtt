@@ -1,22 +1,27 @@
-import { IMqttDriver } from '../interfaces/mqtt-driver';
-import { DaliState } from '../types';
+import { IMqttDriver } from '../interfaces/MqttDriver';
+import { DaliState } from '../interfaces/Common';
 import { EventEmitter } from 'events';
-import {ColorUtils} from "../utils/color";
+import {ColorUtils} from "../utils/Color";
+// import {DaliBridge} from "../Bridge";
 
 /**
- * Represents a single DALI device (Luminaire).
+ * Represents a single DALI device.
  */
 export class DaliDevice extends EventEmitter {
     private _state: DaliState = {
         available: false,
         brightness: 0,
-        state: 'OFF'
+        state: 'OFF',
+        groups: [],
+        color: { r: 0, g: 0, b: 0 },
+        color_temp: 0
     };
 
     constructor(
         private readonly mqtt: IMqttDriver,
         private readonly baseTopic: string,
-        public readonly longAddress: string
+        public readonly longAddress: string,
+        // private readonly bridge: DaliBridge
     ) {
         super();
     }
@@ -81,7 +86,51 @@ export class DaliDevice extends EventEmitter {
             color: { r, g, b }
         });
     }
+    public getGroups(): number[] {
+        return this._state.groups || [];
+    }
 
+    public getGTIN(): string | undefined {
+        return this._state.gtin;
+    }
+
+    public get isControlGearFailure(): boolean {
+        return this.checkStatusBit(0);
+    }
+
+    public get isLampFailure(): boolean {
+        return this.checkStatusBit(1);
+    }
+
+    public get isLampOn(): boolean {
+        return this.checkStatusBit(2);
+    }
+
+    public get isLimitError(): boolean {
+        return this.checkStatusBit(3);
+    }
+
+    public get isFadeRunning(): boolean {
+        return this.checkStatusBit(4);
+    }
+
+    public get isResetState(): boolean {
+        return this.checkStatusBit(5);
+    }
+
+    public get isMissingShortAddress(): boolean {
+        return this.checkStatusBit(6);
+    }
+
+    public get isPowerFailure(): boolean {
+        return this.checkStatusBit(7);
+    }
+
+    private checkStatusBit(bit: number): boolean {
+        const sb = this._state.status_byte;
+        if (sb === undefined) return false;
+        return ((sb >> bit) & 1) === 1;
+    }
     /**
      * Internal helper to send JSON payload.
      */

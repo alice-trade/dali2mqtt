@@ -1,7 +1,9 @@
-import { IMqttDriver } from '../interfaces/mqtt-driver';
-import { DaliState } from '../types';
-import { ColorUtils } from '../utils/color';
+import { IMqttDriver } from '../interfaces/MqttDriver';
+import { DaliState } from '../interfaces/Common';
+import { ColorUtils } from '../utils/Color';
 import { EventEmitter } from 'events';
+import {DaliBridge} from "../Bridge";
+import {DaliDevice} from "./Device";
 
 /**
  * Represents a DALI Group (0-15).
@@ -16,7 +18,9 @@ export class DaliGroup extends EventEmitter {
     constructor(
         private readonly mqtt: IMqttDriver,
         private readonly baseTopic: string,
-        public readonly groupId: number
+        public readonly groupId: number,
+        private readonly bridge: DaliBridge
+
     ) {
         super();
         if (groupId < 0 || groupId > 15) {
@@ -35,6 +39,13 @@ export class DaliGroup extends EventEmitter {
         return `${this.baseTopic}/light/group/${this.groupId}/set`;
     }
 
+    public getDevices(): DaliDevice[] {
+        const allDevices = this.bridge.getAllDevices();
+        return allDevices.filter(dev => {
+            const groups = dev.getGroups();
+            return groups.includes(this.groupId);
+        });
+    }
     /**
      * Turns the group ON.
      */

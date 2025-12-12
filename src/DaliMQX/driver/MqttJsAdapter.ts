@@ -1,4 +1,4 @@
-import { IMqttDriver } from '../interfaces/mqtt-driver';
+import { IMqttDriver } from '../interfaces/MqttDriver';
 import { MqttClient } from 'mqtt';
 
 /**

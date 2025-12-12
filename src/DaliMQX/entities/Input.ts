@@ -4,7 +4,7 @@ export interface InputEvent {
     event_code: number;
     instance: number;
     type: 'short' | 'long' | 'double' | 'motion' | 'unknown';
-    rawData: any;
+    Data: any;
 }
 
 /**
@@ -32,7 +32,7 @@ export class DaliInputDevice extends EventEmitter {
             event_code: eventCode,
             instance: instance,
             type: type,
-            rawData: data
+            Data: data
         };
 
         this.emit('event', event);
