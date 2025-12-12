@@ -111,8 +111,8 @@ namespace daliMQTT
         mqtt.subscribe(scene_cmd_topic);
         ESP_LOGI(TAG, "Subscribed to scenes: %s", scene_cmd_topic.c_str());
 
-        // base/cmd/raw
-        std::string cmd_topic = utils::stringFormat("%s/cmd/raw", config.mqtt_base_topic.c_str());
+        // base/cmd/send
+        std::string cmd_topic = utils::stringFormat("%s/cmd/send", config.mqtt_base_topic.c_str());
         mqtt.subscribe(cmd_topic);
         ESP_LOGW(TAG, "DEBUG INTERFACE ENABLED. Subscribed to: %s", cmd_topic.c_str());
 

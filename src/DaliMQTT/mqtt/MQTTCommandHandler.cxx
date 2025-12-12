@@ -550,7 +550,7 @@ namespace daliMQTT {
             } else {
                 handleSceneCommand(data);
             }
-        } else if (parts[0] == "cmd" && parts.size() > 1 && parts[1] == "raw") {
+        } else if (parts[0] == "cmd" && parts.size() > 1 && parts[1] == "send") {
             processSendDALICommand(data);
         } else if (parts[0] == "cmd" && parts.size() > 1 && parts[1] == "sync") {
             handleSyncCommand(data);
