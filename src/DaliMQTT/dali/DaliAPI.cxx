@@ -188,34 +188,48 @@ namespace daliMQTT
         return std::nullopt;
     }
 
-    std::optional<uint8_t> DaliAPI::sendRaw(const uint32_t data, const uint8_t bits) {
+    std::optional<uint8_t> DaliAPI::sendRaw(const uint32_t data, const uint8_t bits, const bool reply) {
         std::lock_guard lock(bus_mutex);
-        int16_t result;
+        std::optional<int16_t> result = std::nullopt;
 
         if (bits == 16) {
             const uint8_t b1 = (data >> 8) & 0xFF;
             const uint8_t b2 = data & 0xFF;
-            result = m_dali_impl.tx_wait_rx(b1, b2);
-            ESP_LOGD(TAG, "Raw TX (16bit): 0x%02X 0x%02X -> Result: %d", b1, b2, result);
+
+            if (reply) {
+                result = m_dali_impl.tx_wait_rx(b1, b2);
+                ESP_LOGD(TAG, "Raw TX (16bit with Reply): 0x%02X 0x%02X -> Result: %d", b1, b2, *result);
+            } else {
+                uint8_t frame[2] = {b1, b2};
+                m_dali_impl.tx_wait(frame, 16);
+                ESP_LOGD(TAG, "Raw TX (16bit No Reply): 0x%02X 0x%02X", b1, b2);
+            }
         }
         else if (bits == 24) {
             const uint8_t b1 = (data >> 16) & 0xFF;
             const uint8_t b2 = (data >> 8) & 0xFF;
             const uint8_t b3 = data & 0xFF;
-            result = m_dali_impl.tx_wait_rx(b1, b2, b3);
-            ESP_LOGD(TAG, "Raw TX (24bit): 0x%02X 0x%02X 0x%02X -> Result: %d", b1, b2, b3, result);
+
+            if (reply) {
+                result = m_dali_impl.tx_wait_rx(b1, b2, b3);
+                ESP_LOGD(TAG, "Raw TX (24bit with Reply): 0x%02X 0x%02X 0x%02X -> Result: %d", b1, b2, b3, result);
+            } else {
+                uint8_t frame[3] = {b1, b2, b3};
+                m_dali_impl.tx_wait(frame, 24);
+                ESP_LOGD(TAG, "Raw TX (24bit No Reply): 0x%02X 0x%02X 0x%02X", b1, b2, b3);
+            }
         }
         else {
             ESP_LOGW(TAG, "Invalid bit length for sendRaw: %d", bits);
             return std::nullopt;
         }
         vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
-
-        if (result >= 0) {
-            return static_cast<uint8_t>(result);
+        if (result.has_value() && result >= 0) {
+            return static_cast<uint8_t>(*result);
         }
         return std::nullopt;
     }
+
     std::optional<uint8_t> DaliAPI::sendInputDeviceCommand(const uint8_t shortAddress, const uint8_t opcode, const std::optional<uint8_t> param) {
         std::lock_guard lock(bus_mutex);
         const uint8_t addr_byte = (shortAddress << 1) | 1;

@@ -28,7 +28,7 @@ namespace daliMQTT
         [[nodiscard]] std::optional<uint8_t> sendQuery(dali_addressType_t addr_type, uint8_t addr, uint8_t command);
         std::optional<uint8_t> sendInputDeviceCommand(uint8_t shortAddress, uint8_t opcode, std::optional<uint8_t> param = std::nullopt);
         // Raw send command
-        [[nodiscard]] std::optional<uint8_t> sendRaw(uint32_t data, uint8_t bits = 16);
+        [[nodiscard]] std::optional<uint8_t> sendRaw(uint32_t data, uint8_t bits = 16, bool reply = true);
         // DT8 Set Color Temperature (Tc)
         esp_err_t setDT8ColorTemp(dali_addressType_t addr_type, uint8_t addr, uint16_t mireds);
         // DT8 Set RGB (Basic implementation)

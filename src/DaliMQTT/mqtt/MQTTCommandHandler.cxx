@@ -305,6 +305,7 @@ namespace daliMQTT {
         cJSON *cmd_item = cJSON_GetObjectItem(root, "cmd");
         cJSON *repeat_item = cJSON_GetObjectItem(root, "twice");
         cJSON *bits_item = cJSON_GetObjectItem(root, "bits");
+        cJSON *tag_item = cJSON_GetObjectItem(root, "tag");
 
         if (cJSON_IsNumber(addr_item) && cJSON_IsNumber(cmd_item)) {
             const auto addr_val = static_cast<uint32_t>(addr_item->valueint);
@@ -327,37 +328,46 @@ namespace daliMQTT {
             }
 
             const bool repeat = cJSON_IsTrue(repeat_item);
+            bool check_reply = (tag_item != nullptr);
             std::optional<uint8_t> result;
 
-            result = DaliAPI::getInstance().sendRaw(raw_data, bits);
+            result = DaliAPI::getInstance().sendRaw(raw_data, bits, check_reply);
             if (repeat) {
-                if (auto res2 = DaliAPI::getInstance().sendRaw(raw_data, bits); res2.has_value())
+                if (auto res2 = DaliAPI::getInstance().sendRaw(raw_data, bits, check_reply); res2.has_value())
                     result = res2;
             }
 
-            auto const &mqtt = MQTTClient::getInstance();
-            auto config_base = ConfigManager::getInstance().getMqttBaseTopic();
-            std::string reply_topic = utils::stringFormat("%s/cmd/res", config_base.c_str());
+            if (check_reply) {
+                auto const &mqtt = MQTTClient::getInstance();
+                auto config_base = ConfigManager::getInstance().getMqttBaseTopic();
+                std::string reply_topic = utils::stringFormat("%s/cmd/res", config_base.c_str());
 
-            if (result.has_value()) {
-                std::string payload;
-                if (bits == 24) {
-                    payload = utils::stringFormat(
-                        R"({"status":"ok", "addr":%lu, "cmd":%lu, "bits":24, "response":%d, "hex":"%06lX"})",
-                        static_cast<unsigned long>(addr_val), static_cast<unsigned long>(cmd_val), *result, raw_data);
+                cJSON* response_root = cJSON_CreateObject();
+                cJSON_AddItemToObject(response_root, "tag", cJSON_Duplicate(tag_item, 1));
+                cJSON_AddNumberToObject(response_root, "addr", addr_val);
+                cJSON_AddNumberToObject(response_root, "cmd", cmd_val);
+
+                if (result.has_value()) {
+                    cJSON_AddStringToObject(response_root, "status", "ok");
+                    cJSON_AddNumberToObject(response_root, "response", *result);
+
+                    char hex_buf[10];
+                    if (bits == 24) snprintf(hex_buf, sizeof(hex_buf), "%06lX", raw_data);
+                    else snprintf(hex_buf, sizeof(hex_buf), "%04lX", raw_data);
+                    cJSON_AddStringToObject(response_root, "hex", hex_buf);
+
+                    ESP_LOGD(TAG, "Command reply: 0x%02X", *result);
                 } else {
-                    payload = utils::stringFormat(
-                        R"({"status":"ok", "addr":%lu, "cmd":%lu, "bits":16, "response":%d, "hex":"%04lX"})",
-                        static_cast<unsigned long>(addr_val), static_cast<unsigned long>(cmd_val), *result, raw_data);
+                    cJSON_AddStringToObject(response_root, "status", "no_reply");
+                    ESP_LOGD(TAG, "Command: No reply (timed out)");
                 }
-                mqtt.publish(reply_topic, payload, 0, false);
-                ESP_LOGD(TAG, "Command reply: 0x%02X", *result);
-            } else {
-                std::string payload = utils::stringFormat(R"({"status":"no_reply", "addr":%lu, "cmd":%lu, "bits":%d})",
-                                                          static_cast<unsigned long>(addr_val),
-                                                          static_cast<unsigned long>(cmd_val), bits);
-                mqtt.publish(reply_topic, payload, 0, false);
-                ESP_LOGD(TAG, "Command: No reply");
+
+                char* payload = cJSON_PrintUnformatted(response_root);
+                if (payload) {
+                    mqtt.publish(reply_topic, payload, 0, false);
+                    free(payload);
+                }
+                cJSON_Delete(response_root);
             }
         }
         cJSON_Delete(root);
