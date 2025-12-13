@@ -65,14 +65,15 @@ export class DaliBridge extends EventEmitter {
         return this.devices.get(addr)!;
     }
 
-    /**
-     * Get a Group entity.
-     * @param groupId Group ID (0-15).
-     */
+
     public getAllDevices(): DaliDevice[] {
         return Array.from(this.devices.values());
     }
 
+    /**
+     * Get a Group entity.
+     * @param groupId Group ID (0-15).
+     */
     public getGroup(groupId: number): DaliGroup {
         if (!this.groups.has(groupId)) {
             this.groups.set(groupId, new DaliGroup(this.mqtt, this.baseTopic, groupId, this));

@@ -1,7 +1,7 @@
 # idf v5.x common build
 
 include($ENV{IDF_PATH}/tools/cmake/idf.cmake)
-include(../scripts/fetch_3rdparties.cmake)
+include(${PROJDIR}/scripts/fetch_3rdparties.cmake)
 
 
 message("Build for: " ${CMAKE_BUILD_TYPE})
@@ -33,7 +33,7 @@ if(BUILD_UNITY)
 endif()
 
 
-idf_build_component(${ESP_BUILD_UTILS_PATH}/../Kconfig)
+idf_build_component(${ESP_BUILD_UTILS_PATH}/../../Kconfig)
 idf_build_component(${ESP_PROTO_BASEDIR}/mdns)
 
 idf_build_process(${TARGET}

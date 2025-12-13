@@ -7,7 +7,7 @@ project(
 
 include(scripts/common.cmake)
 set(PROJVER ${CMAKE_PROJECT_VERSION})
-
+set(PROJDIR ${CMAKE_SOURCE_DIR})
 if(NOT DEFINED TARGET AND DEFINED CMAKE_TOOLCHAIN_FILE)
     get_filename_component(TOOLCHAIN_FILENAME "${CMAKE_TOOLCHAIN_FILE}" NAME)
     string(REGEX MATCH "^toolchain-([a-zA-Z0-9_]+)\\.cmake$" _ "${TOOLCHAIN_FILENAME}")
@@ -29,7 +29,7 @@ if("${TARGET}" IN_LIST targets)
     message(NOTICE "Target platform: " ${TARGET})
     message(NOTICE "Build type: " ${CMAKE_BUILD_TYPE})
     message(STATUS "Performing configuration stage")
-    add_subdirectory(${TARGET})
+    add_subdirectory(support/${TARGET})
 else ()
     message(FATAL_ERROR "Call cmake with -DCMAKE_TOOLCHAIN_FILE <toolchain>.")
 endif ()

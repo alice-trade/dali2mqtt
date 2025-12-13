@@ -1,10 +1,10 @@
 cmake_minimum_required(VERSION 3.16)
 project(DaliMQTTTests LANGUAGES C CXX)
 
-include(../scripts/common.cmake)
-include(../scripts/idf_buildup.cmake)
+include(${PROJDIR}/scripts/common.cmake)
+include(${PROJDIR}/scripts/idf_buildup.cmake)
 
-add_subdirectory(../src/DaliMQTT daliMQTTModules)
+add_subdirectory(${PROJDIR}/src/DaliMQTT daliMQTTModules)
 
 set(TEST_APP_NAME "daliMQTTTestESP")
 file(GLOB_RECURSE TEST_CASE_FILES "**/*.test.cxx")

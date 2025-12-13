@@ -16,17 +16,17 @@ endif()
 
 set(ESP_BUILD_UTILS_PATH ${CMAKE_CURRENT_SOURCE_DIR})
 
-include(../scripts/idf_buildup.cmake)
+include(${PROJDIR}/scripts/idf_buildup.cmake)
 
 set(app ${CMAKE_PROJECT_NAME})
 
-add_subdirectory(../src/DaliMQTT daliMQTTModules)
+add_subdirectory(${PROJDIR}/src/DaliMQTT daliMQTTModules)
 
-include(../scripts/build_firmware.cmake)
-include(../scripts/size_components.cmake)
-include(../scripts/make_webui.cmake)
+include(${PROJDIR}/scripts/build_firmware.cmake)
+include(${PROJDIR}/scripts/size_components.cmake)
+include(${PROJDIR}/scripts/make_webui.cmake)
 
-include(../scripts/build_tests.cmake)
+include(${PROJDIR}/scripts/build_tests.cmake)
 
 message(NOTICE "--------------------------------------------")
 message(STATUS "Configuration done. Run ninja/make daliMQTT and ninja/make flash")
