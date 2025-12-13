@@ -33,5 +33,5 @@ if("${TARGET}" IN_LIST targets)
 else ()
     message(FATAL_ERROR "Call cmake with -DCMAKE_TOOLCHAIN_FILE <toolchain>.")
 endif ()
-
+include(scripts/auxiliary_targets.cmake)
 set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY CMAKE_DEFAULT_TARGET daliMQTT)
