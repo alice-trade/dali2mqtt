@@ -885,7 +885,11 @@ uint8_t Dali::commission_id(const uint8_t init_arg) {
     for (sa = 0; sa < 64; sa++)
         arr[sa] = 0;
     tx_wait_rx(0xFF, DALI_COMMAND_INPUT_TERMINATE, 0x00, 100);
+
     tx_wait_rx(0xFF, DALI_COMMAND_INPUT_INITIALISE, init_arg, 100);
+    tx_wait_rx(0xFF, DALI_COMMAND_INPUT_INITIALISE, init_arg, 100);
+
+    tx_wait_rx(0xFF, DALI_COMMAND_INPUT_RANDOMISE, 0x00, 100);
     tx_wait_rx(0xFF, DALI_COMMAND_INPUT_RANDOMISE, 0x00, 100);
 
     vTaskDelay(pdMS_TO_TICKS(100));

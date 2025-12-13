@@ -343,7 +343,7 @@ namespace daliMQTT
         char* payload = cJSON_PrintUnformatted(root);
         if (payload) {
             ESP_LOGD(TAG, "Publishing Group %d State: %s", group_id, payload);
-            mqtt.publish(state_topic, payload, 0, false);
+            mqtt.publish(state_topic, payload, 0, true);
             free(payload);
         }
         cJSON_Delete(root);
