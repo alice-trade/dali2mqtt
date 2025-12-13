@@ -32,6 +32,7 @@ namespace daliMQTT
     void MQTTHomeAssistantDiscovery::publishAllDevices() {
         auto devices = DaliDeviceController::getInstance().getDevices();
         for (const auto& device : devices | std::views::values) {
+            if (device.is_input_device) continue;
             publishLight(device.long_address);
         }
 
