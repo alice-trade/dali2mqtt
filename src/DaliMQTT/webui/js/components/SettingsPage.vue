@@ -50,15 +50,11 @@ const loadConfig = async () => {
 };
 
 const handleSystemOta = async () => {
-  if (config.value.ota_url) {
-    // todo: save after
-  }
-
   if (!confirm(`Start firmware update from ${config.value.ota_url}?`)) return;
 
   try {
-    await api.saveConfig({ ...config.value });
-    await api.triggerSystemOta();
+    await api.triggerSystemOta(config.value.ota_url);
+
 
     alert("System update started! The device will reboot if successful. Please wait and reload the page.");
   } catch (e) {

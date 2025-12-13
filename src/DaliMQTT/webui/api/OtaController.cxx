@@ -14,6 +14,7 @@ namespace daliMQTT {
             return ESP_FAIL;
         }
         std::string target_url;
+        int update_type = 0; // 0 = App, 1 = SPIFFS
 
         if (req->content_len > 0 && req->content_len < 512) {
             std::vector<char> buf(req->content_len + 1);
@@ -25,6 +26,10 @@ namespace daliMQTT {
                     cJSON *url_item = cJSON_GetObjectItem(root, "url");
                     if (cJSON_IsString(url_item) && (url_item->valuestring != nullptr)) {
                         target_url = url_item->valuestring;
+                    }
+                    const cJSON *type_item = cJSON_GetObjectItem(root, "type");
+                    if (cJSON_IsString(type_item) && strcmp(type_item->valuestring, "spiffs") == 0) {
+                        update_type = 1;
                     }
                     cJSON_Delete(root);
                 }
@@ -40,7 +45,7 @@ namespace daliMQTT {
             return ESP_FAIL;
         }
 
-        const bool started = AppUpdateManager::getInstance().startUpdateAsync(target_url);
+        const bool started = AppUpdateManager::getInstance().startUpdateAsync(target_url, update_type);
 
         if (started) {
             httpd_resp_send(req, "{\"status\": \"ok\", \"message\": \"OTA update started via system\"}", -1);

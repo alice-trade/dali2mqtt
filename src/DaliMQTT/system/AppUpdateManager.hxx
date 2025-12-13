@@ -13,11 +13,16 @@ namespace daliMQTT
             return instance;
         }
 
-        bool startUpdateAsync(const std::string& url);
+        bool startUpdateAsync(const std::string& url, int type = 0);
 
-        bool isUpdateInProgress() const;
+        [[nodiscard]] bool isUpdateInProgress() const;
 
     private:
+        struct TaskParams {
+            std::string url;
+            int type;
+        };
+        void performSpiffsUpdate(const std::string& url);
         AppUpdateManager() = default;
 
         static void otaTask(void* pvParameter);
