@@ -1,6 +1,6 @@
 {
   "name": "dalimqx",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Client library for communicating with DALI-MQTT4ESP bridges",
   "author": "DALI-MQTT4ESP",
   "main": "dist/dalimqx.cjs.js",
@@ -20,7 +20,9 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
-    "events": "^3.3.0",
+    "events": "^3.3.0"
+  },
+  "optionalDependencies": {
     "mqtt": "^5.14.1"
   },
   "scripts": {
