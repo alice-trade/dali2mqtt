@@ -128,7 +128,8 @@ namespace daliMQTT
             cJSON_AddStringToObject(device, "identifiers", bridge_public_name.c_str());
             cJSON_AddStringToObject(device, "name", bridge_public_name.c_str());
             cJSON_AddStringToObject(device, "model", "ESP32 DALI Bridge");
-            cJSON_AddStringToObject(device, "manufacturer", "DIY");
+            cJSON_AddStringToObject(device, "manufacturer", "DALI-MQTT4ESP");
+            cJSON_AddStringToObject(device, "sw_version", DALIMQTT_VERSION);
             cJSON_AddItemToObject(root, "device", device);
         }
 
@@ -200,7 +201,8 @@ namespace daliMQTT
             cJSON_AddStringToObject(device, "identifiers", bridge_public_name.c_str());
             cJSON_AddStringToObject(device, "name", bridge_public_name.c_str());
             cJSON_AddStringToObject(device, "model", "ESP32 DALI Bridge");
-            cJSON_AddStringToObject(device, "manufacturer", "DIY");
+            cJSON_AddStringToObject(device, "manufacturer", "DALI-MQTT4ESP");
+            cJSON_AddStringToObject(device, "sw_version", DALIMQTT_VERSION);
             cJSON_AddItemToObject(root, "device", device);
         }
 
@@ -240,6 +242,9 @@ namespace daliMQTT
         if (device) {
             cJSON_AddStringToObject(device, "identifiers", bridge_public_name.c_str());
             cJSON_AddStringToObject(device, "name", bridge_public_name.c_str());
+            cJSON_AddStringToObject(device, "model", "ESP32 DALI Bridge");
+            cJSON_AddStringToObject(device, "manufacturer", "DALI-MQTT4ESP");
+            cJSON_AddStringToObject(device, "sw_version", DALIMQTT_VERSION);
             cJSON_AddItemToObject(root, "device", device);
         }
 
