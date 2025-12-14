@@ -86,6 +86,9 @@ namespace daliMQTT
         std::string ip_addr = Wifi::getInstance().getIpAddress();
         mqtt.publish(ip_topic, ip_addr, 1, true);
 
+        std::string version_topic = utils::stringFormat("%s/version", config.mqtt_base_topic.c_str());
+        mqtt.publish(version_topic, DALIMQTT_VERSION, 1, true);
+
         // base/light/LONG_ADDR/set
         std::string light_single_topic = utils::stringFormat("%s/light/+/set", config.mqtt_base_topic.c_str());
         mqtt.subscribe(light_single_topic);

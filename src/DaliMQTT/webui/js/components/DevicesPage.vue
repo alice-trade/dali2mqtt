@@ -18,7 +18,6 @@ const loading = ref(true);
 const getDeviceState = (d: DaliDeviceStatus) => {
   if (!d.available) return 'Offline';
   if (d.is_input_device) return 'Ready';
-  if (d.lamp_failure) return 'Failure';
   return d.level > 0 ? `ON (${Math.round(d.level/2.54)}%)` : 'OFF';
 };
 
