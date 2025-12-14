@@ -581,7 +581,7 @@ namespace daliMQTT
 
     [[noreturn]] void DaliDeviceController::daliSyncTask(void* pvParameters) {
         auto* self = static_cast<DaliDeviceController*>(pvParameters);
-        const int64_t NVS_SAVE_DEBOUNCE_MS = 20000;
+        constexpr int64_t NVS_SAVE_DEBOUNCE_MS = 20000;
         ESP_LOGI(TAG, "Dali Adaptive Sync Task Started.");
 
         const auto config = ConfigManager::getInstance().getConfig();

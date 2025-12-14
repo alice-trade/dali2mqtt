@@ -39,6 +39,9 @@ namespace daliMQTT {
             if (cJSON* item = cJSON_GetObjectItem(root, "syslog_enabled"); cJSON_IsBool(item)) {
                 current_cfg.syslog_enabled = cJSON_IsTrue(item);
             }
+            if (cJSON* item = cJSON_GetObjectItem(root, "dali_poll_interval_ms"); cJSON_IsNumber(item)) {
+                current_cfg.dali_poll_interval_ms = static_cast<uint32_t>(item->valueint);
+            }
             #undef JsonSetStrConfig
 
             cJSON_Delete(root);
@@ -63,25 +66,26 @@ namespace daliMQTT {
     }
 
     esp_err_t WebUI::api::GetConfigHandler(httpd_req_t *req) {
-         if (checkAuth(req) != ESP_OK) return ESP_FAIL;
+        if (checkAuth(req) != ESP_OK) return ESP_FAIL;
 
-         const AppConfig cfg = ConfigManager::getInstance().getConfig();
-         cJSON *root = cJSON_CreateObject();
-         cJSON_AddStringToObject(root, "wifi_ssid", cfg.wifi_ssid.c_str());
-         cJSON_AddStringToObject(root, "mqtt_uri", cfg.mqtt_uri.c_str());
-         cJSON_AddStringToObject(root, "mqtt_user", cfg.mqtt_user.c_str());
-         cJSON_AddStringToObject(root, "client_id", cfg.client_id.c_str());
-         cJSON_AddStringToObject(root, "mqtt_base_topic", cfg.mqtt_base_topic.c_str());
-         cJSON_AddStringToObject(root, "http_domain", cfg.http_domain.c_str());
-         cJSON_AddStringToObject(root, "http_user", cfg.http_user.c_str());
-         cJSON_AddStringToObject(root, "syslog_server", cfg.syslog_server.c_str());
-         cJSON_AddBoolToObject(root, "syslog_enabled", cfg.syslog_enabled);
+        const AppConfig cfg = ConfigManager::getInstance().getConfig();
+        cJSON *root = cJSON_CreateObject();
+        cJSON_AddStringToObject(root, "wifi_ssid", cfg.wifi_ssid.c_str());
+        cJSON_AddStringToObject(root, "mqtt_uri", cfg.mqtt_uri.c_str());
+        cJSON_AddStringToObject(root, "mqtt_user", cfg.mqtt_user.c_str());
+        cJSON_AddStringToObject(root, "client_id", cfg.client_id.c_str());
+        cJSON_AddStringToObject(root, "mqtt_base_topic", cfg.mqtt_base_topic.c_str());
+        cJSON_AddStringToObject(root, "http_domain", cfg.http_domain.c_str());
+        cJSON_AddStringToObject(root, "http_user", cfg.http_user.c_str());
+        cJSON_AddStringToObject(root, "syslog_server", cfg.syslog_server.c_str());
+        cJSON_AddBoolToObject(root, "syslog_enabled", cfg.syslog_enabled);
+        cJSON_AddNumberToObject(root, "dali_poll_interval_ms", cfg.dali_poll_interval_ms);
 
-         char *json_string = cJSON_Print(root);
-         httpd_resp_set_type(req, "application/json");
-         httpd_resp_send(req, json_string, strlen(json_string));
-         cJSON_Delete(root);
-         free( json_string);
-         return ESP_OK;
-     }
+        char *json_string = cJSON_Print(root);
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_send(req, json_string, strlen(json_string));
+        cJSON_Delete(root);
+        free( json_string);
+        return ESP_OK;
+    }
 }

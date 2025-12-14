@@ -16,6 +16,7 @@ interface ConfigData {
   syslog_server?: string;
   syslog_enabled?: boolean;
   ota_url?: string;
+  dali_poll_interval_ms?: number;
 }
 
 const config = ref<ConfigData>({
@@ -29,8 +30,9 @@ const config = ref<ConfigData>({
   http_user: '',
   syslog_server: '',
   syslog_enabled: false,
+  dali_poll_interval_ms: 200000,
 });
-
+const daliPollSeconds = ref(200.0);
 const loading = ref(true);
 const message = ref('');
 const isError = ref(false);
@@ -41,6 +43,9 @@ const loadConfig = async () => {
   try {
     const response = await api.getConfig();
     config.value = response.data;
+    if (config.value.dali_poll_interval_ms) {
+      daliPollSeconds.value = config.value.dali_poll_interval_ms / 1000.0;
+    }
   } catch (e) {
     message.value = 'Failed to load configuration.';
     isError.value = true;
@@ -72,6 +77,7 @@ const saveConfig = async () => {
 
   const payload: ConfigData = { ...config.value };
 
+  payload.dali_poll_interval_ms = Math.round(daliPollSeconds.value * 1000);
 
   if (!payload.wifi_password) {
     delete payload.wifi_password;
@@ -110,6 +116,12 @@ onMounted(loadConfig);
         <label for="cid">Client ID</label>
         <input type="text" id="cid" v-model="config.client_id" required>
         <small>Used as ID for MQTT Client ID, Home Assistant Discovery, mDNS Device Name</small>
+      </fieldset>
+      <fieldset>
+        <legend>DALI Settings</legend>
+        <label for="poll_sec">Bus Sync Interval (Seconds)</label>
+        <input type="number" id="poll_sec" v-model="daliPollSeconds" min="0.5" step="0.1" required>
+        <small>How often the bridge polls devices for sync status updates.</small>
       </fieldset>
       <fieldset>
         <legend>WiFi Settings</legend>

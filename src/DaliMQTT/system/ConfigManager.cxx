@@ -140,6 +140,7 @@ namespace daliMQTT
         SetNVS(setString, "syslog_srv", new_config.syslog_server);
         SetNVS(nvs_set_u8, "syslog_en", new_config.syslog_enabled ? 1 : 0);
         SetNVS(setString, "ota_url", new_config.app_ota_url);
+        SetNVS(nvs_set_u32, "dali_poll", new_config.dali_poll_interval_ms);
 
 
         #undef SetNVS
