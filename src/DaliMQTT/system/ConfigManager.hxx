@@ -1,6 +1,5 @@
 #ifndef DALIMQTT_CONFIGMANAGER_HXX
 #define DALIMQTT_CONFIGMANAGER_HXX
-struct cJSON;
 
 namespace daliMQTT
 {
@@ -75,7 +74,7 @@ namespace daliMQTT
             // Проверка, была ли система сконфигурирована
             [[nodiscard]] bool isConfigured() const;
 
-            cJSON* getSerializedConfig(bool mask_passwords = true) const;
+            struct cJSON* getSerializedConfig(bool mask_passwords = true) const;
 
             esp_err_t updateConfigFromJson(const char* json_str, bool& reboot_needed);
 
