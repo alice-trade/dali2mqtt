@@ -3,89 +3,59 @@
 #include "DaliAPI.hxx"
 
 namespace daliMQTT {
-    static constexpr char  TAG[] = "WebUIConfig";
+    static constexpr char TAG[] = "WebUIConfig";
+
     esp_err_t WebUI::api::SetConfigHandler(httpd_req_t *req) {
-            if (checkAuth(req) != ESP_OK) return ESP_FAIL;
+        if (checkAuth(req) != ESP_OK) return ESP_FAIL;
 
-            if (req->content_len >= 512) {
-                httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Request too long");
-                return ESP_FAIL;
-            }
-            std::vector<char> buf(req->content_len + 1);
-            const int ret = httpd_req_recv(req, buf.data(), req->content_len);
-            if (ret <= 0) return ESP_FAIL;
-            buf[ret] = '\0';
+        if (req->content_len >= 1024) {
+            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Request too long");
+            return ESP_FAIL;
+        }
+        std::vector<char> buf(req->content_len + 1);
+        const int ret = httpd_req_recv(req, buf.data(), req->content_len);
+        if (ret <= 0) return ESP_FAIL;
+        buf[ret] = '\0';
 
-            cJSON *root = cJSON_Parse(buf.data());
-            if (root == nullptr) {
-                httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
-                return ESP_FAIL;
-            }
+        bool reboot_needed = false;
+        esp_err_t err = ConfigManager::getInstance().updateConfigFromJson(buf.data(), reboot_needed);
 
-            AppConfig current_cfg = ConfigManager::getInstance().getConfig();
-            #define JsonSetStrConfig(NAME) if (cJSON* item = cJSON_GetObjectItem(root, #NAME); cJSON_IsString(item) && (item->valuestring != nullptr)) { current_cfg.NAME = item->valuestring; }
+        if (err == ESP_ERR_INVALID_ARG) {
+            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST,
+                                "Invalid Configuration (Missing SSID/URI or Malformed JSON)");
+            return ESP_FAIL;
+        }
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to save configuration: %s", esp_err_to_name(err));
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to save settings to flash.");
+            return ESP_FAIL;
+        }
 
-            JsonSetStrConfig(wifi_ssid);
-            JsonSetStrConfig(wifi_password);
-            JsonSetStrConfig(mqtt_uri);
-            JsonSetStrConfig(mqtt_user);
-            JsonSetStrConfig(mqtt_pass);
-            JsonSetStrConfig(client_id);
-            JsonSetStrConfig(mqtt_base_topic);
-            JsonSetStrConfig(http_domain);
-            JsonSetStrConfig(http_user);
-            JsonSetStrConfig(http_pass);
-            JsonSetStrConfig(syslog_server);
-            if (cJSON* item = cJSON_GetObjectItem(root, "syslog_enabled"); cJSON_IsBool(item)) {
-                current_cfg.syslog_enabled = cJSON_IsTrue(item);
-            }
-            if (cJSON* item = cJSON_GetObjectItem(root, "dali_poll_interval_ms"); cJSON_IsNumber(item)) {
-                current_cfg.dali_poll_interval_ms = static_cast<uint32_t>(item->valueint);
-            }
-            #undef JsonSetStrConfig
-
-            cJSON_Delete(root);
-
-            if(current_cfg.wifi_ssid.empty() || current_cfg.mqtt_uri.empty()) {
-                httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "SSID and MQTT URI cannot be empty");
-                return ESP_FAIL;
-            }
-
-            if (esp_err_t save_err = ConfigManager::getInstance().saveMainConfig(current_cfg); save_err != ESP_OK) {
-                ESP_LOGE(TAG, "Failed to save configuration to NVS! Error: %s (%d)", esp_err_to_name(save_err), save_err);
-                httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to save settings to flash memory.");
-                return ESP_FAIL;
-            }
-            httpd_resp_send(req, R"({"status":"ok", "message":"Settings saved. Restarting..."})", HTTPD_RESP_USE_STRLEN);
-
+        if (reboot_needed) {
+            httpd_resp_send(req, R"({"status":"ok", "message":"Settings saved. Restarting..."})",
+                            HTTPD_RESP_USE_STRLEN);
             ESP_LOGI(TAG, "Configuration saved via WebUI. Restarting in 3 seconds...");
             vTaskDelay(pdMS_TO_TICKS(3000));
             esp_restart();
+        } else {
+            httpd_resp_send(req, R"({"status":"ok", "message":"Settings saved (no changes or non-critical)."})",
+                            HTTPD_RESP_USE_STRLEN);
+        }
 
-            return ESP_OK;
+        return ESP_OK;
     }
 
     esp_err_t WebUI::api::GetConfigHandler(httpd_req_t *req) {
         if (checkAuth(req) != ESP_OK) return ESP_FAIL;
 
-        const AppConfig cfg = ConfigManager::getInstance().getConfig();
-        cJSON *root = cJSON_CreateObject();
-        cJSON_AddStringToObject(root, "wifi_ssid", cfg.wifi_ssid.c_str());
-        cJSON_AddStringToObject(root, "mqtt_uri", cfg.mqtt_uri.c_str());
-        cJSON_AddStringToObject(root, "mqtt_user", cfg.mqtt_user.c_str());
-        cJSON_AddStringToObject(root, "client_id", cfg.client_id.c_str());
-        cJSON_AddStringToObject(root, "mqtt_base_topic", cfg.mqtt_base_topic.c_str());
-        cJSON_AddStringToObject(root, "http_domain", cfg.http_domain.c_str());
-        cJSON_AddStringToObject(root, "http_user", cfg.http_user.c_str());
-        cJSON_AddStringToObject(root, "syslog_server", cfg.syslog_server.c_str());
-        cJSON_AddBoolToObject(root, "syslog_enabled", cfg.syslog_enabled);
-        cJSON_AddNumberToObject(root, "dali_poll_interval_ms", cfg.dali_poll_interval_ms);
+        cJSON *root = ConfigManager::getInstance().getSerializedConfig(true);
 
         char *json_string = cJSON_Print(root);
         httpd_resp_set_type(req, "application/json");
         httpd_resp_send(req, json_string, strlen(json_string));
+
         cJSON_Delete(root);
-        free( json_string);
+        free(json_string);
         return ESP_OK;
     }
 }

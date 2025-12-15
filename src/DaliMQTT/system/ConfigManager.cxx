@@ -318,4 +318,122 @@ namespace daliMQTT
         std::lock_guard<std::mutex> lock(config_mutex);
         return config_cache.mqtt_base_topic;
     }
+
+    cJSON* ConfigManager::getSerializedConfig(const bool mask_passwords) const {
+        const AppConfig cfg = getConfig();
+        cJSON* root = cJSON_CreateObject();
+
+        cJSON_AddStringToObject(root, "wifi_ssid", cfg.wifi_ssid.c_str());
+        cJSON_AddStringToObject(root, "mqtt_uri", cfg.mqtt_uri.c_str());
+        cJSON_AddStringToObject(root, "mqtt_user", cfg.mqtt_user.c_str());
+        cJSON_AddStringToObject(root, "client_id", cfg.client_id.c_str());
+        cJSON_AddStringToObject(root, "mqtt_base_topic", cfg.mqtt_base_topic.c_str());
+        cJSON_AddStringToObject(root, "http_domain", cfg.http_domain.c_str());
+        cJSON_AddStringToObject(root, "http_user", cfg.http_user.c_str());
+        cJSON_AddStringToObject(root, "syslog_server", cfg.syslog_server.c_str());
+        cJSON_AddBoolToObject(root, "syslog_enabled", cfg.syslog_enabled);
+        cJSON_AddNumberToObject(root, "dali_poll_interval_ms", cfg.dali_poll_interval_ms);
+        cJSON_AddStringToObject(root, "ota_url", cfg.app_ota_url.c_str());
+
+        const char* pass_placeholder = mask_passwords ? "***" : "";
+        cJSON_AddStringToObject(root, "wifi_password", mask_passwords ? pass_placeholder : cfg.wifi_password.c_str());
+        cJSON_AddStringToObject(root, "mqtt_pass", mask_passwords ? pass_placeholder : cfg.mqtt_pass.c_str());
+        cJSON_AddStringToObject(root, "http_pass", mask_passwords ? pass_placeholder : cfg.http_pass.c_str());
+
+        return root;
+    }
+
+    esp_err_t ConfigManager::updateConfigFromJson(const char* json_str, bool& reboot_needed) {
+        cJSON *root = cJSON_Parse(json_str);
+        if (root == nullptr) {
+            ESP_LOGE(TAG, "Failed to parse configuration JSON");
+            return ESP_ERR_INVALID_ARG;
+        }
+
+        reboot_needed = false;
+        AppConfig current_cfg = getConfig();
+        bool changed = false;
+
+        #define JsonSetStrConfig(NAME, KEY) \
+            if (cJSON* item = cJSON_GetObjectItem(root, KEY); cJSON_IsString(item) && (item->valuestring != nullptr)) { \
+                std::string val = item->valuestring; \
+                if (!val.empty() && val != "***") { \
+                    if (current_cfg.NAME != val) { \
+                        current_cfg.NAME = val; \
+                        changed = true; \
+                    } \
+                } \
+            }
+
+        JsonSetStrConfig(wifi_ssid, "wifi_ssid");
+        JsonSetStrConfig(wifi_password, "wifi_pass");
+        if (cJSON_GetObjectItem(root, "wifi_password")) JsonSetStrConfig(wifi_password, "wifi_password");
+
+        JsonSetStrConfig(mqtt_uri, "mqtt_uri");
+        JsonSetStrConfig(mqtt_user, "mqtt_user");
+        JsonSetStrConfig(mqtt_pass, "mqtt_pass");
+        JsonSetStrConfig(client_id, "client_id");
+        if (cJSON_GetObjectItem(root, "cid")) JsonSetStrConfig(client_id, "cid");
+
+        JsonSetStrConfig(mqtt_base_topic, "mqtt_base_topic");
+        if (cJSON_GetObjectItem(root, "mqtt_base")) JsonSetStrConfig(mqtt_base_topic, "mqtt_base");
+
+        JsonSetStrConfig(http_domain, "http_domain");
+        JsonSetStrConfig(http_user, "http_user");
+        JsonSetStrConfig(http_pass, "http_pass");
+        JsonSetStrConfig(syslog_server, "syslog_server");
+        if (cJSON_GetObjectItem(root, "syslog_srv")) JsonSetStrConfig(syslog_server, "syslog_srv");
+
+        JsonSetStrConfig(app_ota_url, "ota_url");
+
+        #undef JsonSetStrConfig
+
+        if (cJSON* item = cJSON_GetObjectItem(root, "syslog_enabled"); cJSON_IsBool(item)) {
+            bool val = cJSON_IsTrue(item);
+            if (current_cfg.syslog_enabled != val) {
+                current_cfg.syslog_enabled = val;
+                changed = true;
+            }
+        }
+        if (cJSON* item = cJSON_GetObjectItem(root, "syslog_en"); cJSON_IsNumber(item)) { // WebUI might send 0/1
+             bool val = (item->valueint != 0);
+             if (current_cfg.syslog_enabled != val) {
+                current_cfg.syslog_enabled = val;
+                changed = true;
+            }
+        }
+
+        if (cJSON* item = cJSON_GetObjectItem(root, "dali_poll_interval_ms"); cJSON_IsNumber(item)) {
+            uint32_t val = static_cast<uint32_t>(item->valueint);
+            if (current_cfg.dali_poll_interval_ms != val) {
+                current_cfg.dali_poll_interval_ms = val;
+                changed = true;
+            }
+        }
+        if (cJSON* item = cJSON_GetObjectItem(root, "dali_poll"); cJSON_IsNumber(item)) {
+            uint32_t val = static_cast<uint32_t>(item->valueint);
+            if (current_cfg.dali_poll_interval_ms != val) {
+                current_cfg.dali_poll_interval_ms = val;
+                changed = true;
+            }
+        }
+
+        cJSON_Delete(root);
+
+        if (!changed) {
+            ESP_LOGI(TAG, "No configuration changes detected.");
+            return ESP_OK;
+        }
+
+        if(current_cfg.wifi_ssid.empty() || current_cfg.mqtt_uri.empty()) {
+            ESP_LOGE(TAG, "SSID and MQTT URI cannot be empty");
+            return ESP_ERR_INVALID_ARG;
+        }
+
+        esp_err_t err = saveMainConfig(current_cfg);
+        if (err == ESP_OK) {
+            reboot_needed = true;
+        }
+        return err;
+    }
 }

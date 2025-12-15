@@ -1,5 +1,6 @@
 #ifndef DALIMQTT_CONFIGMANAGER_HXX
 #define DALIMQTT_CONFIGMANAGER_HXX
+struct cJSON;
 
 namespace daliMQTT
 {
@@ -74,6 +75,10 @@ namespace daliMQTT
             // Проверка, была ли система сконфигурирована
             [[nodiscard]] bool isConfigured() const;
 
+            cJSON* getSerializedConfig(bool mask_passwords = true) const;
+
+            esp_err_t updateConfigFromJson(const char* json_str, bool& reboot_needed);
+
         private:
             ConfigManager() = default;
             esp_err_t initSpiffs();
@@ -81,7 +86,6 @@ namespace daliMQTT
 
             static esp_err_t getString(nvs_handle_t handle, const char* key, std::string& out_value, const char* default_value);
             static esp_err_t getU32(nvs_handle_t handle, const char* key, uint32_t& out_value, uint32_t default_value);
-            static esp_err_t getU64(nvs_handle_t handle, const char* key, uint64_t& out_value, uint64_t default_value);
             static esp_err_t setString(nvs_handle_t handle, const char* key, const std::string& value);
 
             AppConfig config_cache{};

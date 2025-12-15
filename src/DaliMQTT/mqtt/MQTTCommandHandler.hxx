@@ -23,7 +23,8 @@ namespace daliMQTT {
         static void handleSyncCommand(const std::string& data);
         static void handleScanCommand();
         static void handleInitializeCommand();
-
+        static void handleConfigGet();
+        static void handleConfigSet(const std::string& data);
         // Background tasks
         static void backgroundScanTask(void* arg);
         static void backgroundInitTask(void* arg);

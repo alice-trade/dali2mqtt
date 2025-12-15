@@ -133,6 +133,15 @@ namespace daliMQTT
         mqtt.subscribe(bus_init_topic);
         ESP_LOGI(TAG, "Subscribed to bus management: %s, %s", bus_scan_topic.c_str(), bus_init_topic.c_str());
 
+        // base/config/get
+        std::string config_get_topic = utils::stringFormat("%s/config/get", config.mqtt_base_topic.c_str());
+        mqtt.subscribe(config_get_topic);
+
+        // base/config/set
+        std::string config_set_topic = utils::stringFormat("%s/config/set", config.mqtt_base_topic.c_str());
+        mqtt.subscribe(config_set_topic);
+        ESP_LOGI(TAG, "Subscribed to system config management: %s, %s", config_get_topic.c_str(), config_set_topic.c_str());
+
         MQTTHomeAssistantDiscovery hass_discovery;
         hass_discovery.publishAllDevices();
         ESP_LOGI(TAG, "MQTT discovery messages published.");

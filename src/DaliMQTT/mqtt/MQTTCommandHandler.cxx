@@ -427,6 +427,40 @@ namespace daliMQTT {
 
         cJSON_Delete(root);
     }
+
+    void MQTTCommandHandler::handleConfigGet() {
+        cJSON* root = ConfigManager::getInstance().getSerializedConfig(true);
+
+        char *json_string = cJSON_PrintUnformatted(root);
+        if (json_string) {
+            auto const &mqtt = MQTTClient::getInstance();
+            const std::string reply_topic = ConfigManager::getInstance().getMqttBaseTopic() + "/config";
+            mqtt.publish(reply_topic, json_string, 0, false);
+            free(json_string);
+        }
+        cJSON_Delete(root);
+    }
+
+    void MQTTCommandHandler::handleConfigSet(const std::string& data) {
+        bool reboot_needed = false;
+        esp_err_t err = ConfigManager::getInstance().updateConfigFromJson(data.c_str(), reboot_needed);
+
+        if (err != ESP_OK && err != ESP_ERR_INVALID_ARG) {
+            ESP_LOGE(TAG, "Failed to update configuration via MQTT: %s", esp_err_to_name(err));
+            return;
+        }
+
+        if (reboot_needed) {
+            ESP_LOGI(TAG, "Configuration updated via MQTT. Restarting...");
+            auto const &mqtt = MQTTClient::getInstance();
+            std::string status_topic = ConfigManager::getInstance().getMqttBaseTopic() + "/config/status";
+            mqtt.publish(status_topic, R"({"status":"updated", "action":"rebooting"})", 0, false);
+
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            esp_restart();
+        }
+    }
+
     void MQTTCommandHandler::backgroundScanTask(void* arg) {
         ESP_LOGI(TAG, "Starting MQTT-initiated DALI scan...");
         auto const& mqtt = MQTTClient::getInstance();
@@ -516,7 +550,13 @@ namespace daliMQTT {
         if (parts[0] == "light") {
             handleLightCommand(parts, data);
         } else if (parts[0] == "config") {
-            if (parts.size() > 2 && parts[1] == "group" && parts[2] == "set") {
+            if (parts.size() == 2) {
+                if (parts[1] == "get") {
+                    handleConfigGet();
+                } else if (parts[1] == "set") {
+                    handleConfigSet(data);
+                }
+            } else if (parts.size() > 2 && parts[1] == "group" && parts[2] == "set") {
                 handleGroupCommand(data);
             }
             else if (parts.size() > 2 && parts[1] == "bus") {
