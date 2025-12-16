@@ -782,7 +782,7 @@ namespace daliMQTT
         return found_devices;
     }
 
-    std::optional<DaliLongAddress_t> DaliDeviceController::getInputDeviceLongAddress(const uint8_t shortAddress) {
+    std::optional<DaliLongAddress_t> DaliDeviceController::getInputDeviceLongAddress(const uint8_t shortAddress) const {
         auto& dali = DaliAPI::getInstance();
         auto readByte = [&](uint8_t offset) -> std::optional<uint8_t> {
             // 1. SET DTR1 (Bank 0)

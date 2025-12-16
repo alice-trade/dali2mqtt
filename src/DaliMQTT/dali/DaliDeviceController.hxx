@@ -51,7 +51,7 @@ namespace daliMQTT
 
         static void publishState(DaliLongAddress_t long_addr, const DaliDevice& device);
         static void publishAvailability(DaliLongAddress_t long_addr, bool is_available);
-        [[nodiscard]] std::optional<DaliLongAddress_t> getInputDeviceLongAddress(uint8_t shortAddress);
+        [[nodiscard]] std::optional<DaliLongAddress_t> getInputDeviceLongAddress(uint8_t shortAddress) const;
 
         TaskHandle_t m_event_handler_task{nullptr};
         TaskHandle_t m_sync_task_handle{nullptr};
