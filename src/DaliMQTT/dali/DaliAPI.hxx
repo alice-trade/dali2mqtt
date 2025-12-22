@@ -3,7 +3,7 @@
 #include "DaliDriver.hxx"
 #include "dali_commands.h"
 #include "driver/gptimer.h"
-    #include "DaliTypes.hxx"
+#include "DaliTypes.hxx"
 
 
 namespace daliMQTT
@@ -96,7 +96,8 @@ namespace daliMQTT
         DaliAPI() = default;
         [[noreturn]] static void dali_sniffer_task(void* arg);
         esp_err_t sendSpecialCmdDT8(uint8_t shortAddr, uint8_t cmd);
-        std::optional<uint8_t> queryDT8Value(const uint8_t shortAddress, const uint8_t dtr0_selector);
+        std::optional<uint8_t> queryDT8Value(uint8_t shortAddress, uint8_t dtr0_selector);
+        static void IRAM_ATTR rx_complete_isr(void* arg);
 
         Dali m_dali_impl{};
         gptimer_handle_t m_dali_timer{nullptr};
@@ -104,7 +105,6 @@ namespace daliMQTT
         std::recursive_mutex bus_mutex{};
         std::atomic<bool> m_initialized{false};
         QueueHandle_t m_dali_event_queue{nullptr};
-        static void IRAM_ATTR rx_complete_isr(void* arg);
 
     };
 } // daliMQTT
