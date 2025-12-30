@@ -142,9 +142,11 @@ namespace daliMQTT
         mqtt.subscribe(config_set_topic);
         ESP_LOGI(TAG, "Subscribed to system config management: %s, %s", config_get_topic.c_str(), config_set_topic.c_str());
 
-        MQTTHomeAssistantDiscovery hass_discovery;
-        hass_discovery.publishAllDevices();
-        ESP_LOGI(TAG, "MQTT discovery messages published.");
+        if (config.hass_discovery_enabled) {
+            MQTTHomeAssistantDiscovery hass_discovery;
+            hass_discovery.publishAllDevices();
+            ESP_LOGI(TAG, "MQTT discovery messages published.");
+        }
 
         DaliGroupManagement::getInstance().publishAllGroups();
 

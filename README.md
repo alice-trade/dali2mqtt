@@ -3,111 +3,132 @@
 ![ESP-IDF](https://img.shields.io/badge/ESP--IDF-v5.x-blue)
 ![Language](https://img.shields.io/badge/language-C++23-purple)
 
-**daliMQTT** — это полнофункциональный мост между шиной управления освещением DALI и протоколом MQTT, разработанный для платформы ESP32 с использованием фреймворка ESP-IDF. Проект позволяет интегрировать профессиональные системы освещения DALI в современные системы умного дома, такие как Home Assistant, Node-RED и другие.
+**daliMQTT** is a full-featured bridge between the DALI lighting control bus and the MQTT protocol, designed for the ESP32 platform using the ESP-IDF framework. This project allows you to integrate professional DALI lighting systems into modern smart home ecosystems such as Home Assistant, Node-RED, and others.
 
-## Ключевые возможности
+## Architecture
 
-*   **Полное управление DALI**: Отправка команд яркости (DACP), включения/выключения, вызова сцен для отдельных устройств (short address) и групп (group address).
-*   **Двусторонняя связь**: Опрос состояния светильников (уровень яркости, статус лампы) и отправка этих данных в MQTT.
-*   **Пассивный мониторинг (Sniffer)**: Мост постоянно "слушает" шину DALI. Если команда отправлена с другого устройства (например, настенного DALI-пульта), мост зафиксирует это изменение и отправит актуальное состояние в MQTT, обеспечивая полную синхронизацию.
-*   **Управление шиной DALI**:
-    *   **Автоматическая адресация (Commissioning)**: Запуск процесса инициализации для обнаружения новых устройств на шине и автоматического назначения им коротких адресов.
-    *   **Сканирование шины**: Возможность в любой момент найти все активные, уже адресованные устройства.
-*   **Управление группами DALI**: Визуальное назначение устройств в любую из 16 групп DALI через Web-интерфейс. Управление группами также доступно через MQTT.
-*   **Управление сценами DALI**: Полноценная поддержка 16 сцен DALI. Активация через MQTT, удобная настройка уровней яркости для каждого светильника в сцене через Web-интерфейс и автоматическое создание сущности `select` в Home Assistant для простого выбора сцен.
-*   **Гибкая настройка через Web-интерфейс**: Встроенный веб-сервер для простой настройки WiFi/MQTT, а также для управления шиной DALI (сканирование, инициализация, группы, сцены).
-*   **Автообнаружение в Home Assistant**: Автоматическая публикация конфигурационных сообщений для интеграции светильников и групп DALI в Home Assistant без ручной настройки.
+The **DaliMQTT** firmware runs on an ESP32, acting as a bridge between a standard DALI Bus (requires a physical DALI Driver circuit) and your MQTT Broker.
 
-## Аппаратные требования
+```mermaid
+graph LR
+    HA[Home Assistant] <--> MQTT((MQTT Broker))
+    JS[NodeJS / DaliMQX] <--> MQTT
+    MQTT <--> ESP[ESP32 DaliMQTT]
+    ESP <--> DALI[DALI Bus]
+    DALI <--> L1((Light 1))
+    DALI <--> L2((Light 2))
+    DALI <--> S1((Switch))
+```
 
-1.  **Плата на базе ESP**: Любая плата с модулем ESP32-S3/ESP32-C3 (например, ESP32-S3-DevKitC).
-2.  **DALI Трансивер/Блок питания**: Специализированное устройство, которое обеспечивает питание шины DALI и преобразует логические уровни ESP32 в электрические сигналы DALI. Примеры: Mean Well L-C Bus Power Supply, кастомные решения на оптопарах.
+### Key Specs
+*   **Protocol:** DALI / DALI-2 (Forward & Backward frames).
+*   **Control:** Dimming, Groups, Scenes, Broadcast.
+*   **DT8 Support:** Tunable White (Tc) & RGB (RGBWAF).
+*   **Input Devices:** Event monitoring for buttons and sensors (Instance types).
 
-## Программные требования
+## Key Capabilities
 
-1.  **ESP-IDF** : [Инструкция по установке](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/index.html).
-2.  **GCC** (xtensa/riscv-esp-elf-g++): Компилятор C/C++ поставляемый ESP-IDF.
-3.  **Git**: Для клонирования репозитория.
-4.  **Node.js и npm**: Для сборки фронтенда Web-интерфейса.
+*   **Full DALI Control**: Send brightness commands (DACP), ON/OFF, and Scene recall commands to individual devices (short address) and groups (group address).
+*   **Two-Way Communication**: Poll luminaire status (brightness level, lamp status) and publish this data to MQTT.
+*   **Passive Monitoring**: The bridge constantly "listens" to the DALI bus. If a command is sent from another device (e.g., a wall-mounted DALI controller), the bridge detects this change and sends the updated state to MQTT, ensuring full synchronization.
+*   **DALI Bus Management**:
+    *   **Automatic Addressing (Commissioning)**: Launch the initialization process to discover new devices on the bus and automatically assign them short addresses.
+    *   **Bus Scanning**: Ability to scan for all active, already addressed devices at any time.
+*   **DALI Group Management**: Visually assign devices to any of the 16 DALI groups via the Web Interface. Group control is also available via MQTT.
+*   **DALI Scene Management**: Full support for 16 DALI scenes. Activate via MQTT, configure brightness levels for each luminaire in a scene via the Web Interface, and automatically create a `select` entity in Home Assistant for easy scene selection.
+*   **Web UI**: Built-in web server for easy WiFi/MQTT setup, as well as DALI bus management (scanning, initialization, groups, scenes).
+*   **Home Assistant Auto-Discovery**: Automatically publishes configuration messages to integrate DALI lights and groups into Home Assistant without manual configuration.
 
-## Сборка и прошивка проекта
+## Hardware Requirements
 
-### 1. Клонирование репозитория
+1.  **ESP-based Board**: Any board with an ESP32-S3 or ESP32-C6 module (e.g., ESP32-S3-DevKitC) with Wifi module.
+2.  **DALI Transceiver/Power Supply**: A specialized circuit/device that provides DALI bus power and converts ESP32 logic levels to DALI electrical signals. Examples: Mean Well L-C Bus Power Supply, or custom optocoupler-based solutions.
+
+## Software Requirements
+
+1.  **ESP-IDF**: [Installation Guide](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/index.html).
+2.  **GCC** (xtensa/riscv-esp-elf-g++): The C/C++ compiler provided by ESP-IDF.
+3.  **Git**: To clone the repository.
+4.  **Node.js and npm**: To build the Web UI frontend.
+
+## Building and Flashing
+
+### 1. Clone the Repository
 
 ```bash
-git clone <URL_ВАШЕГО_РЕПОЗИТОРИЯ>
+git clone <YOUR_REPO_URL>
 cd daliMQTT
 ```
 
-### 2. Конфигурация проекта
+### 2. Project Configuration
 
-Все основные настройки вынесены в `menuconfig`. Вы можете изменить пины DALI, параметры по умолчанию и другие опции.
+All main settings are exposed in `menuconfig`. You can change DALI pins, default parameters, and other options.
 
 ```bash
-# Активируйте окружение ESP-IDF
+# Activate ESP-IDF environment
 . $HOME/esp/esp-idf/export.sh
 
-# Запустите menuconfig
+# Run menuconfig
 cmake -B build -DCMAKE_TOOLCHAIN_FILE=/path/to/esp-idf/tools/cmake/toolchain-esp<chip>.cmake -GNinja .
 cmake --build build --target menuconfig
 ```
-Основные настройки находятся в разделе `DALI MQTT Bridge Settings`.
+Main settings are located under the `DALI MQTT Bridge Settings` section.
 
-### 3. Сборка и прошивка
+### 3. Build and Flash
 
-Процесс состоит из трех шагов: сборка, прошивка основного приложения и прошивка файловой системы для Web UI.
+The process consists of three steps: building, flashing the main firmware, and flashing the file system for the Web UI.
 
 ```bash
-# Сборка проекта
+# Build the project
 cmake --build build
 
-# Прошивка основного приложения
+# Flash the main application
 cmake --build build --target flash
 
-# Запуск монитора порта для просмотра логов
+# Start the serial monitor to view logs
 cmake --build build --target monitor
 ```
 
-## Первоначальная настройка (Provisioning)
+## Initial Setup (Provisioning)
 
-При первом запуске устройство не имеет данных для подключения к вашей сети. Оно перейдет в режим настройки:
+On the first boot, the device does not have credentials to connect to your network. It will enter provisioning mode:
 
-1.  **Подключитесь к Wi-Fi сети**: Устройство создаст точку доступа с SSID `DALI-MQTT-Bridge` и паролем `bridge123` (можно изменить в `menuconfig`).
-2.  **Откройте Web-интерфейс**: В браузере перейдите по адресу `http://dalimqtt.local`.
-3.  **Введите учетные данные**: По умолчанию `admin`/`dalimqttbrg12321`.
-4.  **Заполните поля**:
-    *   **WiFi Settings**: SSID и пароль вашей домашней Wi-Fi сети.
-    *   **MQTT Settings**: URI вашего брокера (например, `mqtt://user:pass@192.168.1.100`), Client ID и базовый топик.
-    *   **Web UI Authentication**: Новый логин и пароль для доступа к веб-интерфейсу.
-5.  **Сохраните и перезагрузите**: Нажмите "Save and Restart". Устройство сохранит конфигурацию в NVS-память и перезагрузится, пытаясь подключиться к вашей сети.
+1.  **Connect to Wi-Fi**: The device will create an Access Point with SSID `DALI-MQTT-Bridge` and password `bridge123` (can be changed in `menuconfig`).
+2.  **Open Web UI**: Navigate to `http://dalimqtt.local` in your browser.
+3.  **Enter Credentials**: Default is `admin` / `dalimqttbrg12321`.
+4.  **Fill in the fields**:
+    *   **WiFi Settings**: SSID and password for your home Wi-Fi network.
+    *   **MQTT Settings**: Your broker URI (e.g., `mqtt://user:pass@192.168.1.100`), Client ID, and Base Topic.
+    *   **Web UI Authentication**: New username and password for Web UI access.
+5.  **Save and Restart**: Click "Save and Restart". The device will save the configuration to NVS memory and reboot, attempting to connect to your network.
 
-## Настройка шины DALI
+## DALI Bus Setup
 
-После того как устройство подключится к вашей сети, вы можете настроить устройства на шине DALI:
- 
-1.  **Откройте Web-интерфейс**: Перейдите по IP-адресу устройства в вашей сети или по адресу `http://dalimqtt.local` (если mDNS работает в вашей сети).
-2.  **Перейдите на вкладку "DALI Control"**.
-3.  **Выберите действие**:
-    *   **Scan Bus**: Используйте эту опцию, если ваши DALI устройства уже имеют назначенные короткие адреса. Система просканирует все 64 адреса и отобразит найденные.
-    *   **Initialize New Devices**: Используйте эту опцию для новых устройств без адреса. Система запустит стандартную процедуру DALI commissioning, найдет все устройства без адреса и последовательно назначит им свободные короткие адреса (от 0 до 63).
-    *   **Настройте группы (Groups)**: Перейдите на вкладку "Group Assignments", чтобы назначить каждое устройство в одну или несколько из 16 групп.
-    *   **Настройте сцены (Scenes)**: Перейдите на вкладку "Scene Editor", чтобы задать уровни яркости для каждого устройства в каждой из 16 сцен. Настройки сохраняются непосредственно в память DALI балластов.
-4.  Найденные устройства будут автоматически сохранены и начнут опрашиваться для отправки состояний в MQTT.
+Once the device connects to your network, you can configure devices on the DALI bus:
+
+1.  **Open Web UI**: Navigate to the device's IP address or `http://dalimqtt.local` (if mDNS is working on your network).
+2.  **Go to the "DALI Control" tab**.
+3.  **Select an Action**:
+    *   **Scan Bus**: Use this if your DALI devices already have short addresses assigned. The system will scan all 64 addresses and display found devices.
+    *   **Initialize New Devices**: Use this for new, unaddressed devices. The system will run the standard DALI commissioning procedure, find all devices without addresses, and sequentially assign them free short addresses (0 to 63).
+    *   **Configure Groups**: Switch to the "Group Assignments" tab to assign each device to one or more of the 16 DALI groups.
+    *   **Configure Scenes**: Switch to the "Scene Editor" tab to set brightness levels for each device in each of the 16 scenes. Settings are stored directly in the DALI ballasts' memory.
+4.  Found devices will be automatically saved and the bridge will begin polling them to send states to MQTT.
 
 ## MQTT API
 
-После успешной настройки мост начнет взаимодействовать с MQTT брокером.
+After successful configuration, the bridge will start interacting with the MQTT broker.
 
-### Управление светильниками (Command Topic)
+### Light Control (Command Topic)
 
-Топик для отправки команд имеет структуру:
+The topic structure for sending commands is:
 `{base_topic}/light/{type}/{id}/set`
 
-*   `{base_topic}`: Базовый топик, указанный в настройках (по умолчанию `dali_bridge`).
-*   `{type}`: `short` или `group`.
-*   `{id}`: Адрес устройства (0-63) или группы (0-15).
+*   `{base_topic}`: Base topic configured in settings (default `dali_bridge`).
+*   `{type}`: `short` or `group`.
+*   `{id}`: Device address (0-63) or Group ID (0-15).
 
-**Пример payload (JSON):**
+**Payload Example (JSON):**
 
 ```json
 {
@@ -116,15 +137,15 @@ cmake --build build --target monitor
 }
 ```
 
-*   `state`: `"ON"` или `"OFF"`.
+*   `state`: `"ON"` or `"OFF"`.
 *   `brightness`: `0`-`254`.
 
-### Получение состояния (State Topic)
+### Get State (State Topic)
 
-Мост периодически опрашивает устройства и публикует их состояние в топик:
+The bridge periodically polls devices and publishes their state to:
 `{base_topic}/light/short/{id}/state`
 
-**Пример payload (JSON):**
+**Payload Example (JSON):**
 
 ```json
 {
@@ -133,14 +154,14 @@ cmake --build build --target monitor
 }
 ```
 
-### Управление сценами (Scene Command Topic)
+### Scene Control (Scene Command Topic)
 
-Активация сцен DALI осуществляется отправкой команды в топик:
+Activate DALI scenes by sending a command to:
 `{base_topic}/scene/set`
 
 **Payload (Home Assistant):**
 
-Home Assistant отправляет простое строковое значение, соответствующее выбранной опции:
+Home Assistant sends a simple string value corresponding to the selected option:
 
 ```
 Scene 5
@@ -154,14 +175,14 @@ Scene 5
 }
 ```
 
-*   `scene`: Номер сцены от `0` до `15`.
+*   `scene`: Scene number from `0` to `15`.
 
-### Управление группами (Group Command Topic)
+### Group Management (Group Command Topic)
 
-Добавление или удаление устройства из группы:
+Add or remove a device from a group:
 `{base_topic}/config/group/set`
 
-**Пример payload (JSON):**
+**Payload Example (JSON):**
 
 ```json
 {
@@ -170,56 +191,53 @@ Scene 5
   "state": "add"
 }
 ```
-*   `short_address`: Адрес устройства (0-63).
-*   `group`: Номер группы (0-15).
-*   `state`: `"add"` или `"remove"`.
+*   `short_address`: Device address (0-63).
+*   `group`: Group number (0-15).
+*   `state`: `"add"` or `"remove"`.
 
-Результат операции публикуется в топик `{base_topic}/config/group/result`.
+The operation result is published to `{base_topic}/config/group/result`.
 
-### Статус доступности (Availability Topic)
+### Availability Status (Availability Topic)
 
-Мост сообщает о своем статусе в топике:
+The bridge reports its status in the topic:
 `{base_topic}/status`
 
-*   Payload `online`: Мост подключен к MQTT.
-*   Payload `offline`: Сообщение LWT (Last Will and Testament), отправляется брокером, если мост отключается.
+*   Payload `online`: Bridge is connected to MQTT.
+*   Payload `offline`: LWT (Last Will and Testament) message, sent by the broker if the bridge disconnects.
 
-## Разработка и тестирование
+## Development and Testing
 
-Проект содержит набор unit- и интеграционных тестов для обеспечения качества кода.
+The project contains a set of unit and integration tests to ensure code quality.
 
-### Сборка тестов
+### Building Tests
 
-Для сборки тестовой прошивки передайте флаг `BUILD_TESTS=ON` в команду CMake:
+To build the test firmware, pass the `BUILD_TESTS=ON` flag to the CMake command:
 
 ```bash
-# Конфигурация для сборки тестов
+# Configuration for building tests
 cmake -B build -G Ninja -DBUILD_TESTS=ON
 
-# Сборка и запуск тестов
+# Build and run tests
 cmake --build build --target test
 cmake --build build --target test-flash
 cmake --build build --target test-monitor
 ```
 
-## Структура проекта
+## Project Structure
 
 ```
 .
-├── esp32s3/              # Конфигурация ESP-IDF для прошивки ESP32-S3
-├── scripts/              # Вспомогательные CMake-скрипты
-├── src/DaliMQT           # Исходный код
-│   ├── config/           # Менеджер конфигурации
-│   ├── dali/             # Высокоуровневый API для DALI
-│   │   └── driver/       # Низкоуровневый драйвер DALI на gptimer, GPIO  
-│   ├── lifecycle/        # Координация работы модулей и режимов приложения
-│   ├── mqtt/             # MQTT клиент и логика автообнаружения
-│   ├── webui/            # Исходный код Web-интерфейса (Vue.js + C++)
-│   ├── wifi/             # Менеджер Wi-Fi соединений
-│   └── main.cxx          # Точка входа в приложение
-└── tests/                # Исходный код тестов
-    ├── config/           # Тесты для ConfigManager
-    ├── dali/             # Тесты для DaliAPI
-    ...
-    └── test_cases.c      # Точка входа для Unity
+├── support/              # ESP-IDF configuration for ESP chip targets
+├── scripts/              # Helper CMake scripts
+├── Kconfig/              # Project compile-time configuration
+├── src/DaliMQTT          # Source code
+│   ├── config/           # Configuration Manager
+│   ├── dali/             # High-level DALI API
+│   │   └── driver/       # Low-level DALI driver (gptimer, GPIO)
+│   ├── lifecycle/        # Application lifecycle and mode coordination
+│   ├── mqtt/             # MQTT client and Auto-Discovery logic
+│   ├── webui/            # Web UI source code (Vue.js + C++)
+│   ├── wifi/             # Wi-Fi connection manager
+│   └── main.cxx          # Application entry point
+└── tests/                # Source code for tests (incomplete)
 ```

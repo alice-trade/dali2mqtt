@@ -96,6 +96,10 @@ namespace daliMQTT
         nvs_get_u8(nvs_handle.get(), "syslog_en", &syslog_enabled_flag);
         config_cache.syslog_enabled = (syslog_enabled_flag == 1);
 
+        uint8_t hass_disc_flag = 0;
+        nvs_get_u8(nvs_handle.get(), "hass_disc", &hass_disc_flag);
+        config_cache.hass_discovery_enabled = (hass_disc_flag == 1);
+
         if (config_cache.client_id.empty()) {
           uint8_t mac[6];
           esp_read_mac(mac, ESP_MAC_WIFI_STA);
@@ -141,6 +145,7 @@ namespace daliMQTT
         SetNVS(nvs_set_u8, "syslog_en", new_config.syslog_enabled ? 1 : 0);
         SetNVS(setString, "ota_url", new_config.app_ota_url);
         SetNVS(nvs_set_u32, "dali_poll", new_config.dali_poll_interval_ms);
+        SetNVS(nvs_set_u8, "hass_disc", new_config.hass_discovery_enabled ? 1 : 0);
 
 
         #undef SetNVS
@@ -204,6 +209,7 @@ namespace daliMQTT
         SetNVS(setString, "syslog_srv", config_cache.syslog_server);
         SetNVS(nvs_set_u8, "syslog_en", config_cache.syslog_enabled ? 1 : 0);
         SetNVS(setString, "ota_url", config_cache.app_ota_url);
+        SetNVS(nvs_set_u8, "hass_disc", config_cache.hass_discovery_enabled ? 1 : 0);
 
         #undef SetNVS
 
@@ -334,6 +340,7 @@ namespace daliMQTT
         cJSON_AddBoolToObject(root, "syslog_enabled", cfg.syslog_enabled);
         cJSON_AddNumberToObject(root, "dali_poll_interval_ms", cfg.dali_poll_interval_ms);
         cJSON_AddStringToObject(root, "ota_url", cfg.app_ota_url.c_str());
+        cJSON_AddBoolToObject(root, "hass_discovery_enabled", cfg.hass_discovery_enabled);
 
         const char* pass_placeholder = mask_passwords ? "***" : "";
         cJSON_AddStringToObject(root, "wifi_password", mask_passwords ? pass_placeholder : cfg.wifi_password.c_str());
@@ -402,7 +409,13 @@ namespace daliMQTT
                 changed = true;
             }
         }
-
+        if (cJSON* item = cJSON_GetObjectItem(root, "hass_discovery_enabled"); cJSON_IsBool(item)) {
+            bool val = cJSON_IsTrue(item);
+            if (current_cfg.hass_discovery_enabled != val) {
+                current_cfg.hass_discovery_enabled = val;
+                changed = true;
+            }
+        }
         if (cJSON* item = cJSON_GetObjectItem(root, "dali_poll_interval_ms"); cJSON_IsNumber(item)) {
             uint32_t val = static_cast<uint32_t>(item->valueint);
             if (current_cfg.dali_poll_interval_ms != val) {

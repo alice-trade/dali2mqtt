@@ -22,7 +22,12 @@ set(app ${CMAKE_PROJECT_NAME})
 
 add_subdirectory(${PROJDIR}/src/DaliMQTT daliMQTTModules)
 
-include(${PROJDIR}/scripts/build_firmware.cmake)
+add_executable(${app} ${CMAKE_SOURCE_DIR}/src/DaliMQTT/main.cxx)
+target_link_libraries(${app} PRIVATE DaliMQTT-Core)
+
+
+idf_build_executable(${app})
+
 include(${PROJDIR}/scripts/size_components.cmake)
 include(${PROJDIR}/scripts/make_webui.cmake)
 

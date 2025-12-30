@@ -34,6 +34,9 @@ namespace daliMQTT
         // General
         std::string client_id;
 
+         // Features
+        bool hass_discovery_enabled{true};
+
         bool configured{false};
     };
 

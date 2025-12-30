@@ -18,7 +18,7 @@ features:
     details: Supports addressing, groups, scenes, DT8 (Color Temp & RGB) and Input Devices (Motion/Switches).
     icon: 💡
   - title: Home Assistant Discovery
-    details: Automatically appears in Home Assistant using MQTT Discovery. Bidirectional sync.
+    details: Devices automatically appears in Home Assistant using MQTT Discovery. Bidirectional sync.
     icon: 🔌
   - title: Commissioning
     details: Built-in Web interface interface for commissioning, addressing, grouping, and configuration.

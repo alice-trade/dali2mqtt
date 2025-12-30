@@ -30,13 +30,6 @@ static void print_banner(const char* text) {
 }
 
 void app_main(void) {
-    // Инициализируем базовые сервисы, необходимые для многих тестов
-    ESP_ERROR_CHECK(nvs_flash_init());
-    ESP_ERROR_CHECK(esp_event_loop_create_default());
-
-    // Задержка для стабилизации системы перед запуском тестов
-    vTaskDelay(pdMS_TO_TICKS(2000));
-
     print_banner("RUNNING CONFIG MANAGER TESTS");
     run_config_manager_tests();
 
@@ -52,7 +45,6 @@ void app_main(void) {
     print_banner("RUNNING LIFECYCLE LOGIC TESTS");
     run_lifecycle_tests();
 
-    // DALI тесты требуют физического подключения или будут падать по таймауту.
     print_banner("RUNNING DALI API SMOKE TESTS (requires hardware loopback or device)");
     run_dali_api_tests();
 

@@ -17,6 +17,7 @@ interface ConfigData {
   syslog_enabled?: boolean;
   ota_url?: string;
   dali_poll_interval_ms?: number;
+  hass_discovery_enabled?: boolean;
 }
 
 const config = ref<ConfigData>({
@@ -31,6 +32,7 @@ const config = ref<ConfigData>({
   syslog_server: '',
   syslog_enabled: false,
   dali_poll_interval_ms: 200000,
+  hass_discovery_enabled: false,
 });
 const daliPollSeconds = ref(200.0);
 const loading = ref(true);
@@ -147,6 +149,11 @@ onMounted(loadConfig);
         </div>
         <label for="mqtt_base">Base Topic</label>
         <input type="text" id="mqtt_base" v-model="config.mqtt_base_topic">
+        <label for="hass_discovery">
+          <input type="checkbox" id="hass_discovery" role="switch" v-model="config.hass_discovery_enabled" />
+          Home Assistant Discovery
+        </label>
+        <small>Automatically publish configuration topics for Home Assistant.</small>
       </fieldset>
 
       <fieldset>
