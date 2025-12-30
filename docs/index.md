@@ -15,25 +15,36 @@ hero:
 
 features:
   - title: Fully Featured DALI Engine
-    details: Supports addressing, groups, scenes, and DT8 (Color Temp & RGB) control straight out of the box.
+    details: Supports addressing, groups, scenes, DT8 (Color Temp & RGB) and Input Devices (Motion/Switches).
     icon: 💡
   - title: Home Assistant Discovery
-    details: Automatically appears in Home Assistant. Bidirectional sync with low latency.
+    details: Automatically appears in Home Assistant using MQTT Discovery. Bidirectional sync.
     icon: 🔌
-  - title: WebUI
-    details: Built-in Vue.js interface for commissioning, addressing, and configuration stored on SPIFFS.
+  - title: Commissioning
+    details: Built-in Web interface interface for commissioning, addressing, grouping, and configuration.
     icon: 🖥
-  - title: ESP32 Hardware Support
-    details: Runs on ESP32-* for reliable DALI communication.
-    icon: ⚡️
+  - title: JS SDK Included
+    details: Comes with DaliMQX - a TypeScript library to easily build custom Node.js/TS integrations.
+    icon: 📦
 ---
 
-## Overview
-### Architecture
-*Schema: ESP32 <-> DALI Bus Circuit <-> Drivers*
+## Architecture
 
-### Quick Specs
-*   **Protocol:** DALI / DALI-2 (Backward frames support)
-*   **Color Control:** DT8 Tc (Tunable White) & RGB support
-*   **Connectivity:** WiFi (STA + AP Mode for provisioning)
-*   **Update:** OTA Support via WebUI
+The **DaliMQTT** firmware runs on an ESP32, acting as a bridge between a standard DALI Bus (requires physical DALI Driver circuit) and your MQTT Broker.
+
+```mermaid
+graph LR
+    HA[Home Assistant] <--> MQTT((MQTT Broker))
+    JS[NodeJS / DaliMQX] <--> MQTT
+    MQTT <--> ESP[ESP32 DaliMQTT]
+    ESP <--> DALI[DALI Bus]
+    DALI <--> L1((Light 1))
+    DALI <--> L2((Light 2))
+    DALI <--> S1((Switch))
+```
+
+### Key Specs
+*   **Protocol:** DALI / DALI-2 (Forward & Backward frames)
+*   **Control:** Dimming, Groups, Scenes, Broadcast
+*   **DT8 Support:** Tunable White (Tc) & RGB (RGBWAF)
+*   **Input Devices:** Event monitoring for buttons and sensors (Instance types).
