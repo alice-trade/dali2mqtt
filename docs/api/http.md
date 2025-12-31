@@ -1,7 +1,7 @@
 # HTTP API Reference
 
 The Bridge provides a REST API used by the WebUI.
-**Authentication:** Basic Auth required (default: `admin` / `admin`).
+**Authentication:** Basic Auth required.
 
 ## Configuration
 

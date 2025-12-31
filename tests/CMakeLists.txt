@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(DaliMQTTTests LANGUAGES C CXX)
+project(DaliMQTTTests LANGUAGES CXX)
 
 include(${PROJDIR}/scripts/common.cmake)
 include(${PROJDIR}/scripts/idf_buildup.cmake)
@@ -12,7 +12,7 @@ file(GLOB_RECURSE TEST_CASE_FILES "**/*.test.cxx")
 message(STATUS "Found test files: ${TEST_CASE_FILES}")
 
 add_executable(${TEST_APP_NAME}
-        test_cases.c
+        test_cases.cxx
         ${TEST_CASE_FILES}
 )
 

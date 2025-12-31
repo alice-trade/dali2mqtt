@@ -11,7 +11,7 @@ hero:
       link: /guide/getting-started
     - theme: alt
       text: View on GitHub
-      link: https://github.com/youruser/DaliMQTT
+      link: https://github.com/alice-trade/dali2mqtt
 
 features:
   - title: Fully Featured DALI Engine

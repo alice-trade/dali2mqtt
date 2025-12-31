@@ -10,7 +10,7 @@ const MainConfig = defineConfig({
             { text: 'Guide', link: '/guide/getting-started' },
             { text: 'API Reference', link: '/api/mqtt' },
             { text: 'JS SDK', link: '/dalimqx/' },
-            { text: 'Releases', link: 'https://github.com/youruser/DaliMQTT/releases' }
+            { text: 'Releases', link: 'https://github.com/alice-trade/dali2mqtt/releases' }
         ],
 
         sidebar: {
@@ -43,18 +43,19 @@ const MainConfig = defineConfig({
                 {
                     text: 'DaliMQX SDK',
                     items: [
-                        { text: 'Usage Guide', link: '/dalimqx/' }
+                        { text: 'Usage Guide', link: '/dalimqx/' },
+                        { text: 'API Reference', link: '/dalimqx/api-reference/' },
                     ]
                 }
             ]
         },
 
         socialLinks: [
-            { icon: 'github', link: 'https://github.com/youruser/DaliMQTT' }
+            { icon: 'github', link: 'https://github.com/alice-trade/dali2mqtt' }
         ],
 
         footer: {
-            message: 'Released under GNU GPL License.',
+            message: 'Released under GNU GPL v3 License.',
             copyright: 'Copyright © 2025 DaliMQTT Project'
         }
     }
