@@ -29,9 +29,8 @@ graph LR
     *   **Automatic Addressing (Commissioning)**: Launch the initialization process to discover new devices on the bus and automatically assign them short addresses.
     *   **Bus Scanning**: Ability to scan for all active, already addressed devices at any time.
 *   **DALI Group Management**: Visually assign devices to any of the 16 DALI groups via the Web Interface. Group control is also available via MQTT.
-*   **DALI Scene Management**: Full support for 16 DALI scenes. Activate via MQTT, configure brightness levels for each luminaire in a scene via the Web Interface, and automatically create a `select` entity in Home Assistant for easy scene selection.
 *   **Web UI**: Built-in web server for easy WiFi/MQTT setup, as well as DALI bus management (scanning, initialization, groups, scenes).
-*   **Home Assistant Auto-Discovery**: Automatically publishes configuration messages to integrate DALI lights and groups into Home Assistant without manual configuration.
+*   **Home Assistant Auto-Discovery**: Option which automatically publishes configuration messages to integrate DALI lights and groups into Home Assistant without manual configuration.
 
 ## Hardware Requirements
 
