@@ -9,13 +9,13 @@ namespace daliMQTT {
     public:
         MQTTCommandHandler() = delete;
         /**
-         * @brief Handle mqtt message
+         * @brief Main handler for incoming MQTT messages.
          * @param topic
          * @param data
          */
         static void handle(const std::string& topic, const std::string& data);
     private:
-        // MQTT handlers
+        /** MQTT command handlers */
         static void handleLightCommand(const std::vector<std::string_view>& parts, const std::string& data);
         static void handleGroupCommand(const std::string& data);
         static void handleSceneCommand(const std::string& data);

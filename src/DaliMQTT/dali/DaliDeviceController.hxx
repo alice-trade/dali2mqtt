@@ -15,24 +15,58 @@ namespace daliMQTT
             return instance;
         }
 
+        /**
+         * @brief Initializes the controller and loads the address map.
+         */
         void init();
+
         /**
          * @brief Starts all DALI background tasks: event monitoring and periodic sync.
          */
         void start();
 
+        /**
+         * @brief Performs full bus initialization (addressing).
+         */
         std::bitset<64> performFullInitialization();
+
+        /**
+         * @brief Performs initialization for 24-bit input devices.
+         */
         std::bitset<64> perform24BitDeviceInitialization();
+
+        /**
+         * @brief Scans the bus for existing devices without re-addressing.
+         */
         std::bitset<64> performScan();
 
+        /**
+         * @brief Returns the map of known devices.
+         */
         [[nodiscard]] std::map<DaliLongAddress_t, DaliDevice> getDevices() const;
         [[nodiscard]] std::optional<uint8_t> getShortAddress(DaliLongAddress_t longAddress) const;
         [[nodiscard]] std::optional<DaliLongAddress_t> getLongAddress(uint8_t shortAddress, bool is24bitSpace = false) const;
 
+        /**
+         * @brief Updates the state of a device in the cache and publishes to MQTT.
+         */
         void updateDeviceState(DaliLongAddress_t longAddr, const DaliState& state);
+
+        /**
+         * @brief Publishes device attributes (extended info) to MQTT.
+         */
         void publishAttributes(DaliLongAddress_t longAddr) const;
+
         [[nodiscard]] std::optional<uint8_t> getLastLevel(DaliLongAddress_t longAddress) const;
+
+        /**
+         * @brief Requests a sync (poll) for a specific device.
+         */
         void requestDeviceSync(uint8_t shortAddress, uint32_t delay_ms = 0);
+
+        /**
+         * @brief Requests a broadcast sync for all devices with staggered delay.
+         */
         void requestBroadcastSync(uint32_t base_delay_ms, uint32_t stagger_ms);
 
 

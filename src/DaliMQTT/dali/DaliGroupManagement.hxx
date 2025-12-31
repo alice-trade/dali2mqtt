@@ -16,40 +16,40 @@ namespace daliMQTT
             return instance;
         }
 
-        // Инициализация менеджера, загрузка данных из NVS
+        /** Initializes the manager, loads data from NVS. */
         void init();
 
-        // Получить все назначения групп
+        /** Gets all group assignments. */
         [[nodiscard]] GroupAssignments getAllAssignments() const;
 
-        // Получить группы для конкретного устройства
+        /** Gets groups for a specific device. */
         [[nodiscard]] std::optional<std::bitset<16>> getGroupsForDevice(DaliLongAddress_t longAddress) const;
 
-        // Установить новое состояние принадлежности устройства к группе
+        /** Sets the group membership for a device. */
         esp_err_t setGroupMembership(DaliLongAddress_t longAddress, uint8_t group, bool assigned);
 
-        // Установить все назначения (например, из WebUI)
+        /** Sets all assignments (e.g. from WebUI). */
         esp_err_t setAllAssignments(const GroupAssignments& newAssignments);
 
-        // Обновить назначения групп, опросив все устройства на шине
+        /** Refreshes group assignments by querying all devices on the bus. */
         esp_err_t refreshAssignmentsFromBus();
 
-        // Получить состояние конкретной группы
+        /** Gets the state of a specific group. */
         [[nodiscard]] DaliGroup getGroupState(uint8_t group_id) const;
 
-        // Обновить состояние группы
+        /** Updates the state of a group. */
         void updateGroupState(uint8_t group_id, const DaliState& state);
 
-        // Восстановить уровень
+        /** Restores the group level. */
         void restoreGroupLevel(uint8_t group_id);
 
-        // Публикация текущей конфигурации групп в MQTT
+        /** Publishes the current group configuration to MQTT. */
         void publishAllGroups() const;
 
 
         /**
-        * @brief Относительное изменение уровня
-        * @param is_up: true для увеличения, false для уменьшения
+        * @brief Relative level change (Step Up/Down)
+        * @param is_up: true to increase, false to decrease
         */
         void stepGroupLevel(uint8_t group_id, bool is_up);
     private:

@@ -9,10 +9,10 @@ namespace daliMQTT
             Lifecycle& operator=(const Lifecycle&) = delete;
             Lifecycle() = delete;
 
-            // Запуск в режиме начальной настройки
+            /** Starts in provisioning mode. */
             static void startProvisioningMode();
 
-            // Запуск в нормальном режиме работы
+            /** Starts in normal operation mode. */
             static void startNormalMode();
 
         private:

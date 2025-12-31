@@ -20,18 +20,35 @@ namespace daliMQTT
         }
         esp_err_t init(gpio_num_t rx_pin, gpio_num_t tx_pin);
 
-        // Отправка команды без ожидания ответа
+        /**
+         * @brief Sends a command without waiting for a reply.
+         */
         esp_err_t sendCommand(dali_addressType_t addr_type, uint8_t addr, uint8_t command, bool send_twice = false);
-        // DACP - Direct Arc Power Control
+
+        /**
+         * @brief DACP - Direct Arc Power Control.
+         */
         esp_err_t sendDACP(dali_addressType_t addr_type, uint8_t addr, uint8_t level);
-        // Отправка запроса с ожиданием ответа
+
+        /**
+         * @brief Sends a query waiting for a reply.
+         */
         [[nodiscard]] std::optional<uint8_t> sendQuery(dali_addressType_t addr_type, uint8_t addr, uint8_t command);
         std::optional<uint8_t> sendInputDeviceCommand(uint8_t shortAddress, uint8_t opcode, std::optional<uint8_t> param = std::nullopt);
-        // Raw send command
+
+        /**
+         * @brief Sends a raw command.
+         */
         [[nodiscard]] std::optional<uint8_t> sendRaw(uint32_t data, uint8_t bits = 16, bool reply = true);
-        // DT8 Set Color Temperature (Tc)
+
+        /**
+         * @brief Sets DT8 Color Temperature (Tc).
+         */
         esp_err_t setDT8ColorTemp(dali_addressType_t addr_type, uint8_t addr, uint16_t mireds);
-        // DT8 Set RGB (Basic implementation)
+
+        /**
+         * @brief Sets DT8 RGB value (Basic implementation).
+         */
         esp_err_t setDT8RGB(dali_addressType_t addr_type, uint8_t addr, uint8_t r, uint8_t g, uint8_t b);
 
         /**
@@ -56,17 +73,25 @@ namespace daliMQTT
          */
         [[nodiscard]] QueueHandle_t getEventQueue() const;
 
-        // Процесс инициализации и адресации новых устройств на шине
+        /**
+         * @brief Initialization and addressing process for new devices on the bus.
+         */
         uint8_t initializeBus();
         uint8_t initialize24BitDevicesBus();
 
-        // Добавить в группу
+        /**
+         * @brief Adds a device to a group.
+         */
         esp_err_t assignToGroup(uint8_t shortAddress, uint8_t group);
 
-        // Удалить из группы
+        /**
+         * @brief Removes a device from a group.
+         */
         esp_err_t removeFromGroup(uint8_t shortAddress, uint8_t group);
 
-        // Получение маски группы
+        /**
+         * @brief Gets the group mask for a device.
+         */
         [[nodiscard]] std::optional<std::bitset<16>> getDeviceGroups(uint8_t shortAddress);
 
         [[nodiscard]] std::optional<uint8_t> getDT8Features(uint8_t shortAddress);
@@ -77,19 +102,29 @@ namespace daliMQTT
 
         std::optional<uint8_t> getDeviceStatus(uint8_t shortAddress);
 
-        // Чтение одного байта из Memory Bank
+        /**
+         * @brief Reads one byte from Memory Bank.
+         */
         [[nodiscard]] std::optional<uint8_t> readMemoryLocation(uint8_t shortAddress, uint8_t bank, uint8_t offset);
 
-        // Получить текущую цветовую температуру (Tc) из Memory Bank 205
+        /**
+         * @brief Gets current Color Temperature (Tc) from Memory Bank 205.
+         */
         [[nodiscard]] std::optional<uint16_t> getDT8ColorTemp(uint8_t shortAddress);
 
-        // Получить текущий RGB из Memory Bank 205
+        /**
+         * @brief Gets current RGB from Memory Bank 205.
+         */
         [[nodiscard]] std::optional<DaliRGB> getDT8RGB(uint8_t shortAddress);
 
-        // Получение long address устройства по short address
+        /**
+         * @brief Gets the long address of a device by short address.
+         */
         [[nodiscard]] std::optional<DaliLongAddress_t> getLongAddress(uint8_t shortAddress);
 
-        // Проверка, была ли инициализирована шина DALI
+        /**
+         * @brief Checks if the DALI bus driver is initialized.
+         */
         [[nodiscard]] bool isInitialized() const;
 
     private:
