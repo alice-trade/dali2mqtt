@@ -15,7 +15,9 @@ add_executable(${TEST_APP_NAME}
         test_cases.cxx
         ${TEST_CASE_FILES}
 )
-
+target_precompile_headers(${TEST_APP_NAME} PRIVATE
+        ${PROJDIR}/src/DaliMQTT/pch.hxx
+)
 target_link_libraries(${TEST_APP_NAME} PRIVATE
         DaliMQTT-Core
         idf::unity
