@@ -1,10 +1,10 @@
-#include "DaliDeviceController.hxx"
-#include <DaliGroupManagement.hxx>
+#include "dali/DaliDeviceController.hxx"
+#include <dali/DaliGroupManagement.hxx>
 #include <utils/StringUtils.hxx>
-#include "ConfigManager.hxx"
-#include "DaliAddressMap.hxx"
-#include "DaliAPI.hxx"
-#include "MQTTClient.hxx"
+#include "system/ConfigManager.hxx"
+#include "dali/DaliAddressMap.hxx"
+#include "dali/DaliAPI.hxx"
+#include "mqtt/MQTTClient.hxx"
 #include "utils/DaliLongAddrConversions.hxx"
 #include <esp_timer.h>
 namespace daliMQTT

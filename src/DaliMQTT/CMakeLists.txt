@@ -2,7 +2,9 @@ project(DaliMQTT-Core LANGUAGES CXX)
 
 add_library(DaliMQTT-Core STATIC)
 
-target_precompile_headers(DaliMQTT-Core PRIVATE pch.hxx)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/pch.hxx")
+    target_precompile_headers(DaliMQTT-Core PRIVATE pch.hxx)
+endif()
 
 string(TIMESTAMP PROJ_BUILD_TIMESTAMP "%Y-%m-%dT%H:%M:%SZ")
 
@@ -20,18 +22,23 @@ set(MODULE_DIRS
         mqtt
 )
 
-set(MODULE_SOURCES "")
+set(PROJECT_SOURCES "")
 foreach(DIR IN LISTS MODULE_DIRS)
-    file(GLOB C_FILES "${CMAKE_CURRENT_SOURCE_DIR}/${DIR}/*.c")
-    file(GLOB CXX_FILES "${CMAKE_CURRENT_SOURCE_DIR}/${DIR}/*.cxx")
-    list(APPEND MODULE_SOURCES ${C_FILES} ${CXX_FILES})
+    file(GLOB_RECURSE DIR_SRCS
+            "${CMAKE_CURRENT_SOURCE_DIR}/${DIR}/*.c"
+            "${CMAKE_CURRENT_SOURCE_DIR}/${DIR}/*.cxx"
+    )
+    list(APPEND PROJECT_SOURCES ${DIR_SRCS})
 endforeach()
 
-message(STATUS "Found DaliMQTT source files: ${MODULE_SOURCES}")
+message(STATUS "Found DaliMQTT source files: ${PROJECT_SOURCES}")
 
-target_sources(DaliMQTT-Core PRIVATE ${MODULE_SOURCES})
+target_sources(DaliMQTT-Core PRIVATE ${PROJECT_SOURCES})
 
-target_include_directories(DaliMQTT-Core PRIVATE ${MODULE_DIRS} include INTERFACE ..)
+target_include_directories(DaliMQTT-Core PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+)
 target_link_libraries(DaliMQTT-Core PUBLIC
         idf::nvs_flash
         idf::mqtt

@@ -1,9 +1,9 @@
 #ifndef DALIMQTT_DALIAPI_HXX
 #define DALIMQTT_DALIAPI_HXX
-#include "DaliDriver.hxx"
-#include "dali_commands.h"
+#include "dali/driver/DaliDriver.hxx"
+#include "dali/driver/dali_commands.h"
 #include "driver/gptimer.h"
-#include "DaliTypes.hxx"
+#include "dali/DaliTypes.hxx"
 
 
 namespace daliMQTT

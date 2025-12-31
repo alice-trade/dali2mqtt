@@ -1,5 +1,5 @@
-#include "MQTTCommandProcess.hxx"
-#include "MQTTCommandHandler.hxx"
+#include "mqtt/MQTTCommandProcess.hxx"
+#include "mqtt/MQTTCommandHandler.hxx"
 
 namespace daliMQTT {
     static constexpr char TAG[] = "MQTTCommandProcess";

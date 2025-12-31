@@ -1,7 +1,7 @@
-#include "AppUpdateManager.hxx"
-#include "ConfigManager.hxx"
+#include "system/AppUpdateManager.hxx"
+#include "system/ConfigManager.hxx"
 #include <cJSON.h>
-#include "WebUI.hxx"
+#include "webui/WebUI.hxx"
 
 namespace daliMQTT {
     static constexpr char TAG[] = "WebUI_OTA";

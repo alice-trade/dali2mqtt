@@ -1,10 +1,10 @@
-#include <DaliDeviceController.hxx>
-#include <DaliGroupManagement.hxx>
-#include <DaliSceneManagement.hxx>
+#include <dali/DaliDeviceController.hxx>
+#include <dali/DaliGroupManagement.hxx>
+#include <dali/DaliSceneManagement.hxx>
 #include <utils/StringUtils.hxx>
-#include "ConfigManager.hxx"
-#include "WebUI.hxx"
-#include "DaliAPI.hxx"
+#include "system/ConfigManager.hxx"
+#include "webui/WebUI.hxx"
+#include "dali/DaliAPI.hxx"
 #include "utils/DaliLongAddrConversions.hxx"
 
 namespace daliMQTT {

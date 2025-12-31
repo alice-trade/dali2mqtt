@@ -2,11 +2,11 @@
 #include <esp_system.h>
 #include <esp_timer.h>
 #include <utils/StringUtils.hxx>
-#include "DaliAPI.hxx"
-#include "DaliDeviceController.hxx"
-#include "WebUI.hxx"
-#include "Wifi.hxx"
-#include "MQTTClient.hxx"
+#include "dali/DaliAPI.hxx"
+#include "dali/DaliDeviceController.hxx"
+#include "webui/WebUI.hxx"
+#include "wifi/Wifi.hxx"
+#include "mqtt/MQTTClient.hxx"
 
 namespace daliMQTT {
     static constexpr char  TAG[] = "WebUIInfo";

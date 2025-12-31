@@ -4,8 +4,8 @@
 #include <mutex>
 #include <nvs_flash.h>
 
-#include <DaliMQTT/system/ConfigManager.hxx>
-#include <DaliMQTT/lifecycle/Lifecycle.hxx>
+#include <system/ConfigManager.hxx>
+#include <lifecycle/Lifecycle.hxx>
 
 static constexpr char  TAG[] = "daliMQTT";
 extern "C" void app_main(void) {

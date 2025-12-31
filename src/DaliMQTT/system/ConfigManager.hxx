@@ -85,7 +85,8 @@ namespace daliMQTT
             ConfigManager() = default;
             esp_err_t initSpiffs();
             esp_err_t ensureConfiguredAndCommit(nvs_handle_t handle);
-
+            esp_err_t processConfigUpdate(const std::function<esp_err_t(nvs_handle_t)>& write_action);
+            esp_err_t writeBasicSettings(nvs_handle_t handle, const AppConfig& cfg);
             static esp_err_t getString(nvs_handle_t handle, const char* key, std::string& out_value, const char* default_value);
             static esp_err_t getU32(nvs_handle_t handle, const char* key, uint32_t& out_value, uint32_t default_value);
             static esp_err_t setString(nvs_handle_t handle, const char* key, const std::string& value);

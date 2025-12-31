@@ -1,4 +1,4 @@
-#include "ConfigManager.hxx"
+#include "system/ConfigManager.hxx"
 #include "utils/NvsHandle.hxx"
 #include <esp_spiffs.h>
 #include <dirent.h>
@@ -115,146 +115,94 @@ namespace daliMQTT
         return ESP_OK;
     }
 
-    esp_err_t ConfigManager::saveMainConfig(const AppConfig& new_config) {
+    esp_err_t ConfigManager::processConfigUpdate(const std::function<esp_err_t(nvs_handle_t)>& write_action) {
         std::lock_guard<std::mutex> lock(config_mutex);
 
         const NvsHandle nvs_handle(NVS_NAMESPACE, NVS_READWRITE);
-        if (!nvs_handle) {
-            return ESP_FAIL;
-        }
+        if (!nvs_handle) return ESP_FAIL;
 
-        config_cache = new_config;
+        const esp_err_t err = write_action(nvs_handle.get());
+        if (err != ESP_OK) return err;
 
+        return ensureConfiguredAndCommit(nvs_handle.get());
+    }
+
+    esp_err_t ConfigManager::writeBasicSettings(const nvs_handle_t handle, const AppConfig& cfg) {
         esp_err_t err;
-
         #define SetNVS(func, key, value, ...) \
-            err = func(nvs_handle.get(), key, value, ##__VA_ARGS__); \
-            if (err != ESP_OK) return err;
-
-        SetNVS(setString, "wifi_ssid", new_config.wifi_ssid);
-        SetNVS(setString, "wifi_pass", new_config.wifi_password);
-        SetNVS(setString, "mqtt_uri", new_config.mqtt_uri);
-        SetNVS(setString, "mqtt_user", new_config.mqtt_user);
-        SetNVS(setString, "mqtt_pass", new_config.mqtt_pass);
-        SetNVS(setString, "cid", new_config.client_id);
-        SetNVS(setString, "mqtt_base", new_config.mqtt_base_topic);
-        SetNVS(setString, "http_domain", new_config.http_domain);
-        SetNVS(setString, "http_user", new_config.http_user);
-        SetNVS(setString, "http_pass", new_config.http_pass);
-        SetNVS(setString, "syslog_srv", new_config.syslog_server);
-        SetNVS(nvs_set_u8, "syslog_en", new_config.syslog_enabled ? 1 : 0);
-        SetNVS(setString, "ota_url", new_config.app_ota_url);
-        SetNVS(nvs_set_u32, "dali_poll", new_config.dali_poll_interval_ms);
-        SetNVS(nvs_set_u8, "hass_disc", new_config.hass_discovery_enabled ? 1 : 0);
-
+        if ((err = func(handle, key, value, ##__VA_ARGS__)) != ESP_OK) return err;
+        SetNVS(setString, "wifi_ssid", cfg.wifi_ssid);
+        SetNVS(setString, "wifi_pass", cfg.wifi_password);
+        SetNVS(setString, "mqtt_uri",  cfg.mqtt_uri);
+        SetNVS(setString, "mqtt_user", cfg.mqtt_user);
+        SetNVS(setString, "mqtt_pass", cfg.mqtt_pass);
+        SetNVS(setString, "cid",       cfg.client_id);
+        SetNVS(setString, "mqtt_base", cfg.mqtt_base_topic);
+        SetNVS(setString, "http_domain", cfg.http_domain);
+        SetNVS(setString, "http_user",   cfg.http_user);
+        SetNVS(setString, "http_pass",   cfg.http_pass);
+        SetNVS(setString, "syslog_srv",  cfg.syslog_server);
+        SetNVS(nvs_set_u8, "syslog_en",  cfg.syslog_enabled ? 1 : 0);
+        SetNVS(setString, "ota_url",     cfg.app_ota_url);
+        SetNVS(nvs_set_u32, "dali_poll", cfg.dali_poll_interval_ms);
+        SetNVS(nvs_set_u8, "hass_disc",  cfg.hass_discovery_enabled ? 1 : 0);
 
         #undef SetNVS
-        
-        return ensureConfiguredAndCommit(nvs_handle.get());
+        return ESP_OK;
+    }
+
+    esp_err_t ConfigManager::saveMainConfig(const AppConfig& new_config) {
+        return processConfigUpdate([this, &new_config](nvs_handle_t handle) {
+            config_cache = new_config;
+            return writeBasicSettings(handle, config_cache);
+        });
     }
 
     esp_err_t ConfigManager::saveDaliDeviceIdentificators(const std::string& identificators) {
-        std::lock_guard<std::mutex> lock(config_mutex);
-        config_cache.dali_device_identificators = identificators;
-
-        const NvsHandle nvs_handle(NVS_NAMESPACE, NVS_READWRITE);
-        if (!nvs_handle) return ESP_FAIL;
-
-        const esp_err_t err = setString(nvs_handle.get(), "dali_identif", identificators);
-        if (err != ESP_OK) return err;
-
-        return ensureConfiguredAndCommit(nvs_handle.get());
+        return processConfigUpdate([this, &identificators](nvs_handle_t handle) {
+            config_cache.dali_device_identificators = identificators;
+            return setString(handle, "dali_identif", identificators);
+        });
     }
 
     esp_err_t ConfigManager::saveDaliGroupAssignments(const std::string& assignments) {
-        std::lock_guard<std::mutex> lock(config_mutex);
-        config_cache.dali_group_assignments = assignments;
-
-        const NvsHandle nvs_handle(NVS_NAMESPACE, NVS_READWRITE);
-        if (!nvs_handle) return ESP_FAIL;
-
-        const esp_err_t err = setString(nvs_handle.get(), "dali_groups", assignments);
-        if (err != ESP_OK) return err;
-
-        return ensureConfiguredAndCommit(nvs_handle.get());
+         return processConfigUpdate([this, &assignments](nvs_handle_t handle) {
+            config_cache.dali_group_assignments = assignments;
+            return setString(handle, "dali_groups", assignments);
+        });
     }
 
     esp_err_t ConfigManager::save() {
-        std::lock_guard<std::mutex> lock(config_mutex);
-
-        const NvsHandle nvs_handle(NVS_NAMESPACE, NVS_READWRITE);
-        if (!nvs_handle) {
-            return ESP_FAIL;
-        }
-
-        esp_err_t err;
-
-        #define SetNVS(func, key, value, ...) \
-            err = func(nvs_handle.get(), key, value, ##__VA_ARGS__); \
+        return processConfigUpdate([this](const nvs_handle_t handle) {
+            esp_err_t err = writeBasicSettings(handle, config_cache);
             if (err != ESP_OK) return err;
 
-        SetNVS(setString, "wifi_ssid", config_cache.wifi_ssid);
-        SetNVS(setString, "wifi_pass", config_cache.wifi_password);
-        SetNVS(setString, "mqtt_uri", config_cache.mqtt_uri);
-        SetNVS(setString, "mqtt_user", config_cache.mqtt_user);
-        SetNVS(setString, "mqtt_pass", config_cache.mqtt_pass);
-        SetNVS(setString, "cid", config_cache.client_id);
-        SetNVS(setString, "mqtt_base", config_cache.mqtt_base_topic);
-        SetNVS(setString, "http_domain", config_cache.http_domain);
-        SetNVS(setString, "http_user", config_cache.http_user);
-        SetNVS(setString, "http_pass", config_cache.http_pass);
-        SetNVS(setString, "dali_identif", config_cache.dali_device_identificators);
-        SetNVS(setString, "dali_groups", config_cache.dali_group_assignments);
-        SetNVS(nvs_set_u32, "dali_poll", config_cache.dali_poll_interval_ms);
-        SetNVS(setString, "syslog_srv", config_cache.syslog_server);
-        SetNVS(nvs_set_u8, "syslog_en", config_cache.syslog_enabled ? 1 : 0);
-        SetNVS(setString, "ota_url", config_cache.app_ota_url);
-        SetNVS(nvs_set_u8, "hass_disc", config_cache.hass_discovery_enabled ? 1 : 0);
-
-        #undef SetNVS
-
-        return ensureConfiguredAndCommit(nvs_handle.get());
+            if ((err = setString(handle, "dali_identif", config_cache.dali_device_identificators)) != ESP_OK) return err;
+            return setString(handle, "dali_groups", config_cache.dali_group_assignments);
+        });
     }
 
     esp_err_t ConfigManager::resetConfiguredFlag() {
-        std::lock_guard<std::mutex> lock(config_mutex);
-        const NvsHandle nvs_handle(NVS_NAMESPACE, NVS_READWRITE);
-        if (!nvs_handle) {
-            return ESP_FAIL;
-        }
-
-        config_cache.configured = false;
-        esp_err_t err = nvs_set_u8(nvs_handle.get(), "configured", 0);
-        if (err != ESP_OK) {
-            ESP_LOGE(TAG, "Failed to set configured flag to 0: %s", esp_err_to_name(err));
-            return err;
-        }
-
-        err = nvs_commit(nvs_handle.get());
-        if (err != ESP_OK) {
-            ESP_LOGE(TAG, "Failed to commit NVS reset: %s", esp_err_to_name(err));
-            return err;
-        }
-        ESP_LOGI(TAG, "Configuration flag reset to 0 (Unconfigured).");
-        return ESP_OK;
+        return processConfigUpdate([this](nvs_handle_t handle) {
+             config_cache.configured = false;
+             const esp_err_t err = nvs_set_u8(handle, "configured", 0);
+             if (err != ESP_OK) {
+                 ESP_LOGE(TAG, "Failed to set configured flag to 0: %s", esp_err_to_name(err));
+             }
+             return err;
+        });
     }
 
     esp_err_t ConfigManager::ensureConfiguredAndCommit(nvs_handle_t handle) {
         if (!config_cache.configured) {
             config_cache.configured = true;
-            esp_err_t err = nvs_set_u8(handle, "configured", 1);
+            const esp_err_t err = nvs_set_u8(handle, "configured", 1);
             if (err != ESP_OK) return err;
         }
 
-        esp_err_t err = nvs_commit(handle);
+        const esp_err_t err = nvs_commit(handle);
         if (err != ESP_OK) return err;
-
-        if (err == ESP_OK) {
-            ESP_LOGI(TAG, "Configuration saved successfully.");
-        } else {
-            ESP_LOGE(TAG, "Failed to commit NVS changes: %s", esp_err_to_name(err));
-        }
-
+        ESP_LOGI(TAG, "Configuration saved successfully.");
         return err;
     }
 

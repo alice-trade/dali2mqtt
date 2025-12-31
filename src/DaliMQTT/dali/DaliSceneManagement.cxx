@@ -1,6 +1,6 @@
-#include "DaliSceneManagement.hxx"
-#include "DaliDeviceController.hxx"
-#include "DaliAPI.hxx"
+#include "dali/DaliSceneManagement.hxx"
+#include "dali/DaliDeviceController.hxx"
+#include "dali/DaliAPI.hxx"
 
 namespace daliMQTT
 {

@@ -1,5 +1,5 @@
-#include "SystemControl.hxx"
-#include "ConfigManager.hxx"
+#include "system/SystemControl.hxx"
+#include "system/ConfigManager.hxx"
 #include <esp_ota_ops.h>
 
 namespace daliMQTT {

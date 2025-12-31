@@ -1,4 +1,4 @@
-#include "SyslogConfig.hxx"
+#include "system/SyslogConfig.hxx"
 #include "sdkconfig.h"
 #include <lwip/sockets.h>
 #include <lwip/netdb.h>

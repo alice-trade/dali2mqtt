@@ -1,6 +1,6 @@
 #ifndef DALIMQTT_HA_DISCOVERY_HXX
 #define DALIMQTT_HA_DISCOVERY_HXX
-#include "DaliTypes.hxx"
+#include "dali/DaliTypes.hxx"
 
 namespace daliMQTT
 {

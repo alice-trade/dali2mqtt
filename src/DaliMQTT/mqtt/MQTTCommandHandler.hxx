@@ -1,7 +1,7 @@
 #ifndef DALIMQTT_MQTTCOMMANDHANDLER_HXX
 #define DALIMQTT_MQTTCOMMANDHANDLER_HXX
 
-#include "DaliAPI.hxx"
+#include "dali/DaliAPI.hxx"
 
 namespace daliMQTT {
 

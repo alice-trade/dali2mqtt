@@ -3,7 +3,7 @@
 #include <lwip/ip4_addr.h>
 #include <mdns.h>
 #include "Wifi.hxx"
-#include <ConfigManager.hxx>
+#include <system/ConfigManager.hxx>
 #include <utils/StringUtils.hxx>
 #include "utils/NvsHandle.hxx"
 

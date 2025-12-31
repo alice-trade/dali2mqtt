@@ -1,6 +1,6 @@
-#include "DaliDeviceController.hxx"
-#include <DaliGroupManagement.hxx>
-#include <MQTTClient.hxx>
+#include "dali/DaliDeviceController.hxx"
+#include <dali/DaliGroupManagement.hxx>
+#include <mqtt/MQTTClient.hxx>
 #include "utils/DaliLongAddrConversions.hxx"
 
 namespace daliMQTT {

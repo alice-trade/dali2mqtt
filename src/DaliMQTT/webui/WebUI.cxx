@@ -1,9 +1,9 @@
 #include <sys/stat.h>
 #include <esp_chip_info.h>
 #include <mbedtls/base64.h>
-#include "WebUI.hxx"
+#include "webui/WebUI.hxx"
 #include <utils/StringUtils.hxx>
-#include "ConfigManager.hxx"
+#include "system/ConfigManager.hxx"
 #include "utils/FileHandle.hxx"
 
 

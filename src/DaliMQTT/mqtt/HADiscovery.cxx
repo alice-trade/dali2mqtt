@@ -1,8 +1,8 @@
-#include "HADiscovery.hxx"
-#include <DaliGroupManagement.hxx>
-#include "MQTTClient.hxx"
-#include "ConfigManager.hxx"
-#include "DaliDeviceController.hxx"
+#include "mqtt/HADiscovery.hxx"
+#include <dali/DaliGroupManagement.hxx>
+#include "mqtt/MQTTClient.hxx"
+#include "system/ConfigManager.hxx"
+#include "dali/DaliDeviceController.hxx"
 #include "utils/DaliLongAddrConversions.hxx"
 #include "utils/StringUtils.hxx"
 

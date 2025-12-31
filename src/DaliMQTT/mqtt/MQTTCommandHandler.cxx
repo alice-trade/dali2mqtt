@@ -1,10 +1,10 @@
-#include "MQTTCommandHandler.hxx"
+#include "mqtt/MQTTCommandHandler.hxx"
 #include <utils/StringUtils.hxx>
-#include "ConfigManager.hxx"
-#include "MQTTClient.hxx"
-#include "DaliDeviceController.hxx"
-#include "DaliGroupManagement.hxx"
-#include "DaliSceneManagement.hxx"
+#include "system/ConfigManager.hxx"
+#include "mqtt/MQTTClient.hxx"
+#include "dali/DaliDeviceController.hxx"
+#include "dali/DaliGroupManagement.hxx"
+#include "dali/DaliSceneManagement.hxx"
 #include "utils/DaliLongAddrConversions.hxx"
 
 namespace daliMQTT {
