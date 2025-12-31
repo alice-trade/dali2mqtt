@@ -20,15 +20,9 @@ graph LR
     DALI <--> S1((Switch))
 ```
 
-### Key Specs
-*   **Protocol:** DALI / DALI-2 (Forward & Backward frames).
-*   **Control:** Dimming, Groups, Scenes, Broadcast.
-*   **DT8 Support:** Tunable White (Tc) & RGB (RGBWAF).
-*   **Input Devices:** Event monitoring for buttons and sensors (Instance types).
-
 ## Key Capabilities
 
-*   **Full DALI Control**: Send brightness commands (DACP), ON/OFF, and Scene recall commands to individual devices (short address) and groups (group address).
+*   **DALI Control**: Send brightness commands (DACP), ON/OFF, DT8 commands and Scene recall commands to individual devices (short address) and groups (group address).
 *   **Two-Way Communication**: Poll luminaire status (brightness level, lamp status) and publish this data to MQTT.
 *   **Passive Monitoring**: The bridge constantly "listens" to the DALI bus. If a command is sent from another device (e.g., a wall-mounted DALI controller), the bridge detects this change and sends the updated state to MQTT, ensuring full synchronization.
 *   **DALI Bus Management**:
@@ -229,8 +223,10 @@ cmake --build build --target test-monitor
 .
 ├── support/              # ESP-IDF configuration for ESP chip targets
 ├── scripts/              # Helper CMake scripts
+├── examples/             # Examples
 ├── Kconfig/              # Project compile-time configuration
-├── src/DaliMQTT          # Source code
+├── src/DaliMQX           # JS Library source code
+├── src/DaliMQTT          # Firmware source code
 │   ├── config/           # Configuration Manager
 │   ├── dali/             # High-level DALI API
 │   │   └── driver/       # Low-level DALI driver (gptimer, GPIO)
