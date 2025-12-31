@@ -1,13 +1,13 @@
 # DALI-to-MQTT Bridge for ESP
 
 ![ESP-IDF](https://img.shields.io/badge/ESP--IDF-v5.x-blue)
-![Language](https://img.shields.io/badge/language-C++23-purple)
+![Language](https://img.shields.io/badge/language-C++20-purple)
 
-**daliMQTT** is a full-featured bridge between the DALI lighting control bus and the MQTT protocol, designed for the ESP32 platform using the ESP-IDF framework. This project allows you to integrate professional DALI lighting systems into modern smart home ecosystems such as Home Assistant, Node-RED, and others.
+**dali2mqtt** is a bridge between the DALI lighting control bus and the MQTT protocol, designed for the ESP32 platform using the ESP-IDF framework. This project allows you to integrate professional DALI lighting systems into modern smart home ecosystems such as Home Assistant, Node-RED, and others.
 
 ## Architecture
 
-The **DaliMQTT** firmware runs on an ESP32, acting as a bridge between a standard DALI Bus (requires a physical DALI Driver circuit) and your MQTT Broker.
+The **dali2mqtt** firmware runs on an ESP32-S3/C6/etc. acting as a bridge between a standard DALI Bus (requires a physical DALI Driver circuit) and your MQTT Broker.
 
 ```mermaid
 graph LR
@@ -42,11 +42,11 @@ graph LR
 ## Hardware Requirements
 
 1.  **ESP-based Board**: Any board with an ESP32-S3 or ESP32-C6 module (e.g., ESP32-S3-DevKitC) with Wifi module.
-2.  **DALI Transceiver/Power Supply**: A specialized circuit/device that provides DALI bus power and converts ESP32 logic levels to DALI electrical signals. Examples: Mean Well L-C Bus Power Supply, or custom optocoupler-based solutions.
+2.  **DALI Transceiver/Power Supply**: A specialized circuit/device that provides DALI bus power and converts ESP32 logic levels to DALI electrical signals.
 
 ## Software Requirements
 
-1.  **ESP-IDF**: [Installation Guide](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/index.html).
+1.  **ESP-IDF v5.x**: [Installation Guide](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/index.html).
 2.  **GCC** (xtensa/riscv-esp-elf-g++): The C/C++ compiler provided by ESP-IDF.
 3.  **Git**: To clone the repository.
 4.  **Node.js and npm**: To build the Web UI frontend.
