@@ -32,7 +32,6 @@ static void test_config_save_load_cycle() {
     TEST_ASSERT_EQUAL_STRING("TEST_UNIT_SSID", loaded.wifi_ssid.c_str());
     TEST_ASSERT_EQUAL_UINT32(12345, loaded.dali_poll_interval_ms);
 
-    // Восстанавливаем
     cm.saveMainConfig(original);
 }
 

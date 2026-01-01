@@ -44,7 +44,7 @@ graph LR
 ```
 
 ### Key Specs
-*   **Protocol:** DALI / DALI-2 (Forward & Backward frames)
+*   **Protocol:** DALI (Forward & Backward frames)
 *   **Control:** Dimming, Groups, Scenes, Broadcast
-*   **DT8 Support:** Tunable White (Tc) & RGB (RGBWAF)
-*   **Input Devices:** Event monitoring for buttons and sensors (Instance types).
+*   **Experimental DT8 Support:** Tunable White (Tc) & RGB (RGBWAF)
+*   **Input Devices:** Experimental support for DALI2 Input Events. Event monitoring for buttons and sensors (Instance types).
