@@ -71,8 +71,8 @@ const handleSystemOta = async () => {
 };
 
 const saveConfig = async () => {
-  if (!confirm('Сохранить настройки и перезагрузить устройство?')) {
-        return;
+  if (!confirm('Save settings and reboot device?')) {
+    return;
   }
   loading.value = true;
   message.value = '';
@@ -168,7 +168,7 @@ onMounted(loadConfig);
         <legend>Logging</legend>
         <label for="syslog_enabled">
           <input type="checkbox" id="syslog_enabled" role="switch" v-model="config.syslog_enabled" />
-                  Enable Remote Syslog
+          Enable Remote Syslog
         </label>
         <label for="syslog_server">Syslog Server Address</label>
         <input type="text" id="syslog_server" v-model="config.syslog_server" placeholder="e.g., 192.168.1.100" :disabled="!config.syslog_enabled">

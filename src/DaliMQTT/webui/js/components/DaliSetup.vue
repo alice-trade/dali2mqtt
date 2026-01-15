@@ -3,7 +3,6 @@ import { ref, onMounted, computed } from 'vue';
 import { api } from '../api';
 import DaliSceneEditor from './DaliSceneEditor.vue';
 
-// Типы данных
 interface DaliDevice {
   long_address: string;
   short_address: number;
@@ -14,7 +13,6 @@ type GroupAssignments = Record<string, number[]>; // key: long_address
 type GroupMatrix = Record<string, boolean[]>;    // key: long_address
 type DeviceNames = Record<string, string>;       // key: long_address
 
-// Состояние компонента
 const devices = ref<DaliDevice[]>([]);
 const deviceNames = ref<DeviceNames>({});
 const groupMatrix = ref<GroupMatrix>({});
@@ -79,7 +77,7 @@ const loadData = async () => {
     pristineGroupMatrix.value = JSON.parse(JSON.stringify(matrixClone));
 
   } catch (e) {
-    message.value = 'Не удалось загрузить данные DALI. Проверьте соединение с устройством.';
+    message.value = 'Failed to load DALI data. Check device connection.';
     isError.value = true;
   } finally {
     loading.value = false;
@@ -98,14 +96,14 @@ const pollStatus = (action: 'scan' | 'init' | 'refresh', successMessage: string)
         setTimeout(() => { if (message.value === successMessage) message.value = ''; }, 3000);
       } else {
         let statusText = res.data.status;
-        if (statusText === 'scanning') statusText = 'сканирование';
-        else if (statusText === 'initializing') statusText = 'инициализация';
-        else if (statusText === 'refreshing_groups') statusText = 'обновление групп';
-        message.value = `Выполняется: ${statusText}...`;
+        if (statusText === 'scanning') statusText = 'scanning';
+        else if (statusText === 'initializing') statusText = 'initializing';
+        else if (statusText === 'refreshing_groups') statusText = 'refreshing groups';
+        message.value = `Executing: ${statusText}...`;
       }
     } catch (e) {
       clearInterval(intervalId);
-      message.value = `Ошибка при проверке статуса: ${action}.`;
+      message.value = `Error checking status: ${action}.`;
       isError.value = true;
       actionInProgress.value = '';
     }
@@ -114,12 +112,12 @@ const pollStatus = (action: 'scan' | 'init' | 'refresh', successMessage: string)
 
 const runAction = async (action: 'scan' | 'init' | 'save' | 'refresh', asyncFn: () => Promise<any>, successMessage: string, isAsyncDali: boolean = false) => {
   actionInProgress.value = action;
-  message.value = `Выполняется: ${action}...`;
+  message.value = `Executing: ${action}...`;
   isError.value = false;
   try {
     await asyncFn();
   } catch (e) {
-    message.value = `Произошла ошибка во время выполнения: ${action}.`;
+    message.value = `An error occurred during execution: ${action}.`;
     isError.value = true;
   } finally {
     if (!isError.value) {
@@ -140,18 +138,18 @@ const runAction = async (action: 'scan' | 'init' | 'save' | 'refresh', asyncFn: 
 };
 
 const handleScan = () => {
-  runAction('scan', api.daliScan, 'Сканирование завершено!', true);
+  runAction('scan', api.daliScan, 'Scan completed!', true);
 };
 
 const handleInitialize = () => {
-  if (!confirm('Это действие назначит новые короткие адреса неинициализированным устройствам на шине. Это необратимо. Вы уверены?')) {
+  if (!confirm('This action will assign new short addresses to uninitialized devices on the bus. This is irreversible. Are you sure?')) {
     return;
   }
-  runAction('init', api.daliInitialize, 'Инициализация завершена!', true);
+  runAction('init', api.daliInitialize, 'Initialization completed!', true);
 };
 
 const handleRefreshGroups = () => {
-  runAction('refresh', api.daliRefreshGroups, 'Состояния групп успешно обновлены!', true);
+  runAction('refresh', api.daliRefreshGroups, 'Group states successfully updated!', true);
 };
 
 const handleSaveChanges = () => {
@@ -175,7 +173,7 @@ const handleSaveChanges = () => {
 
   if (savePromises.length === 0) return;
 
-  runAction('save', () => Promise.all(savePromises), 'Изменения успешно сохранены!').then(() => {
+  runAction('save', () => Promise.all(savePromises), 'Changes saved successfully!').then(() => {
     if (!isError.value) {
       pristineDeviceNames.value = JSON.parse(JSON.stringify(deviceNames.value));
       pristineGroupMatrix.value = JSON.parse(JSON.stringify(groupMatrix.value));
@@ -194,16 +192,16 @@ onMounted(loadData);
 <template>
   <article :aria-busy="loading || !!actionInProgress">
     <header>
-      <h3>Управление шиной DALI</h3>
-      <p>Обнаружение устройств, назначение групп и настройка сцен.</p>
+      <h3>DALI Bus Management</h3>
+      <p>Device discovery, group assignment, and scene configuration.</p>
     </header>
 
     <div class="grid">
       <button @click="handleScan" :disabled="!!actionInProgress" :aria-busy="actionInProgress === 'scan'">
-        Сканировать шину
+        Scan Bus
       </button>
       <button @click="handleInitialize" :disabled="!!actionInProgress" :aria-busy="actionInProgress === 'init'" class="contrast">
-        Инициализировать новые устройства
+        Initialize New Devices
       </button>
     </div>
 
@@ -212,29 +210,29 @@ onMounted(loadData);
     <div v-if="!loading">
       <nav>
         <ul>
-          <li><a href="#" :class="{ 'secondary': viewMode !== 'management' }" @click.prevent="viewMode = 'management'">Управление группами</a></li>
-          <li><a href="#" :class="{ 'secondary': viewMode !== 'scenes' }" @click.prevent="viewMode = 'scenes'">Редактор сцен</a></li>
+          <li><a href="#" :class="{ 'secondary': viewMode !== 'management' }" @click.prevent="viewMode = 'management'">Group Management</a></li>
+          <li><a href="#" :class="{ 'secondary': viewMode !== 'scenes' }" @click.prevent="viewMode = 'scenes'">Scene Editor</a></li>
         </ul>
       </nav>
 
       <div v-if="devices.length === 0" class="empty-state">
-        <p><strong>Устройства на шине DALI не найдены.</strong></p>
-        <p>Попробуйте просканировать шину или инициализировать новые балласты, если они подключены.</p>
+        <p><strong>No devices found on DALI bus.</strong></p>
+        <p>Try scanning the bus or initializing new ballasts if connected.</p>
       </div>
 
       <div v-if="viewMode === 'management' && devices.length > 0">
         <div class="save-bar" v-if="isDirty">
-          <span>У вас есть несохраненные изменения.</span>
+          <span>You have unsaved changes.</span>
           <div class="grid">
-            <button class="secondary outline" @click="handleDiscardChanges" :disabled="actionInProgress === 'save'">Отменить</button>
-            <button @click="handleSaveChanges" :aria-busy="actionInProgress === 'save'">Сохранить изменения</button>
+            <button class="secondary outline" @click="handleDiscardChanges" :disabled="actionInProgress === 'save'">Discard</button>
+            <button @click="handleSaveChanges" :aria-busy="actionInProgress === 'save'">Save Changes</button>
           </div>
         </div>
 
         <div class="management-header">
-          <h4>Найдено устройств: ({{ devices.length }}/64)</h4>
+          <h4>Devices Found: ({{ devices.length }}/64)</h4>
           <button @click="handleRefreshGroups" :disabled="!!actionInProgress" :aria-busy="actionInProgress === 'refresh'" class="secondary outline">
-                      Обновить статус групп
+            Refresh Group Status
           </button>
         </div>
         <div class="devices-grid">
@@ -242,7 +240,7 @@ onMounted(loadData);
             <header class="card-header">
               <div style="display: flex; justify-content: space-between; align-items: center;">
                 <div>
-                  <strong>Устройство {{ device.short_address }}</strong>
+                  <strong>Device {{ device.short_address }}</strong>
                   <small class="long-address-text">{{ device.long_address }}</small>
                 </div>
                 <div v-if="device.is_input_device">
@@ -251,10 +249,10 @@ onMounted(loadData);
               </div>
             </header>
             <div class="card-body">
-              <label :for="`name-${device.long_address}`">Имя устройства</label>
-              <input type="text" :id="`name-${device.long_address}`" v-model="deviceNames[device.long_address]" placeholder="например, Свет в офисе 1" />
+              <label :for="`name-${device.long_address}`">Device Name</label>
+              <input type="text" :id="`name-${device.long_address}`" v-model="deviceNames[device.long_address]" placeholder="e.g., Office Light 1" />
 
-              <label>Членство в группах</label>
+              <label>Group Membership</label>
               <div class="group-chips">
                 <template v-for="i in 16" :key="i">
                   <label :for="`check-${device.long_address}-${i-1}`" class="chip" :class="{ 'active': groupMatrix[device.long_address] && groupMatrix[device.long_address][i-1] }">

@@ -6,7 +6,6 @@
   import StatusPage from './components/StatusPage.vue';
   import DevicesPage from './components/DevicesPage.vue';
 
-  // Состояния
   const loggedIn = ref(false);
   const username = ref('admin');
   const password = ref('');

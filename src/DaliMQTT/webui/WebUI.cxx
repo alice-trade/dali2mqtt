@@ -63,7 +63,6 @@ namespace daliMQTT
         return ESP_OK;
     }
 
-    // --- Static File and Auth ---
     void WebUI::set_content_type_from_file(httpd_req_t *req, const char *filepath) {
         const std::string_view fp(filepath);
         if (fp.ends_with(".html")) httpd_resp_set_type(req, "text/html");
@@ -105,7 +104,6 @@ namespace daliMQTT
             if (read_bytes > 0) {
                 if (httpd_resp_send_chunk(req, chunk.data(), read_bytes) != ESP_OK) {
                     ESP_LOGE(TAG, "File sending failed!");
-                    // Важно не возвращать ошибку сразу, а закрыть chunk-ответ
                     httpd_resp_send_chunk(req, nullptr, 0);
                     return ESP_FAIL;
                 }

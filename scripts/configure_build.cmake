@@ -14,7 +14,7 @@ if(NOT CMAKE_BUILD_TYPE IN_LIST SUPPORTED_BUILD_TYPES)
     message(WARNING "You are using an unsupported build type: ${CMAKE_BUILD_TYPE}")
 endif()
 
-set(ESP_BUILD_UTILS_PATH ${CMAKE_CURRENT_SOURCE_DIR})
+set(ESP_BUILD_UTILS_PATH ${CMAKE_CURRENT_SOURCE_DIR}/support/${TARGET})
 
 include(${PROJDIR}/scripts/idf_buildup.cmake)
 

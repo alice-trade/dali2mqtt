@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 project(
         daliMQTT
-        VERSION 0.12.0
+        VERSION 0.13.0
         DESCRIPTION "DALI-to-MQTT bridge for ESP platform"
         LANGUAGES C CXX)
 
@@ -29,7 +29,7 @@ if("${TARGET}" IN_LIST targets)
     message(NOTICE "Target platform: " ${TARGET})
     message(NOTICE "Build type: " ${CMAKE_BUILD_TYPE})
     message(STATUS "Performing configuration stage")
-    add_subdirectory(support/${TARGET})
+    include(scripts/configure_build.cmake)
 else ()
     message(FATAL_ERROR "Call cmake with -DCMAKE_TOOLCHAIN_FILE <toolchain>.")
 endif ()

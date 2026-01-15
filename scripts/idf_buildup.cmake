@@ -28,10 +28,9 @@ set(PLATFORM_MODULES
 )
 
 if(BUILD_UNITY)
-    message("----------UNITY BUILD-------")
+    message("-------- TEST BACKEND BUILD -------")
     list(APPEND PLATFORM_MODULES unity)
 endif()
-
 
 idf_build_component(${ESP_BUILD_UTILS_PATH}/../../Kconfig)
 idf_build_component(${ESP_PROTO_BASEDIR}/mdns)
