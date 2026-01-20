@@ -9,8 +9,9 @@
 
 ## Flashing & First Boot
 
-1.  Flash the `firmware.bin` and `spiffs.bin` (WebUI) to your ESP32.
-2.  On the first boot, the device will be in **Provisioning Mode**.
+1.  Get and unpack firmware [last release](https://github.com/alice-trade/dali2mqtt/releases) to your ESP32;
+2.  Run the flash.sh script to flash the firmware to your ESP;
+3.  On the first boot, the device will be in **Provisioning Mode**.
 
 ### Provisioning Mode
 
