@@ -31,6 +31,7 @@ extern "C" {
 #include <nvs.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include <freertos/ringbuf.h>
 #include <freertos/queue.h>
 #include <freertos/timers.h>
 #include <driver/gpio.h>

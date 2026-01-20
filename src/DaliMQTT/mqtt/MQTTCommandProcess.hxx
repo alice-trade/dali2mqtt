@@ -2,10 +2,7 @@
 #define DALIMQTT_DALICOMMANDPROCESSOR_HXX
 
 namespace daliMQTT {
-    struct MqttMessage {
-        std::string topic;
-        std::string payload;
-    };
+    struct __attribute__((packed)) RingBufHeader;
 
     class MQTTCommandProcess {
         public:
@@ -24,7 +21,7 @@ namespace daliMQTT {
 
             [[noreturn]] static void CommandProcessTask(void* arg);
 
-            QueueHandle_t m_queue{nullptr};
+            RingbufHandle_t m_ringbuf{nullptr};
     };
 } // daliMQTT
 
