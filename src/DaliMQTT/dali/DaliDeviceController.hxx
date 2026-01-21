@@ -50,7 +50,7 @@ namespace daliMQTT
         /**
          * @brief Updates the state of a device in the cache and publishes to MQTT.
          */
-        void updateDeviceState(DaliLongAddress_t longAddr, const DaliState& state);
+        void updateDeviceState(DaliLongAddress_t longAddr, const DaliPublishState& state);
 
         /**
          * @brief Publishes device attributes (extended info) to MQTT.

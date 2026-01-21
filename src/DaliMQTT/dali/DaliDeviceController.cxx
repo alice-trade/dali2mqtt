@@ -89,7 +89,7 @@ namespace daliMQTT
         mqtt.publish(status_topic, payload, 1, true);
     }
 
-    void DaliDeviceController::updateDeviceState(const DaliLongAddress_t longAddr, const DaliState& state) {
+    void DaliDeviceController::updateDeviceState(const DaliLongAddress_t longAddr, const DaliPublishState& state) {
         std::lock_guard<std::mutex> lock(m_devices_mutex);
         const auto it = m_devices.find(longAddr);
         if (it != m_devices.end()) {
@@ -581,7 +581,7 @@ namespace daliMQTT
 
     [[noreturn]] void DaliDeviceController::daliSyncTask(void* pvParameters) {
         auto* self = static_cast<DaliDeviceController*>(pvParameters);
-        constexpr int64_t NVS_SAVE_DEBOUNCE_MS = 20000;
+        constexpr int64_t NVS_SAVE_DEBOUNCE_MS = 60000;
         ESP_LOGI(TAG, "Dali Adaptive Sync Task Started.");
 
         const auto config = ConfigManager::getInstance().getConfig();
@@ -651,7 +651,7 @@ namespace daliMQTT
                         std::lock_guard<std::mutex> lock(self->m_devices_mutex);
                         devices_snapshot = self->m_devices;
                     }
-                    std::map<uint8_t, DaliState> group_sync_states;
+                    std::map<uint8_t, DaliPublishState> group_sync_states;
                     for (const auto& [long_addr, groups] : all_assignments) {
                         if (!devices_snapshot.contains(long_addr)) continue;
                         const auto& dev = devices_snapshot.at(long_addr);
@@ -660,7 +660,7 @@ namespace daliMQTT
                         for (uint8_t group = 0; group < 16; ++group) {
                             if (groups.test(group)) {
                                 if (!group_sync_states.contains(group)) {
-                                    group_sync_states[group] = DaliState{ .level = 0, .status_byte = std::nullopt, .color_temp = std::nullopt, .rgb = std::nullopt };
+                                    group_sync_states[group] = DaliPublishState{ .level = 0, .status_byte = std::nullopt, .color_temp = std::nullopt, .rgb = std::nullopt };
                                 }
 
                                 auto& g_state = group_sync_states[group];

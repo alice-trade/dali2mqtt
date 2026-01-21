@@ -13,11 +13,11 @@ namespace daliMQTT {
     static std::atomic<bool> g_mqtt_bus_busy{false};
 
     void MQTTCommandHandler::publishLightState(dali_addressType_t addr_type, uint8_t target_id,
-                                               const std::string &state_str, const DaliState& state_data) {
+                                               const std::string &state_str, const DaliPublishState& state_data) {
         auto &device_controller = DaliDeviceController::getInstance();
 
         auto update_device = [&](const DaliLongAddress_t long_addr) {
-            DaliState devState = state_data;
+            DaliPublishState devState = state_data;
 
             if (state_str == "OFF") {
                 devState.level = 0;
@@ -30,7 +30,7 @@ namespace daliMQTT {
         };
 
         if (addr_type == DALI_ADDRESS_TYPE_GROUP) {
-            DaliState groupState = state_data;
+            DaliPublishState groupState = state_data;
             if (state_str == "ON" && !groupState.level.has_value()) {
                 auto grp = DaliGroupManagement::getInstance().getGroupState(target_id);
                 groupState.level = (grp.last_level > 0) ? grp.last_level : 254;
@@ -108,7 +108,7 @@ namespace daliMQTT {
         if (!root) return;
 
         auto &dali = DaliAdapter::getInstance();
-        DaliState targetState;
+        DaliPublishState targetState;
         std::optional<bool> target_on_state;
 
         cJSON *state_item = cJSON_GetObjectItem(root, "state");
@@ -143,7 +143,7 @@ namespace daliMQTT {
             }
         }
         if (targetState.color_temp.has_value() || targetState.rgb.has_value()) {
-            DaliState stateUpdateForMode;
+            DaliPublishState stateUpdateForMode;
 
             if (targetState.color_temp.has_value()) {
                 dali.setDT8ColorTemp(addr_type, target_id, *targetState.color_temp);

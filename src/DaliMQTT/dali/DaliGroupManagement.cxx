@@ -267,7 +267,7 @@ namespace daliMQTT
             publishDeviceGroupState(longAddr, groups);
         }
     }
-    void DaliGroupManagement::updateGroupState(const uint8_t group_id, const DaliState& state) {
+    void DaliGroupManagement::updateGroupState(const uint8_t group_id, const DaliPublishState& state) {
         if (group_id >= 16) return;
 
         bool changed = false;

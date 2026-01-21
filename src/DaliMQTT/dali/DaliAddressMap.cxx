@@ -40,29 +40,31 @@ namespace daliMQTT
         short_to_long.clear();
 
         for (const auto& record : mappings) {
-            DaliDevice dev;
-            dev.long_address = record.long_address;
-            dev.short_address = record.short_address;
-
-            if (record.device_type != 0xFF) {
-                dev.device_type = record.device_type;
+            if (record.is_input_device) {
+                InputDevice dev;
+                dev.long_address = record.long_address;
+                dev.short_address = record.short_address;
+                dev.gtin = std::string(record.gtin, strnlen(record.gtin, GTIN_STORAGE_SIZE));
+                dev.available = false;
+                devices.emplace(record.long_address, dev);
+            } else {
+                ControlGear dev;
+                dev.long_address = record.long_address;
+                dev.short_address = record.short_address;
+                dev.gtin = std::string(record.gtin, strnlen(record.gtin, GTIN_STORAGE_SIZE));
+                if (record.device_type != 0xFF) dev.device_type = record.device_type;
+                dev.supports_rgb = record.supports_rgb;
+                dev.supports_tc = record.supports_tc;
+                dev.min_level = record.min_level;
+                dev.max_level = record.max_level;
+                dev.power_on_level = record.power_on_level;
+                dev.system_failure_level = record.system_failure_restore_level;
+                if (dev.device_type.has_value() || !dev.gtin.empty()) {
+                    dev.static_data_loaded = true;
+                }
+                dev.available = false;
+                devices.emplace(record.long_address, dev);
             }
-
-            dev.gtin = std::string(record.gtin, strnlen(record.gtin, GTIN_STORAGE_SIZE));
-            dev.is_input_device = record.is_input_device;
-
-            dev.supports_rgb = record.supports_rgb;
-            dev.supports_tc = record.supports_tc;
-
-            dev.min_level = record.min_level;
-            dev.max_level = record.max_level;
-            dev.power_on_level = record.power_on_level;
-            dev.system_failure_level = record.system_failure_restore_level;
-            if (dev.device_type.has_value() || !dev.gtin.empty()) {
-                dev.static_data_loaded = true;
-            }
-
-            devices[record.long_address] = dev;
             short_to_long[record.short_address] = record.long_address;
         }
         
@@ -79,25 +81,32 @@ namespace daliMQTT
 
         std::vector<AddressMapping> mappings;
         mappings.reserve(devices.size());
-        for (const auto& [long_addr, device] : devices) {
+        for (const auto& device_var : devices | std::views::values) {
             AddressMapping record{};
-            record.long_address = long_addr;
-            record.short_address = device.short_address;
-            record.device_type = device.device_type.value_or(0xFF);
-            record.supports_rgb = device.supports_rgb;
-            record.supports_tc = device.supports_tc;
-            record.is_input_device = device.is_input_device;
-            record.min_level = device.min_level;
-            record.max_level = device.max_level;
-            record.power_on_level = device.power_on_level;
-            record.system_failure_restore_level = device.system_failure_level;
-            record._padding = 0;
-            if (!device.gtin.empty()) {
-                strncpy(record.gtin, device.gtin.c_str(), GTIN_STORAGE_SIZE - 1);
-                record.gtin[GTIN_STORAGE_SIZE - 1] = '\0';
+            const auto& identity = getIdentity(device_var);
+
+            record.long_address = identity.long_address;
+            record.short_address = identity.short_address;
+            if (!identity.gtin.empty()) {
+                strncpy(record.gtin, identity.gtin.c_str(), GTIN_STORAGE_SIZE - 1);
+            }
+
+            if (std::holds_alternative<InputDevice>(device_var)) {
+                record.is_input_device = true;
+                record.device_type = 0xFF;
+            } else if (const auto* gear = std::get_if<ControlGear>(&device_var)) {
+                record.is_input_device = false;
+                record.device_type = gear->device_type.value_or(0xFF);
+                record.supports_rgb = gear->supports_rgb;
+                record.supports_tc = gear->supports_tc;
+                record.min_level = gear->min_level;
+                record.max_level = gear->max_level;
+                record.power_on_level = gear->power_on_level;
+                record.system_failure_restore_level = gear->system_failure_level;
             }
             mappings.push_back(record);
         }
+
 
         esp_err_t err = nvs_set_blob(nvs_handle.get(), MAP_KEY, mappings.data(), mappings.size() * sizeof(AddressMapping));
         if (err != ESP_OK) {

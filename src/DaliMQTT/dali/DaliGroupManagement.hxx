@@ -38,7 +38,7 @@ namespace daliMQTT
         [[nodiscard]] DaliGroup getGroupState(uint8_t group_id) const;
 
         /** Updates the state of a group. */
-        void updateGroupState(uint8_t group_id, const DaliState& state);
+        void updateGroupState(uint8_t group_id, const DaliPublishState& state);
 
         /** Restores the group level. */
         void restoreGroupLevel(uint8_t group_id);

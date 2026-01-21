@@ -1,15 +1,18 @@
 #ifndef DALIMQTT_DALITYPES_HXX
 #define DALIMQTT_DALITYPES_HXX
+#include "dali/DaliControlGear.hxx"
+#include "dali/DaliInputDevice.hxx"
 
 namespace daliMQTT
 {
     // Dali address Type
-    typedef enum {
+    using dali_addressType_t = enum
+    {
         DALI_ADDRESS_TYPE_SHORT,
         DALI_ADDRESS_TYPE_GROUP,
         DALI_ADDRESS_TYPE_BROADCAST,
         DALI_ADDRESS_TYPE_SPECIAL_CMD
-    } dali_addressType_t;
+    };
 
     // Dali frame structure
     struct dali_frame_t {
@@ -18,64 +21,29 @@ namespace daliMQTT
         bool is_backward_frame;
     };
 
-    struct DaliRGB {
-        uint8_t r{0};
-        uint8_t g{0};
-        uint8_t b{0};
-        bool operator==(const DaliRGB& other) const {
-            return r == other.r && g == other.g && b == other.b;
-        }
-        bool operator!=(const DaliRGB& other) const {
-            return !(*this == other);
-        }
-    };
-    enum class DaliColorMode {
-        Unknown,
-        Tc,     // Tunable White
-        Rgb     // RGB / RGBW
-    };
-    struct DaliState {
+    struct DaliPublishState {
         std::optional<uint8_t> level;
         std::optional<uint8_t> status_byte;
         std::optional<uint16_t> color_temp;
         std::optional<DaliRGB> rgb;
         std::optional<DaliColorMode> active_mode;
     };
+    using DaliDevice = std::variant<ControlGear, InputDevice>;
 
-    // 24bit long dali addr type
-    using DaliLongAddress_t = uint32_t;
+    using DaliLongAddrStr = std::array<char, 7>;
 
-    struct DaliDevice {
-        DaliLongAddress_t long_address{};     // 24-bit DALI Long (random) Address
-        uint8_t short_address{};              // Short addr
-
-        uint8_t current_level{0};             // Current Level
-        uint8_t last_level{254};              // Last Level
-        uint8_t status_byte{0};               // Current status
-
-        std::optional<uint8_t> device_type{}; // Device Type
-        bool is_input_device{false};          // Input Device flag
-        std::string gtin{};                   // GTIN
-
-        uint8_t min_level{1};                 // Default DALI min
-        uint8_t max_level{254};               // Default DALI max
-        uint8_t power_on_level{254};          // Level after power cycle
-        uint8_t system_failure_level{254};    // System Failure Level
-
-        std::optional<uint16_t> min_mireds{}; // Min CT
-        std::optional<uint16_t> max_mireds{}; // Max CT
-        std::optional<uint16_t> color_temp{}; // Current CT in Mireds
-        std::optional<DaliRGB> rgb{};         // Current RGB
-        DaliColorMode active_mode{DaliColorMode::Tc};
-
-        bool supports_rgb{false};
-        bool supports_tc{false};
-
-        bool available{false};                // Runtime Availability flag
-        bool initial_sync_needed{true};       // First sync flag
-        bool static_data_loaded{false};       // Static data load flag
-        int64_t last_color_poll_ts{0};
+    struct GetIdentityVisitor {
+        const DeviceIdentity& operator()(const DeviceIdentity& d) const { return d; }
+        DeviceIdentity& operator()(DeviceIdentity& d) const { return d; }
     };
+
+    inline const DeviceIdentity& getIdentity(const DaliDevice& dev) {
+        return std::visit(GetIdentityVisitor{}, dev);
+    }
+
+    inline DeviceIdentity& getIdentity(DaliDevice& dev) {
+        return std::visit(GetIdentityVisitor{}, dev);
+    }
 
     struct DaliGroup {
         uint8_t id{};                    // Group ID
