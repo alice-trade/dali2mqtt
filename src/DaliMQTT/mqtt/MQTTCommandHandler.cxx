@@ -107,7 +107,7 @@ namespace daliMQTT {
         cJSON *root = cJSON_Parse(data.c_str());
         if (!root) return;
 
-        auto &dali = DaliAPI::getInstance();
+        auto &dali = DaliAdapter::getInstance();
         DaliState targetState;
         std::optional<bool> target_on_state;
 
@@ -331,9 +331,9 @@ namespace daliMQTT {
             bool check_reply = (tag_item != nullptr);
             std::optional<uint8_t> result;
 
-            result = DaliAPI::getInstance().sendRaw(raw_data, bits, check_reply);
+            result = DaliAdapter::getInstance().sendRaw(raw_data, bits, check_reply);
             if (repeat) {
-                if (auto res2 = DaliAPI::getInstance().sendRaw(raw_data, bits, check_reply); res2.has_value())
+                if (auto res2 = DaliAdapter::getInstance().sendRaw(raw_data, bits, check_reply); res2.has_value())
                     result = res2;
             }
 

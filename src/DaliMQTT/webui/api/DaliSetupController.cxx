@@ -4,7 +4,7 @@
 #include <utils/StringUtils.hxx>
 #include "system/ConfigManager.hxx"
 #include "webui/WebUI.hxx"
-#include "dali/DaliAPI.hxx"
+#include "dali/DaliAdapter.hxx"
 #include "utils/DaliLongAddrConversions.hxx"
 
 namespace daliMQTT {

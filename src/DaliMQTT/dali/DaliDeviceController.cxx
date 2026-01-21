@@ -3,7 +3,7 @@
 #include <utils/StringUtils.hxx>
 #include "system/ConfigManager.hxx"
 #include "dali/DaliAddressMap.hxx"
-#include "dali/DaliAPI.hxx"
+#include "dali/DaliAdapter.hxx"
 #include "mqtt/MQTTClient.hxx"
 #include "utils/DaliLongAddrConversions.hxx"
 #include <esp_timer.h>
@@ -13,7 +13,7 @@ namespace daliMQTT
 
     void DaliDeviceController::init() {
         ESP_LOGI(TAG, "Initializing DALI Device Controller...");
-        if (!DaliAPI::getInstance().isInitialized()) {
+        if (!DaliAdapter::getInstance().isInitialized()) {
             ESP_LOGW(TAG, "DALI Driver not initialized. Device discovery skipped.");
             return;
         }
@@ -33,7 +33,7 @@ namespace daliMQTT
             return;
         }
 
-        auto& dali_api = DaliAPI::getInstance();
+        auto& dali_api = DaliAdapter::getInstance();
         if (dali_api.isInitialized()) {
             dali_api.startSniffer();
             xTaskCreate(daliEventHandlerTask, "dali_event_handler", 4096, this, 5, &m_event_handler_task);
@@ -184,7 +184,7 @@ namespace daliMQTT
 
     bool DaliDeviceController::validateAddressMap() {
         ESP_LOGI(TAG, "Validating cached DALI address map...");
-        auto& dali = DaliAPI::getInstance();
+        auto& dali = DaliAdapter::getInstance();
 
         std::vector<AddressMapping> devices_to_validate;
         {
@@ -234,7 +234,7 @@ namespace daliMQTT
 
     [[noreturn]] void DaliDeviceController::daliEventHandlerTask(void* pvParameters) {
         auto* self = static_cast<DaliDeviceController*>(pvParameters);
-        const auto& dali_api = DaliAPI::getInstance();
+        const auto& dali_api = DaliAdapter::getInstance();
         const QueueHandle_t queue = dali_api.getEventQueue();
         dali_frame_t frame;
 
@@ -399,7 +399,7 @@ namespace daliMQTT
             return;
         }
 
-        auto& dali = DaliAPI::getInstance();
+        auto& dali = DaliAdapter::getInstance();
         const auto level_opt = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddr, DALI_COMMAND_QUERY_ACTUAL_LEVEL);
         const bool is_device_responding = level_opt.has_value();
         {
@@ -691,25 +691,25 @@ namespace daliMQTT
     }
 
     std::bitset<64> DaliDeviceController::performFullInitialization() {
-        if (!DaliAPI::getInstance().isInitialized()) {
+        if (!DaliAdapter::getInstance().isInitialized()) {
             ESP_LOGE(TAG, "Cannot initialize DALI bus: DALI driver is not initialized (device might be in provisioning mode).");
             return {};
         }
-        DaliAPI::getInstance().initializeBus();
+        DaliAdapter::getInstance().initializeBus();
         const std::bitset<64> devices = discoverAndMapDevices();
         return devices;
     }
     std::bitset<64> DaliDeviceController::perform24BitDeviceInitialization() {
-        if (!DaliAPI::getInstance().isInitialized()) {
+        if (!DaliAdapter::getInstance().isInitialized()) {
             ESP_LOGE(TAG, "Cannot initialize DALI bus: DALI driver is not initialized.");
             return {};
         }
-        DaliAPI::getInstance().initialize24BitDevicesBus();
+        DaliAdapter::getInstance().initialize24BitDevicesBus();
         const std::bitset<64> devices = discoverAndMapDevices();
         return devices;
     }
     std::bitset<64> DaliDeviceController::performScan() {
-        if (!DaliAPI::getInstance().isInitialized()) {
+        if (!DaliAdapter::getInstance().isInitialized()) {
             ESP_LOGE(TAG, "Cannot scan DALI bus: DALI driver is not initialized (device might be in provisioning mode).");
             return {};
         }
@@ -720,7 +720,7 @@ namespace daliMQTT
     
     std::bitset<64> DaliDeviceController::discoverAndMapDevices() {
         ESP_LOGI(TAG, "Starting DALI device discovery and mapping...");
-        auto& dali = DaliAPI::getInstance();
+        auto& dali = DaliAdapter::getInstance();
         std::map<DaliLongAddress_t, DaliDevice> new_devices;
         std::map<uint8_t, DaliLongAddress_t> new_short_to_long_map;
         std::bitset<64> found_devices;
@@ -783,7 +783,7 @@ namespace daliMQTT
     }
 
     std::optional<DaliLongAddress_t> DaliDeviceController::getInputDeviceLongAddress(const uint8_t shortAddress) const {
-        auto& dali = DaliAPI::getInstance();
+        auto& dali = DaliAdapter::getInstance();
         auto readByte = [&](uint8_t offset) -> std::optional<uint8_t> {
             // 1. SET DTR1 (Bank 0)
             dali.sendInputDeviceCommand(shortAddress, 0x31, 0x00);

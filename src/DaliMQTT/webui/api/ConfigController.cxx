@@ -1,6 +1,6 @@
 #include <webui/WebUI.hxx>
 #include "system/ConfigManager.hxx"
-#include "dali/DaliAPI.hxx"
+#include "dali/DaliAdapter.hxx"
 
 namespace daliMQTT {
     static constexpr char TAG[] = "WebUIConfig";

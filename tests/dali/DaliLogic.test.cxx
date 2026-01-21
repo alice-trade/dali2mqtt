@@ -1,5 +1,5 @@
 #include "unity.h"
-#include "dali/DaliAPI.hxx"
+#include "dali/DaliAdapter.hxx"
 #include "utils/DaliLongAddrConversions.hxx"
 #include "dali/DaliDeviceController.hxx"
 

@@ -2,7 +2,7 @@
 #include <esp_system.h>
 #include <esp_timer.h>
 #include <utils/StringUtils.hxx>
-#include "dali/DaliAPI.hxx"
+#include "dali/DaliAdapter.hxx"
 #include "dali/DaliDeviceController.hxx"
 #include "webui/WebUI.hxx"
 #include "wifi/Wifi.hxx"
@@ -56,7 +56,7 @@ namespace daliMQTT {
         const std::string firmware_version = utils::stringFormat("%s (built at: %s)", DALIMQTT_VERSION, DALIMQTT_CONFIGURED_TIMESTAMP);
 
         // Get DALI status
-        const auto& dali_api = DaliAPI::getInstance();
+        const auto& dali_api = DaliAdapter::getInstance();
         std::string dali_status;
         if (dali_api.isInitialized()) {
             const auto discovered_devices = DaliDeviceController::getInstance().getDevices().size();

@@ -1,6 +1,6 @@
 #include "dali/DaliSceneManagement.hxx"
 #include "dali/DaliDeviceController.hxx"
-#include "dali/DaliAPI.hxx"
+#include "dali/DaliAdapter.hxx"
 
 namespace daliMQTT
 {
@@ -16,7 +16,7 @@ namespace daliMQTT
             return ESP_ERR_INVALID_ARG;
         }
         ESP_LOGI(TAG, "Activating DALI Scene %d", sceneId);
-        auto& dali = DaliAPI::getInstance();
+        auto& dali = DaliAdapter::getInstance();
         return dali.sendCommand(DALI_ADDRESS_TYPE_BROADCAST, 0, DALI_COMMAND_GO_TO_SCENE_0 + sceneId);
     }
 
@@ -26,7 +26,7 @@ namespace daliMQTT
             return ESP_ERR_INVALID_ARG;
         }
         ESP_LOGI(TAG, "Saving configuration for DALI Scene %d for %zu devices", sceneId, levels.size());
-        auto& dali = DaliAPI::getInstance();
+        auto& dali = DaliAdapter::getInstance();
 
         for (const auto& [addr, level] : levels) {
             ESP_LOGD(TAG, "Setting device %d to level %d for scene %d", addr, level, sceneId);
@@ -64,7 +64,7 @@ namespace daliMQTT
         SceneDeviceLevels results;
         if (sceneId >= 16) return results;
 
-        auto& dali = DaliAPI::getInstance();
+        auto& dali = DaliAdapter::getInstance();
         auto devices = DaliDeviceController::getInstance().getDevices();
 
         ESP_LOGI(TAG, "Querying levels for Scene %d...", sceneId);

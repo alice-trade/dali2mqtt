@@ -2,7 +2,7 @@
 #include <utils/StringUtils.hxx>
 #include "system/ConfigManager.hxx"
 #include "dali/DaliDeviceController.hxx"
-#include "dali/DaliAPI.hxx"
+#include "dali/DaliAdapter.hxx"
 #include "mqtt/MQTTClient.hxx"
 #include "utils/DaliLongAddrConversions.hxx"
 
@@ -112,7 +112,7 @@ namespace daliMQTT
             m_assignments[longAddress].set(group, assigned);
         }
         
-        auto& dali = DaliAPI::getInstance();
+        auto& dali = DaliAdapter::getInstance();
         esp_err_t result;
 
         if (assigned) {
@@ -174,7 +174,7 @@ namespace daliMQTT
             m_assignments = newAssignments;
         }
 
-        auto& dali = DaliAPI::getInstance();
+        auto& dali = DaliAdapter::getInstance();
         for (const auto& [short_address, group, assign] : commands_to_send) {
             if (assign) {
                 ESP_LOGI(TAG, "Sync: Adding device %d to group %d", short_address, group);
@@ -200,7 +200,7 @@ namespace daliMQTT
         }
 
         GroupAssignments new_assignments;
-        auto& dali = DaliAPI::getInstance();
+        auto& dali = DaliAdapter::getInstance();
 
         for (const auto& [long_addr, device] : devices) {
             if (!device.available) continue;

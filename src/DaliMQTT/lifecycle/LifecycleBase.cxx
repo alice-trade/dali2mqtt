@@ -1,5 +1,5 @@
 #include "system/ConfigManager.hxx"
-#include "dali/DaliAPI.hxx"
+#include "dali/DaliAdapter.hxx"
 #include "mqtt/MQTTCommandProcess.hxx"
 #include "system/SystemControl.hxx"
 #include "dali/DaliGroupManagement.hxx"
@@ -57,7 +57,7 @@ namespace daliMQTT
             MQTTClient::getInstance().disconnect();
         };
 
-        auto& dali_api = DaliAPI::getInstance();
+        auto& dali_api = DaliAdapter::getInstance();
         dali_api.init(static_cast<gpio_num_t>(CONFIG_DALI2MQTT_DALI_RX_PIN), static_cast<gpio_num_t>(CONFIG_DALI2MQTT_DALI_TX_PIN));
 
         auto& dali_manager = DaliDeviceController::getInstance();
