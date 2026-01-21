@@ -28,23 +28,28 @@ namespace daliMQTT {
         auto devices = DaliDeviceController::getInstance().getDevices();
         cJSON *root = cJSON_CreateArray();
 
-        for (const auto& [long_addr, device] : devices) {
+        for (const auto& [long_addr, dev] : devices) {
             cJSON* device_obj = cJSON_CreateObject();
             const auto addr_str = utils::longAddressToString(long_addr);
-
             cJSON_AddStringToObject(device_obj, "long_address", addr_str.data());
-            cJSON_AddNumberToObject(device_obj, "short_address", device.short_address);
 
-            cJSON_AddNumberToObject(device_obj, "level", device.current_level);
-            cJSON_AddBoolToObject(device_obj, "available", device.available);
-            cJSON_AddBoolToObject(device_obj, "is_input_device", device.is_input_device);
-            const bool is_failure = (device.status_byte >> 1) & 0x01;
-            cJSON_AddBoolToObject(device_obj, "lamp_failure", is_failure);
+            if (auto* gear = std::get_if<ControlGear>(&dev)) {
+                cJSON_AddNumberToObject(device_obj, "short_address", gear->short_address);
 
-            if (device.device_type.has_value()) {
-                cJSON_AddNumberToObject(device_obj, "dt", device.device_type.value());
-            } else {
-                cJSON_AddNullToObject(device_obj, "dt");
+                cJSON_AddNumberToObject(device_obj, "level", gear->current_level);
+                cJSON_AddBoolToObject(device_obj, "available", gear->available);
+                const bool is_failure = (gear->status_byte >> 1) & 0x01;
+                cJSON_AddBoolToObject(device_obj, "lamp_failure", is_failure);
+
+                if (gear->device_type.has_value()) {
+                    cJSON_AddNumberToObject(device_obj, "dt", gear->device_type.value());
+                } else {
+                    cJSON_AddNullToObject(device_obj, "dt");
+                }
+            }
+            if (auto* id = std::get_if<InputDevice>(&dev)) {
+                cJSON_AddNumberToObject(device_obj, "short_address", id->short_address);
+                // TODO: WEBUI REWORK DEVICES PAGE
             }
 
             cJSON_AddItemToArray(root, device_obj);

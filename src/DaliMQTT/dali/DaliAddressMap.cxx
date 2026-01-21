@@ -53,8 +53,12 @@ namespace daliMQTT
                 dev.short_address = record.short_address;
                 dev.gtin = std::string(record.gtin, strnlen(record.gtin, GTIN_STORAGE_SIZE));
                 if (record.device_type != 0xFF) dev.device_type = record.device_type;
-                dev.supports_rgb = record.supports_rgb;
-                dev.supports_tc = record.supports_tc;
+                if (record.supports_rgb || record.supports_tc) {
+                    ColorFeatures cf;
+                    cf.supports_rgb = record.supports_rgb;
+                    cf.supports_tc = record.supports_tc;
+                    dev.color = cf;
+                }
                 dev.min_level = record.min_level;
                 dev.max_level = record.max_level;
                 dev.power_on_level = record.power_on_level;
@@ -97,8 +101,13 @@ namespace daliMQTT
             } else if (const auto* gear = std::get_if<ControlGear>(&device_var)) {
                 record.is_input_device = false;
                 record.device_type = gear->device_type.value_or(0xFF);
-                record.supports_rgb = gear->supports_rgb;
-                record.supports_tc = gear->supports_tc;
+                if (gear->color.has_value()) {
+                    record.supports_rgb = gear->color->supports_rgb;
+                    record.supports_tc = gear->color->supports_tc;
+                } else {
+                    record.supports_rgb = false;
+                    record.supports_tc = false;
+                }
                 record.min_level = gear->min_level;
                 record.max_level = gear->max_level;
                 record.power_on_level = gear->power_on_level;

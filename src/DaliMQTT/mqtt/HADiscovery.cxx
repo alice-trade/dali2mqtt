@@ -31,9 +31,10 @@ namespace daliMQTT
 
     void MQTTHomeAssistantDiscovery::publishAllDevices() {
         auto devices = DaliDeviceController::getInstance().getDevices();
-        for (const auto& device : devices | std::views::values) {
-            if (device.is_input_device) continue;
-            publishLight(device.long_address);
+        for (const auto& [long_addr,dev] : devices) {
+            if (std::holds_alternative<InputDevice>(dev)) continue;
+
+            publishLight(long_addr);
         }
 
         for (uint8_t i = 0; i < 16; ++i) {
@@ -65,11 +66,15 @@ namespace daliMQTT
         cJSON* root = cJSON_CreateObject();
         if (!root) return;
 
-        DaliDevice dev_copy;
+        ControlGear dev_copy;
         {
-            auto devices = DaliDeviceController::getInstance().getDevices();
+            const auto devices = DaliDeviceController::getInstance().getDevices();
             if (devices.contains(long_addr)) {
-                dev_copy = devices.at(long_addr);
+                if (const auto* gear = std::get_if<ControlGear>(&devices.at(long_addr))) {
+                    dev_copy = *gear;
+                } else {
+                    return;
+                }
             } else {
                 return;
             }
@@ -82,26 +87,17 @@ namespace daliMQTT
         cJSON_AddStringToObject(root, "state_topic", utils::stringFormat("%s/light/%s/state", base_topic.c_str(), addr_str.c_str()).c_str());
         cJSON_AddTrueToObject(root, "brightness");
 
-        if (dev_copy.device_type.has_value() && dev_copy.device_type.value() == 8) {
+        if (dev_copy.device_type.has_value() && dev_copy.device_type.value() == 8 && dev_copy.color.has_value()) {
+            const auto& c = dev_copy.color.value();
             cJSON* color_modes = cJSON_CreateArray();
-            bool mode_added = false;
-            if (dev_copy.supports_tc) {
+            if (c.supports_tc) {
                 cJSON_AddItemToArray(color_modes, cJSON_CreateString("color_temp"));
-                cJSON_AddNumberToObject(root, "min_mireds", 153); // ~6500K
-                cJSON_AddNumberToObject(root, "max_mireds", 500); // ~2000K
-                mode_added = true;
+                cJSON_AddNumberToObject(root, "min_mireds", c.min_mireds.value_or(153)); // ~6500K
+                cJSON_AddNumberToObject(root, "max_mireds", c.max_mireds.value_or(500)); // ~2000K
             }
 
-            if (dev_copy.supports_rgb) {
+            if (c.supports_rgb) {
                 cJSON_AddItemToArray(color_modes, cJSON_CreateString("rgb"));
-                mode_added = true;
-            }
-
-            if (!mode_added) {
-                cJSON_AddItemToArray(color_modes, cJSON_CreateString("color_temp"));
-                cJSON_AddItemToArray(color_modes, cJSON_CreateString("rgb"));
-                cJSON_AddNumberToObject(root, "min_mireds", 153);
-                cJSON_AddNumberToObject(root, "max_mireds", 500);
             }
 
             cJSON_AddItemToObject(root, "supported_color_modes", color_modes);
@@ -171,9 +167,13 @@ namespace daliMQTT
             for (const auto& [long_addr, groups] : assignments) {
                 if (groups.test(group_id)) {
                     if (devices.contains(long_addr)) {
-                        const auto& dev = devices.at(long_addr);
-                        if (dev.supports_tc) group_supports_tc = true;
-                        if (dev.supports_rgb) group_supports_rgb = true;
+                        if (auto* gear = std::get_if<ControlGear>(&devices.at(long_addr))) {
+                            if (gear->color.has_value())
+                            {
+                                if (gear->color->supports_tc) group_supports_tc = true;
+                                if (gear->color->supports_rgb) group_supports_rgb = true;
+                            }
+                        }
                     }
                 }
             }

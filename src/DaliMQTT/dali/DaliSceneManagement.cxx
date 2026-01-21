@@ -70,18 +70,19 @@ namespace daliMQTT
         ESP_LOGI(TAG, "Querying levels for Scene %d...", sceneId);
 
         for (const auto& device : devices | std::views::values) {
-            if (!device.available) continue;
+            auto* gear = std::get_if<ControlGear>(&device);
+            if (!gear->available) continue;
 
             auto level_opt = dali.sendQuery(
                 DALI_ADDRESS_TYPE_SHORT,
-                device.short_address,
+                gear->short_address,
                 DALI_COMMAND_QUERY_SCENE_LEVEL_0 + sceneId
             );
 
             if (level_opt.has_value()) {
-                results[device.short_address] = level_opt.value();
+                results[gear->short_address] = level_opt.value();
             } else {
-                results[device.short_address] = 255;
+                results[gear->short_address] = 255;
             }
             vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
         }

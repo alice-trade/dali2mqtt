@@ -203,18 +203,21 @@ namespace daliMQTT
         auto& dali = DaliAdapter::getInstance();
 
         for (const auto& [long_addr, device] : devices) {
-            if (!device.available) continue;
+            const auto& id = getIdentity(device);
+            if (!id.available) continue;
 
-            if (auto groups_opt = dali.getDeviceGroups(device.short_address)) {
-                new_assignments[long_addr] = *groups_opt;
-                ESP_LOGD(TAG, "Device %s (SA %d) has group mask: %s",
-                         utils::longAddressToString(long_addr).data(),
-                         device.short_address,
-                         groups_opt->to_string().c_str());
-            } else {
-                ESP_LOGW(TAG, "Failed to get group info for device %s (SA %d)",
-                         utils::longAddressToString(long_addr).data(),
-                         device.short_address);
+            if (std::holds_alternative<ControlGear>(device)) {
+                if (auto groups_opt = dali.getDeviceGroups(id.short_address)) {
+                    new_assignments[long_addr] = *groups_opt;
+                    ESP_LOGD(TAG, "Device %s (SA %d) has group mask: %s",
+                             utils::longAddressToString(long_addr).data(),
+                             id.short_address,
+                             groups_opt->to_string().c_str());
+                } else {
+                    ESP_LOGW(TAG, "Failed to get group info for device %s (SA %d)",
+                             utils::longAddressToString(long_addr).data(),
+                             id.short_address);
+                }
             }
             vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
         }
