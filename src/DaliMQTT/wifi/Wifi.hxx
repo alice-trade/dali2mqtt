@@ -22,16 +22,12 @@ namespace daliMQTT
             return instance;
         }
 
-        // Инициализация сетевого стека
         esp_err_t init();
 
-        // Подключение к точке доступа
         esp_err_t connectToAP(const std::string& ssid, const std::string& password);
 
-        // Запуск в режиме точки доступа
         esp_err_t startAP(const std::string& ssid, const std::string& password);
 
-        // Отключение
         void disconnect();
 
         [[nodiscard]] Status getStatus() const { return status; }

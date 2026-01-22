@@ -32,8 +32,12 @@ namespace daliMQTT {
             cJSON* device_obj = cJSON_CreateObject();
             const auto addr_str = utils::longAddressToString(long_addr);
             cJSON_AddStringToObject(device_obj, "long_address", addr_str.data());
-
+            const auto& identity = getIdentity(dev);
+            if (!identity.gtin.empty()) {
+                cJSON_AddStringToObject(device_obj, "gtin", identity.gtin.c_str());
+            }
             if (auto* gear = std::get_if<ControlGear>(&dev)) {
+                cJSON_AddStringToObject(device_obj, "type", "gear");
                 cJSON_AddNumberToObject(device_obj, "short_address", gear->short_address);
 
                 cJSON_AddNumberToObject(device_obj, "level", gear->current_level);
@@ -46,10 +50,17 @@ namespace daliMQTT {
                 } else {
                     cJSON_AddNullToObject(device_obj, "dt");
                 }
+                if (gear->static_data_loaded) {
+                    cJSON_AddNumberToObject(device_obj, "min", gear->min_level);
+                    cJSON_AddNumberToObject(device_obj, "max", gear->max_level);
+                    cJSON_AddNumberToObject(device_obj, "on_level", gear->power_on_level);
+                    cJSON_AddNumberToObject(device_obj, "fail_level", gear->system_failure_level);
+                }
             }
-            if (auto* id = std::get_if<InputDevice>(&dev)) {
+            else if (auto* id = std::get_if<InputDevice>(&dev)) {
+                cJSON_AddStringToObject(device_obj, "type", "input");
                 cJSON_AddNumberToObject(device_obj, "short_address", id->short_address);
-                // TODO: WEBUI REWORK DEVICES PAGE
+                cJSON_AddBoolToObject(device_obj, "available", id->available);
             }
 
             cJSON_AddItemToArray(root, device_obj);

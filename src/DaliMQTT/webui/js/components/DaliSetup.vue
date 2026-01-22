@@ -6,7 +6,7 @@ import DaliSceneEditor from './DaliSceneEditor.vue';
 interface DaliDevice {
   long_address: string;
   short_address: number;
-  is_input_device?: boolean;
+  type: 'gear' | 'input';
 }
 
 type GroupAssignments = Record<string, number[]>; // key: long_address
@@ -26,15 +26,20 @@ const message = ref('');
 const isError = ref(false);
 const viewMode = ref<'management' | 'scenes'>('management');
 
-const createGroupMatrix = (devices: DaliDevice[], assignments: GroupAssignments): GroupMatrix => {
+const gears = computed(() => devices.value.filter(d => d.type === 'gear'));
+const inputs = computed(() => devices.value.filter(d => d.type === 'input'));
+
+const createGroupMatrix = (deviceList: DaliDevice[], assignments: GroupAssignments): GroupMatrix => {
   const matrix: GroupMatrix = {};
-  devices.forEach((device) => {
-    const groupList = assignments[device.long_address] || [];
-    const boolArray = Array(16).fill(false);
-    groupList.forEach(g => {
-      if (g >= 0 && g < 16) boolArray[g] = true;
-    });
-    matrix[device.long_address] = boolArray;
+  deviceList.forEach((device) => {
+    if (device.type === 'gear') {
+      const groupList = assignments[device.long_address] || [];
+      const boolArray = Array(16).fill(false);
+      groupList.forEach(g => {
+        if (g >= 0 && g < 16) boolArray[g] = true;
+      });
+      matrix[device.long_address] = boolArray;
+    }
   });
   return matrix;
 };
@@ -68,13 +73,10 @@ const loadData = async () => {
 
     const matrix = createGroupMatrix(sortedDevices, groups);
 
-    const namesClone = JSON.parse(JSON.stringify(names));
-    const matrixClone = JSON.parse(JSON.stringify(matrix));
-
-    deviceNames.value = namesClone;
-    pristineDeviceNames.value = JSON.parse(JSON.stringify(namesClone));
-    groupMatrix.value = matrixClone;
-    pristineGroupMatrix.value = JSON.parse(JSON.stringify(matrixClone));
+    deviceNames.value = JSON.parse(JSON.stringify(names));
+    pristineDeviceNames.value = JSON.parse(JSON.stringify(names));
+    groupMatrix.value = JSON.parse(JSON.stringify(matrix));
+    pristineGroupMatrix.value = JSON.parse(JSON.stringify(matrix));
 
   } catch (e) {
     message.value = 'Failed to load DALI data. Check device connection.';
@@ -230,43 +232,57 @@ onMounted(loadData);
         </div>
 
         <div class="management-header">
-          <h4>Devices Found: ({{ devices.length }}/64)</h4>
+          <h4>Devices Found: ({{ gears.length }})</h4>
           <button @click="handleRefreshGroups" :disabled="!!actionInProgress" :aria-busy="actionInProgress === 'refresh'" class="secondary outline">
             Refresh Group Status
           </button>
         </div>
         <div class="devices-grid">
-          <div v-for="device in devices" :key="device.long_address" class="device-card">
+          <div v-for="device in gears" :key="device.long_address" class="device-card">
             <header class="card-header">
-              <div style="display: flex; justify-content: space-between; align-items: center;">
-                <div>
-                  <strong>Device {{ device.short_address }}</strong>
-                  <small class="long-address-text">{{ device.long_address }}</small>
-                </div>
-                <div v-if="device.is_input_device">
-                  <span style="font-size: 0.7em; background-color: var(--pico-primary-background); color: var(--pico-primary); padding: 2px 6px; border-radius: 4px;">Input Device</span>
-                </div>
+              <div>
+                <strong>Device {{ device.short_address }}</strong>
+                <small class="long-address-text">{{ device.long_address }}</small>
               </div>
             </header>
             <div class="card-body">
-              <label :for="`name-${device.long_address}`">Device Name</label>
+              <label :for="`name-${device.long_address}`">Name</label>
               <input type="text" :id="`name-${device.long_address}`" v-model="deviceNames[device.long_address]" placeholder="e.g., Office Light 1" />
 
-              <label>Group Membership</label>
-              <div class="group-chips">
+              <label>Groups</label>
+              <div class="group-chips" v-if="groupMatrix[device.long_address]">
                 <template v-for="i in 16" :key="i">
-                  <label :for="`check-${device.long_address}-${i-1}`" class="chip" :class="{ 'active': groupMatrix[device.long_address] && groupMatrix[device.long_address][i-1] }">
+                  <label :for="`check-${device.long_address}-${i-1}`" class="chip" :class="{ 'active': groupMatrix[device.long_address][i-1] }">
                     <input type="checkbox" role="switch" :id="`check-${device.long_address}-${i-1}`" v-model="groupMatrix[device.long_address][i-1]" />
-                    G{{ i-1 }}
+                    {{ i-1 }}
                   </label>
                 </template>
               </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <DaliSceneEditor v-if="viewMode === 'scenes' && devices.length > 0" :devices="devices" :device-names="deviceNames" />
+        <div v-if="inputs.length > 0">
+          <hr/>
+          <h4>Input Devices: ({{ inputs.length }})</h4>
+          <div class="devices-grid">
+            <div v-for="device in inputs" :key="device.long_address" class="device-card input-card">
+              <header class="card-header input-header">
+                <div>
+                  <strong>Device {{ device.short_address }}</strong> (Input)
+                  <small class="long-address-text">{{ device.long_address }}</small>
+                </div>
+              </header>
+              <div class="card-body">
+                <label :for="`name-${device.long_address}`">Name</label>
+                <input type="text" :id="`name-${device.long_address}`" v-model="deviceNames[device.long_address]" placeholder="e.g., Switch 1" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+      <DaliSceneEditor v-if="viewMode === 'scenes' && gears.length > 0" :devices="gears" :device-names="deviceNames" />
     </div>
   </article>
 </template>
@@ -286,7 +302,6 @@ onMounted(loadData);
   border-radius: var(--pico-border-radius);
   margin-top: 1rem;
 }
-
 .save-bar {
   display: flex;
   justify-content: space-between;
@@ -305,14 +320,18 @@ onMounted(loadData);
   margin-bottom: 0;
   gap: 0.5rem;
 }
-
+.management-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
 .devices-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 1.5rem;
-  margin-top: 1rem;
+  margin-bottom: 2rem;
 }
-
 .device-card {
   background-color: var(--pico-card-background-color);
   border: 1px solid var(--pico-card-border-color);
@@ -321,16 +340,14 @@ onMounted(loadData);
   display: flex;
   flex-direction: column;
 }
-
 .card-header {
   padding: 1rem 1.25rem;
   border-bottom: 1px solid var(--pico-card-border-color);
   background-color: var(--pico-table-header-background);
 }
-.card-header strong {
-  font-size: 1.1em;
+.input-header {
+  background-color: var(--pico-muted-background-color);
 }
-
 .card-body {
   padding: 1.25rem;
   flex-grow: 1;
@@ -342,17 +359,12 @@ onMounted(loadData);
   color: var(--pico-secondary);
   font-size: 0.9em;
 }
-.card-body input[type="text"] {
-  margin-bottom: 0.5rem;
-}
-
 .group-chips {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 0.5rem;
   margin-top: 0.5rem;
 }
-
 .chip {
   display: inline-flex;
   justify-content: center;
@@ -363,15 +375,12 @@ onMounted(loadData);
   color: var(--pico-muted-color);
   font-size: 0.85em;
   font-weight: 600;
-  text-align: center;
   cursor: pointer;
-  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
   border: 1px solid var(--pico-muted-border-color);
   user-select: none;
 }
 .chip:hover {
   background-color: var(--pico-secondary-hover);
-  border-color: var(--pico-secondary-hover);
   color: var(--pico-secondary-inverse);
 }
 
@@ -380,11 +389,6 @@ onMounted(loadData);
   border-color: var(--pico-primary);
   color: var(--pico-primary-inverse);
 }
-.chip.active:hover {
-  background-color: var(--pico-primary-hover);
-  border-color: var(--pico-primary-hover);
-}
-
 .chip input[type="checkbox"] {
   display: none;
 }
