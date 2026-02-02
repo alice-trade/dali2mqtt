@@ -250,30 +250,6 @@ namespace daliMQTT
         }
         return true;
     }
-
-    void DaliDeviceController::initialSyncSequence() {
-        ESP_LOGI(TAG, "Queueing all devices for initial sync...");
-        std::vector<uint8_t> targets;
-        {
-            std::lock_guard<std::mutex> lock(m_devices_mutex);
-            for (const auto& dev_var : m_devices | std::views::values) {
-                if (std::holds_alternative<ControlGear>(dev_var)) {
-                    targets.push_back(getIdentity(dev_var).short_address);
-                }
-            }
-        }
-
-        {
-            std::lock_guard<std::mutex> lock(m_queue_mutex);
-            for(uint8_t sa : targets) {
-                if (!m_priority_set.contains(sa)) {
-                    m_priority_queue.push_back(sa);
-                    m_priority_set.insert(sa);
-                }
-            }
-        }
-        ESP_LOGI(TAG, "Queued %zu devices for initial sync.", targets.size());
-    }
     [[noreturn]] void DaliDeviceController::daliEventHandlerTask(void* pvParameters) {
         auto* self = static_cast<DaliDeviceController*>(pvParameters);
         const auto& dali_api = DaliAdapter::getInstance();
@@ -326,8 +302,7 @@ namespace daliMQTT
     [[noreturn]] void DaliDeviceController::daliSyncTask(void* pvParameters) {
         auto* self = static_cast<DaliDeviceController*>(pvParameters);
         constexpr int64_t NVS_SAVE_DEBOUNCE_MS = 60000;
-
-        self->initialSyncSequence();
+        self->requestBroadcastSync(200, 150);
 
         ESP_LOGI(TAG, "Dali Adaptive Sync Task Started.");
         const auto config = ConfigManager::getInstance().getConfig();
@@ -592,6 +567,7 @@ namespace daliMQTT
         bool features_known = false;
         bool supports_tc = false;
         bool supports_rgb = false;
+        bool is_initial_sync = false;
         uint8_t current_cached_level = 0;
 
         {
@@ -599,6 +575,7 @@ namespace daliMQTT
              if (m_devices.contains(long_addr)) {
                  if (auto* safe_gear = std::get_if<ControlGear>(&m_devices[long_addr])) {
                      current_cached_level = safe_gear->current_level;
+                     is_initial_sync = safe_gear->initial_sync_needed;
                      if (safe_gear->device_type.has_value() && safe_gear->device_type.value() == 8) {
                          is_dt8 = true;
                          features_known = safe_gear->static_data_loaded;
@@ -682,6 +659,28 @@ namespace daliMQTT
             .color_temp = polled_tc,
             .rgb = polled_rgb,
         });
+
+        if (is_initial_sync) {
+            auto groups_opt = DaliGroupManagement::getInstance().getGroupsForDevice(long_addr);
+            if (groups_opt) {
+                for (uint8_t i = 0; i < 16; ++i) {
+                    if (groups_opt->test(i)) {
+                        auto current_grp = DaliGroupManagement::getInstance().getGroupState(i);
+                        DaliPublishState groupUpdate;
+                        if (actual_level > current_grp.current_level) {
+                            groupUpdate.level = actual_level;
+                        }
+                        if (is_dt8) {
+                            groupUpdate.color_temp = polled_tc;
+                            groupUpdate.rgb = polled_rgb;
+                        }
+                        if (groupUpdate.level.has_value() || groupUpdate.color_temp.has_value() || groupUpdate.rgb.has_value()) {
+                            DaliGroupManagement::getInstance().updateGroupState(i, groupUpdate);
+                        }
+                    }
+                }
+            }
+        }
 
         bool needs_static_data = false;
         {

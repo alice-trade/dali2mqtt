@@ -1,6 +1,6 @@
 #ifndef DALIMQTT_DALIGROUPMANAGEMENT_HXX
 #define DALIMQTT_DALIGROUPMANAGEMENT_HXX
-#include "dali/DaliTypes.hxx"
+#include "dali/DaliСommon.hxx"
 
 namespace daliMQTT
 {

@@ -1,7 +1,7 @@
 #ifndef DALIMQTT_DALIADDRESSMAP_HXX
 #define DALIMQTT_DALIADDRESSMAP_HXX
 
-#include "dali/DaliTypes.hxx"
+#include "dali/DaliСommon.hxx"
 
 namespace daliMQTT {
     constexpr size_t GTIN_STORAGE_SIZE = 16;

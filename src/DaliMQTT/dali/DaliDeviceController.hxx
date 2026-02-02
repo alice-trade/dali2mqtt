@@ -83,7 +83,6 @@ namespace daliMQTT
         [[noreturn]] static void daliEventHandlerTask(void* pvParameters);
         [[noreturn]] static void daliSyncTask(void* pvParameters);
 
-        void initialSyncSequence();
         void publishState(const DaliLongAddress_t long_addr, const ControlGear& device) const;
         static void publishAvailability(DaliLongAddress_t long_addr, bool is_available);
         [[nodiscard]] std::optional<DaliLongAddress_t> getInputDeviceLongAddress(uint8_t shortAddress) const;

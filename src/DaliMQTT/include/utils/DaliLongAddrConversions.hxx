@@ -1,6 +1,6 @@
 #ifndef DALIMQTT_DALILONGADDRCONVERSIONS_HXX
 #define DALIMQTT_DALILONGADDRCONVERSIONS_HXX
-#include "dali/DaliTypes.hxx"
+#include "dali/DaliСommon.hxx"
 
 // Utility functions
 namespace daliMQTT::utils {

@@ -3,7 +3,7 @@
 #include "dali/driver/DaliDriver.hxx"
 #include "dali/driver/dali_commands.h"
 #include "driver/gptimer.h"
-#include "dali/DaliTypes.hxx"
+#include "dali/DaliСommon.hxx"
 
 
 namespace daliMQTT
