@@ -13,6 +13,7 @@ namespace daliMQTT
         std::string mqtt_user;
         std::string mqtt_pass;
         std::string mqtt_base_topic;
+        std::string mqtt_ca_cert;
 
         // WebUI
         std::string http_domain;

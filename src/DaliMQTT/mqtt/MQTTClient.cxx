@@ -4,18 +4,29 @@ namespace daliMQTT
 {
     static constexpr char  TAG[] = "MQTTClient";
 
-    void MQTTClient::init(const std::string& uri, const std::string& client_id, const std::string& availability_topic, const std::string& username, const std::string& password) {
-
+    void MQTTClient::init(const std::string& uri,
+                          const std::string& client_id,
+                          const std::string& availability_topic,
+                          const std::string& username,
+                          const std::string& password,
+                          const std::string& ca_cert) {
         esp_mqtt_client_config_t mqtt_cfg = {};
+
         mqtt_cfg.session.protocol_ver = MQTT_PROTOCOL_V_3_1_1;
         mqtt_cfg.broker.address.uri = uri.c_str();
+        if (!ca_cert.empty()) {
+            mqtt_cfg.broker.verification.certificate = ca_cert.c_str();
+        }
+
         mqtt_cfg.credentials.client_id = client_id.c_str();
+
         if (!username.empty()) {
             mqtt_cfg.credentials.username = username.data();
         }
         if (!password.empty()) {
             mqtt_cfg.credentials.authentication.password = password.data();
         }
+
         mqtt_cfg.session.last_will.topic = availability_topic.c_str();
         mqtt_cfg.session.last_will.msg = CONFIG_DALI2MQTT_MQTT_PAYLOAD_OFFLINE;
         mqtt_cfg.session.last_will.qos = 1;
@@ -97,13 +108,18 @@ namespace daliMQTT
                 break;
         }
     }
-    void MQTTClient::reloadConfig(const std::string& uri, const std::string& client_id, const std::string& username, const std::string& password, const std::string& availability_topic) {
+    void MQTTClient::reloadConfig(const std::string& uri,
+                                  const std::string& client_id,
+                                  const std::string& username,
+                                  const std::string& password,
+                                  const std::string& availability_topic,
+                                  const std::string& ca_cert) {
         disconnect();
         if (client_handle) {
             esp_mqtt_client_destroy(client_handle);
             client_handle = nullptr;
         }
-        init(uri, client_id, availability_topic, username, password);
+        init(uri, client_id, availability_topic, username, password, ca_cert);
         connect();
     }
 } // daliMQTT

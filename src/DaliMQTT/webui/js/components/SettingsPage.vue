@@ -8,6 +8,7 @@ interface ConfigData {
   mqtt_uri: string;
   mqtt_user?: string;
   mqtt_pass?: string;
+  mqtt_ca_cert?: string;
   client_id: string;
   mqtt_base_topic: string;
   http_domain: string;
@@ -24,6 +25,7 @@ const config = ref<ConfigData>({
   wifi_ssid: '',
   mqtt_uri: '',
   mqtt_user: '',
+  mqtt_ca_cert: '',
   client_id: '',
   mqtt_base_topic: '',
   ota_url: '',
@@ -70,6 +72,20 @@ const handleSystemOta = async () => {
   }
 };
 
+const handleCertFileUpload = (event: Event) => {
+  const target = event.target as HTMLInputElement;
+  if (target.files && target.files.length > 0) {
+    const file = target.files[0];
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      if (e.target?.result) {
+        config.value.mqtt_ca_cert = e.target.result as string;
+      }
+    };
+    reader.readAsText(file);
+  }
+};
+
 const saveConfig = async () => {
   if (!confirm('Save settings and reboot device?')) {
     return;
@@ -81,15 +97,11 @@ const saveConfig = async () => {
 
   payload.dali_poll_interval_ms = Math.round(daliPollSeconds.value * 1000);
 
-  if (!payload.wifi_password) {
-    delete payload.wifi_password;
-  }
-  if (!payload.http_pass) {
-    delete payload.http_pass;
-  }
-  if (!payload.mqtt_pass) {
-    delete payload.mqtt_pass;
-  }
+  if (!payload.wifi_password) delete payload.wifi_password;
+  if (!payload.http_pass) delete payload.http_pass;
+  if (!payload.mqtt_pass) delete payload.mqtt_pass;
+
+  if (payload.mqtt_ca_cert === '***') delete payload.mqtt_ca_cert;
 
   try {
     const response = await api.saveConfig(payload);
@@ -112,11 +124,11 @@ onMounted(loadConfig);
     <form @submit.prevent="saveConfig">
       <fieldset>
         <legend>General Settings</legend>
-        <label for="cid">WebUI mDNS Domain</label>
-        <input type="text" id="cid" v-model="config.http_domain">
+        <label for="http_domain">WebUI mDNS Domain</label>
+        <input type="text" id="http_domain" v-model="config.http_domain">
         <small>This value is used as the mDNS address (http://{{ config.http_domain }}.local).</small>
-        <label for="cid">Client ID</label>
-        <input type="text" id="cid" v-model="config.client_id" required>
+        <label for="client_id">Client ID</label>
+        <input type="text" id="client_id" v-model="config.client_id" required>
         <small>Used as ID for MQTT Client ID, Home Assistant Discovery, mDNS Device Name</small>
       </fieldset>
       <fieldset>
@@ -136,7 +148,8 @@ onMounted(loadConfig);
       <fieldset>
         <legend>MQTT Settings</legend>
         <label for="mqtt_uri">Broker URI</label>
-        <input type="text" id="mqtt_uri" v-model="config.mqtt_uri" placeholder="mqtt://host:port" required>
+        <input type="text" id="mqtt_uri" v-model="config.mqtt_uri" placeholder="mqtts://host:8883" required>
+
         <div class="grid">
           <div>
             <label for="mqtt_user">Username</label>
@@ -147,6 +160,22 @@ onMounted(loadConfig);
             <input type="password" id="mqtt_pass" v-model="config.mqtt_pass" placeholder="Leave blank to keep unchanged">
           </div>
         </div>
+
+        <label for="mqtt_ca_cert">TLS CA Certificate (PEM)</label>
+        <textarea
+            id="mqtt_ca_cert"
+            v-model="config.mqtt_ca_cert"
+            rows="4"
+            placeholder="-----BEGIN CERTIFICATE----- ..."
+            style="font-family: monospace; font-size: 0.8rem; white-space: pre;">
+        </textarea>
+
+        <label for="cert_upload">
+          Upload Certificate File:
+          <input type="file" id="cert_upload" @change="handleCertFileUpload" accept=".pem,.crt,.cer">
+        </label>
+        <small>Required for secure MQTT connections. Ensure the broker URI matches the certificate CN.</small>
+
         <label for="mqtt_base">Base Topic</label>
         <input type="text" id="mqtt_base" v-model="config.mqtt_base_topic">
         <label for="hass_discovery">

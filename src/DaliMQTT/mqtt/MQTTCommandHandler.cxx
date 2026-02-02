@@ -454,7 +454,7 @@ namespace daliMQTT {
             ESP_LOGI(TAG, "MQTT Config changed. Reloading...");
             mqtt.publish(status_topic, R"({"status":"updated", "action":"reconnecting_mqtt"})", 0, false);
             xTaskCreate([](void*){
-                vTaskDelay(pdMS_TO_TICKS(500)); // Дать время на отправку ACK
+                vTaskDelay(pdMS_TO_TICKS(500));
                 AppController::Instance().onConfigReloadRequest();
                 vTaskDelete(nullptr);
             }, "mqtt_reload", 4096, nullptr, 5, nullptr);

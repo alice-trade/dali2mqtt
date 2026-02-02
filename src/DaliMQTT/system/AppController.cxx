@@ -78,7 +78,12 @@ namespace daliMQTT
         auto& mqtt = MQTTClient::Instance();
         const std::string availability_topic = utils::stringFormat("%s%s", config.mqtt_base_topic.c_str(), CONFIG_DALI2MQTT_MQTT_AVAILABILITY_TOPIC);
 
-        mqtt.init(config.mqtt_uri, config.client_id, availability_topic, config.mqtt_user, config.mqtt_pass);
+        mqtt.init(config.mqtt_uri,
+                      config.client_id,
+                      availability_topic,
+                      config.mqtt_user,
+                      config.mqtt_pass,
+                      config.mqtt_ca_cert);
         mqtt.onConnected = [this]() { this->onMqttConnected(); };
         mqtt.onDisconnected = [this]() { this->onMqttDisconnected(); };
         mqtt.connect();
@@ -191,7 +196,8 @@ namespace daliMQTT
             config.client_id,
             config.mqtt_user,
             config.mqtt_pass,
-            availability_topic
+            availability_topic,
+            config.mqtt_ca_cert
         );
     }
 } // daliMQTT
