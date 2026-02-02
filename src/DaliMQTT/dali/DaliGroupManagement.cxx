@@ -2,7 +2,7 @@
 #include <utils/StringUtils.hxx>
 #include "system/ConfigManager.hxx"
 #include "dali/DaliDeviceController.hxx"
-#include "dali/DaliAPI.hxx"
+#include "dali/DaliAdapter.hxx"
 #include "mqtt/MQTTClient.hxx"
 #include "utils/DaliLongAddrConversions.hxx"
 
@@ -17,7 +17,7 @@ namespace daliMQTT
 
     void DaliGroupManagement::loadFromConfig() {
         std::lock_guard<std::mutex> lock(m_mutex);
-        const auto& config = ConfigManager::getInstance().getConfig();
+        const auto& config = ConfigManager::Instance().getConfig();
         m_assignments.clear();
 
         cJSON* root = cJSON_Parse(config.dali_group_assignments.c_str());
@@ -79,7 +79,7 @@ namespace daliMQTT
             return ESP_ERR_NO_MEM;
         }
 
-        const esp_err_t err = ConfigManager::getInstance().saveDaliGroupAssignments(json_string);
+        const esp_err_t err = ConfigManager::Instance().saveDaliGroupAssignments(json_string);
         free(json_string);
         return err;
     }
@@ -100,7 +100,7 @@ namespace daliMQTT
     esp_err_t DaliGroupManagement::setGroupMembership(DaliLongAddress_t longAddress, uint8_t group, bool assigned) {
         if (group >= 16) return ESP_ERR_INVALID_ARG;
 
-        auto short_address_opt = DaliDeviceController::getInstance().getShortAddress(longAddress);
+        auto short_address_opt = DaliDeviceController::Instance().getShortAddress(longAddress);
         if (!short_address_opt) {
             ESP_LOGE(TAG, "Cannot set group membership: device with long address %lX not found on bus.", longAddress);
             return ESP_ERR_NOT_FOUND;
@@ -112,7 +112,7 @@ namespace daliMQTT
             m_assignments[longAddress].set(group, assigned);
         }
         
-        auto& dali = DaliAPI::getInstance();
+        auto& dali = DaliAdapter::Instance();
         esp_err_t result;
 
         if (assigned) {
@@ -162,7 +162,7 @@ namespace daliMQTT
 
                 if (old_groups == new_groups) continue;
                 
-                auto short_addr_opt = DaliDeviceController::getInstance().getShortAddress(long_addr);
+                auto short_addr_opt = DaliDeviceController::Instance().getShortAddress(long_addr);
                 if (!short_addr_opt) continue;
                 std::bitset<16> changed_bits = old_groups ^ new_groups;
                 for (uint8_t i = 0; i < 16; ++i) {
@@ -174,7 +174,7 @@ namespace daliMQTT
             m_assignments = newAssignments;
         }
 
-        auto& dali = DaliAPI::getInstance();
+        auto& dali = DaliAdapter::Instance();
         for (const auto& [short_address, group, assign] : commands_to_send) {
             if (assign) {
                 ESP_LOGI(TAG, "Sync: Adding device %d to group %d", short_address, group);
@@ -192,7 +192,7 @@ namespace daliMQTT
     esp_err_t DaliGroupManagement::refreshAssignmentsFromBus() {
         ESP_LOGI(TAG, "Refreshing group assignments from DALI bus...");
 
-        auto& device_controller = DaliDeviceController::getInstance();
+        auto& device_controller = DaliDeviceController::Instance();
         auto devices = device_controller.getDevices();
         if (devices.empty()) {
             ESP_LOGW(TAG, "No devices found to refresh group assignments.");
@@ -200,21 +200,24 @@ namespace daliMQTT
         }
 
         GroupAssignments new_assignments;
-        auto& dali = DaliAPI::getInstance();
+        auto& dali = DaliAdapter::Instance();
 
         for (const auto& [long_addr, device] : devices) {
-            if (!device.available) continue;
+            const auto& id = getIdentity(device);
+            if (!id.available) continue;
 
-            if (auto groups_opt = dali.getDeviceGroups(device.short_address)) {
-                new_assignments[long_addr] = *groups_opt;
-                ESP_LOGD(TAG, "Device %s (SA %d) has group mask: %s",
-                         utils::longAddressToString(long_addr).data(),
-                         device.short_address,
-                         groups_opt->to_string().c_str());
-            } else {
-                ESP_LOGW(TAG, "Failed to get group info for device %s (SA %d)",
-                         utils::longAddressToString(long_addr).data(),
-                         device.short_address);
+            if (std::holds_alternative<ControlGear>(device)) {
+                if (auto groups_opt = dali.getDeviceGroups(id.short_address)) {
+                    new_assignments[long_addr] = *groups_opt;
+                    ESP_LOGD(TAG, "Device %s (SA %d) has group mask: %s",
+                             utils::longAddressToString(long_addr).data(),
+                             id.short_address,
+                             groups_opt->to_string().c_str());
+                } else {
+                    ESP_LOGW(TAG, "Failed to get group info for device %s (SA %d)",
+                             utils::longAddressToString(long_addr).data(),
+                             id.short_address);
+                }
             }
             vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
         }
@@ -235,10 +238,10 @@ namespace daliMQTT
         return DaliGroup{};
     }
     void DaliGroupManagement::publishDeviceGroupState(const DaliLongAddress_t longAddr, const std::bitset<16>& groups) const {
-        auto const& mqtt = MQTTClient::getInstance();
+        auto const& mqtt = MQTTClient::Instance();
         if (mqtt.getStatus() != MqttStatus::CONNECTED) return;
 
-        const auto config = ConfigManager::getInstance().getConfig();
+        const auto config = ConfigManager::Instance().getConfig();
         const auto addr_str = utils::longAddressToString(longAddr);
         const std::string topic = utils::stringFormat("%s/light/%s/groups", config.mqtt_base_topic.c_str(), addr_str.data()); // base/light/{LONG_ADDRESS}/groups
 
@@ -267,7 +270,7 @@ namespace daliMQTT
             publishDeviceGroupState(longAddr, groups);
         }
     }
-    void DaliGroupManagement::updateGroupState(const uint8_t group_id, const DaliState& state) {
+    void DaliGroupManagement::updateGroupState(const uint8_t group_id, const DaliPublishState& state) {
         if (group_id >= 16) return;
 
         bool changed = false;
@@ -317,8 +320,8 @@ namespace daliMQTT
     void DaliGroupManagement::publishGroupState(const uint8_t group_id, const uint8_t level,
                                                 std::optional<uint16_t> color_temp,
                                                 std::optional<DaliRGB> rgb) const {
-        auto const& mqtt = MQTTClient::getInstance();
-        const auto config = ConfigManager::getInstance().getConfig();
+        auto const& mqtt = MQTTClient::Instance();
+        const auto config = ConfigManager::Instance().getConfig();
 
         // Topic: base/light/group/+/state
         const std::string state_topic = utils::stringFormat("%s/light/group/%d/state", config.mqtt_base_topic.c_str(), group_id);

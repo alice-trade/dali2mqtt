@@ -11,7 +11,7 @@ namespace daliMQTT
         DaliSceneManagement(const DaliSceneManagement&) = delete;
         DaliSceneManagement& operator=(const DaliSceneManagement&) = delete;
 
-        static DaliSceneManagement& getInstance() {
+        static DaliSceneManagement& Instance() {
             static DaliSceneManagement instance;
             return instance;
         }

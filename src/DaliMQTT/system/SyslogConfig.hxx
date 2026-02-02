@@ -9,7 +9,7 @@ namespace daliMQTT {
             SyslogConfig(const SyslogConfig&) = delete;
             SyslogConfig& operator=(const SyslogConfig&) = delete;
 
-            static SyslogConfig& getInstance() {
+            static SyslogConfig& Instance() {
                 static SyslogConfig instance;
                 return instance;
             }

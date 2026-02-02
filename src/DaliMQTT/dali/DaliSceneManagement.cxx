@@ -1,6 +1,6 @@
 #include "dali/DaliSceneManagement.hxx"
 #include "dali/DaliDeviceController.hxx"
-#include "dali/DaliAPI.hxx"
+#include "dali/DaliAdapter.hxx"
 
 namespace daliMQTT
 {
@@ -16,7 +16,7 @@ namespace daliMQTT
             return ESP_ERR_INVALID_ARG;
         }
         ESP_LOGI(TAG, "Activating DALI Scene %d", sceneId);
-        auto& dali = DaliAPI::getInstance();
+        auto& dali = DaliAdapter::Instance();
         return dali.sendCommand(DALI_ADDRESS_TYPE_BROADCAST, 0, DALI_COMMAND_GO_TO_SCENE_0 + sceneId);
     }
 
@@ -26,7 +26,7 @@ namespace daliMQTT
             return ESP_ERR_INVALID_ARG;
         }
         ESP_LOGI(TAG, "Saving configuration for DALI Scene %d for %zu devices", sceneId, levels.size());
-        auto& dali = DaliAPI::getInstance();
+        auto& dali = DaliAdapter::Instance();
 
         for (const auto& [addr, level] : levels) {
             ESP_LOGD(TAG, "Setting device %d to level %d for scene %d", addr, level, sceneId);
@@ -64,24 +64,25 @@ namespace daliMQTT
         SceneDeviceLevels results;
         if (sceneId >= 16) return results;
 
-        auto& dali = DaliAPI::getInstance();
-        auto devices = DaliDeviceController::getInstance().getDevices();
+        auto& dali = DaliAdapter::Instance();
+        auto devices = DaliDeviceController::Instance().getDevices();
 
         ESP_LOGI(TAG, "Querying levels for Scene %d...", sceneId);
 
         for (const auto& device : devices | std::views::values) {
-            if (!device.available) continue;
+            auto* gear = std::get_if<ControlGear>(&device);
+            if (!gear->available) continue;
 
             auto level_opt = dali.sendQuery(
                 DALI_ADDRESS_TYPE_SHORT,
-                device.short_address,
+                gear->short_address,
                 DALI_COMMAND_QUERY_SCENE_LEVEL_0 + sceneId
             );
 
             if (level_opt.has_value()) {
-                results[device.short_address] = level_opt.value();
+                results[gear->short_address] = level_opt.value();
             } else {
-                results[device.short_address] = 255;
+                results[gear->short_address] = 255;
             }
             vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
         }

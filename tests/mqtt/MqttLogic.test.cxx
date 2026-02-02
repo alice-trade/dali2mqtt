@@ -6,7 +6,7 @@
 using namespace daliMQTT;
 
 static void test_mqtt_client_init_state() {
-    auto& client = MQTTClient::getInstance();
+    auto& client = MQTTClient::Instance();
 
     TEST_ASSERT_EQUAL(MqttStatus::DISCONNECTED, client.getStatus());
 
@@ -16,7 +16,7 @@ static void test_mqtt_client_init_state() {
 }
 
 static void test_command_processor_queue() {
-    auto& processor = MQTTCommandProcess::getInstance();
+    auto& processor = MQTTCommandProcess::Instance();
     processor.init();
 
     const char* topic = "test/topic";

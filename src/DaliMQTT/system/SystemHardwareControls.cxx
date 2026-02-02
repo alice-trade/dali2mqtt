@@ -1,10 +1,10 @@
-#include "system/SystemControl.hxx"
+#include "system/SystemHardwareControls.hxx"
 #include "system/ConfigManager.hxx"
 #include <esp_ota_ops.h>
 
 namespace daliMQTT {
 
-    static constexpr char TAG[] = "SystemControl";
+    static constexpr char TAG[] = "SystemHardwareControls";
     static constexpr gpio_num_t BOOT_BUTTON_GPIO = GPIO_NUM_0;
     static constexpr uint32_t BUTTON_LONG_PRESS_MS = 5000;
 
@@ -14,7 +14,7 @@ namespace daliMQTT {
         if (gpio_get_level(BOOT_BUTTON_GPIO) == 0) {
             ESP_LOGW(TAG, "BOOT button held for %lu seconds. Performing Factory Reset!", BUTTON_LONG_PRESS_MS/1000);
             
-            ConfigManager::getInstance().resetConfiguredFlag();
+            ConfigManager::Instance().resetConfiguredFlag();
             
             ESP_LOGW(TAG, "Rebooting system...");
             vTaskDelay(pdMS_TO_TICKS(500));
@@ -43,7 +43,7 @@ namespace daliMQTT {
         }
     }
 
-    void SystemControl::checkOtaValidation() {
+    void SystemHardwareControls::checkOtaValidation() {
         const esp_partition_t *running = esp_ota_get_running_partition();
         esp_ota_img_states_t ota_state;
         if (esp_ota_get_state_partition(running, &ota_state) == ESP_OK) {
@@ -54,7 +54,7 @@ namespace daliMQTT {
         }
     }
 
-    void SystemControl::startResetConfigurationButtonMonitor() {
+    void SystemHardwareControls::startResetConfigurationButtonMonitor() {
         if (g_button_timer != nullptr) {
             ESP_LOGW(TAG, "Button monitor already started.");
             return;

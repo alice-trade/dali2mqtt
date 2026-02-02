@@ -9,7 +9,7 @@ namespace daliMQTT
         WebUI(const WebUI&) = delete;
         WebUI& operator=(const WebUI&) = delete;
 
-        static WebUI& getInstance() {
+        static WebUI& Instance() {
             static WebUI instance;
             return instance;
         }

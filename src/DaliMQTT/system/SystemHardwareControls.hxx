@@ -1,11 +1,11 @@
-#ifndef DALIMQTT_SYSTEMCONTROL_HXX
-#define DALIMQTT_SYSTEMCONTROL_HXX
+#ifndef DALIMQTT_SYSTEMHARDWARECONTROLS_HXX
+#define DALIMQTT_SYSTEMHARDWARECONTROLS_HXX
 
 namespace daliMQTT
 {
-    class SystemControl {
+    class SystemHardwareControls {
         public:
-            SystemControl() = delete;
+            SystemHardwareControls() = delete;
 
             /**
              * @brief Check OTA Validation and set it
@@ -19,4 +19,4 @@ namespace daliMQTT
     };
 }
 
-#endif //DALIMQTT_SYSTEMCONTROL_HXX
+#endif //DALIMQTT_SYSTEMHARDWARECONTROLS_HXX

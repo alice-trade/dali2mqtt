@@ -72,6 +72,7 @@ namespace daliMQTT
         getString(nvs_handle.get(), "mqtt_uri", config_cache.mqtt_uri, "");
         getString(nvs_handle.get(), "mqtt_user", config_cache.mqtt_user, "");
         getString(nvs_handle.get(), "mqtt_pass", config_cache.mqtt_pass, "");
+        getString(nvs_handle.get(), "mqtt_cert", config_cache.mqtt_ca_cert, "");
         getString(nvs_handle.get(), "cid", config_cache.client_id, "");
         getString(nvs_handle.get(), "mqtt_base", config_cache.mqtt_base_topic, CONFIG_DALI2MQTT_MQTT_BASE_TOPIC);
         getString(nvs_handle.get(), "http_domain", config_cache.http_domain, CONFIG_DALI2MQTT_WEBUI_DEFAULT_MDNS_DOMAIN);
@@ -136,6 +137,7 @@ namespace daliMQTT
         SetNVS(setString, "mqtt_uri",  cfg.mqtt_uri);
         SetNVS(setString, "mqtt_user", cfg.mqtt_user);
         SetNVS(setString, "mqtt_pass", cfg.mqtt_pass);
+        SetNVS(setString, "mqtt_cert", cfg.mqtt_ca_cert);
         SetNVS(setString, "cid",       cfg.client_id);
         SetNVS(setString, "mqtt_base", cfg.mqtt_base_topic);
         SetNVS(setString, "http_domain", cfg.http_domain);
@@ -298,15 +300,15 @@ namespace daliMQTT
         return root;
     }
 
-    esp_err_t ConfigManager::updateConfigFromJson(const char* json_str, bool& reboot_needed) {
+    ConfigUpdateResult ConfigManager::updateConfigFromJson(const char* json_str) {
         cJSON *root = cJSON_Parse(json_str);
         if (root == nullptr) {
             ESP_LOGE(TAG, "Failed to parse configuration JSON");
-            return ESP_ERR_INVALID_ARG;
+            return ConfigUpdateResult::NoUpdate;
         }
 
-        reboot_needed = false;
         AppConfig current_cfg = getConfig();
+        AppConfig old_cfg = current_cfg;
         bool changed = false;
 
         #define JsonSetStrConfig(NAME, KEY) \
@@ -327,6 +329,17 @@ namespace daliMQTT
         JsonSetStrConfig(mqtt_uri, "mqtt_uri");
         JsonSetStrConfig(mqtt_user, "mqtt_user");
         JsonSetStrConfig(mqtt_pass, "mqtt_pass");
+
+        if (cJSON* item = cJSON_GetObjectItem(root, "mqtt_ca_cert"); cJSON_IsString(item) && (item->valuestring != nullptr)) {
+            std::string val = item->valuestring;
+            if (val != "***") {
+                if (current_cfg.mqtt_ca_cert != val) {
+                    current_cfg.mqtt_ca_cert = val;
+                    changed = true;
+                }
+            }
+        }
+
         JsonSetStrConfig(client_id, "client_id");
         if (cJSON_GetObjectItem(root, "cid")) JsonSetStrConfig(client_id, "cid");
 
@@ -382,19 +395,32 @@ namespace daliMQTT
         cJSON_Delete(root);
 
         if (!changed) {
-            ESP_LOGI(TAG, "No configuration changes detected.");
-            return ESP_OK;
+            return ConfigUpdateResult::NoUpdate;
         }
 
         if(current_cfg.wifi_ssid.empty() || current_cfg.mqtt_uri.empty()) {
             ESP_LOGE(TAG, "SSID and MQTT URI cannot be empty");
-            return ESP_ERR_INVALID_ARG;
+            return ConfigUpdateResult::NoUpdate;
         }
 
-        esp_err_t err = saveMainConfig(current_cfg);
-        if (err == ESP_OK) {
-            reboot_needed = true;
+        if (esp_err_t saveResult = saveMainConfig(current_cfg); saveResult != ESP_OK) {
+            return ConfigUpdateResult::NoUpdate;
         }
-        return err;
+
+        if (old_cfg.wifi_ssid != current_cfg.wifi_ssid ||
+            old_cfg.wifi_password != current_cfg.wifi_password) {
+            return ConfigUpdateResult::WIFIUpdate;
+            }
+
+        if (old_cfg.mqtt_uri != current_cfg.mqtt_uri ||
+            old_cfg.mqtt_user != current_cfg.mqtt_user ||
+            old_cfg.mqtt_pass != current_cfg.mqtt_pass ||
+            old_cfg.mqtt_ca_cert != current_cfg.mqtt_ca_cert ||
+            old_cfg.mqtt_base_topic != current_cfg.mqtt_base_topic ||
+            old_cfg.client_id != current_cfg.client_id) {
+            return ConfigUpdateResult::MQTTUpdate;
+            }
+
+        return ConfigUpdateResult::SystemUpdate;
     }
 }

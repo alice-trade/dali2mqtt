@@ -3,19 +3,19 @@
 #include "dali/driver/DaliDriver.hxx"
 #include "dali/driver/dali_commands.h"
 #include "driver/gptimer.h"
-#include "dali/DaliTypes.hxx"
+#include "dali/DaliСommon.hxx"
 
 
 namespace daliMQTT
 {
 
-    class DaliAPI {
+    class DaliAdapter {
     public:
-        DaliAPI(const DaliAPI&) = delete;
-        DaliAPI& operator=(const DaliAPI&) = delete;
+        DaliAdapter(const DaliAdapter&) = delete;
+        DaliAdapter& operator=(const DaliAdapter&) = delete;
 
-        static DaliAPI& getInstance() {
-            static DaliAPI instance;
+        static DaliAdapter& Instance() {
+            static DaliAdapter instance;
             return instance;
         }
         esp_err_t init(gpio_num_t rx_pin, gpio_num_t tx_pin);
@@ -128,7 +128,7 @@ namespace daliMQTT
         [[nodiscard]] bool isInitialized() const;
 
     private:
-        DaliAPI() = default;
+        DaliAdapter() = default;
         [[noreturn]] static void dali_sniffer_task(void* arg);
         esp_err_t sendSpecialCmdDT8(uint8_t shortAddr, uint8_t cmd);
         std::optional<uint8_t> queryDT8Value(uint8_t shortAddress, uint8_t dtr0_selector);

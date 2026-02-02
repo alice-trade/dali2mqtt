@@ -1,5 +1,5 @@
 #include "unity.h"
-#include "dali/DaliAPI.hxx"
+#include "dali/DaliAdapter.hxx"
 #include "utils/DaliLongAddrConversions.hxx"
 #include "dali/DaliDeviceController.hxx"
 
@@ -32,13 +32,13 @@ static void test_dali_driver_init() {
     gpio_num_t rx = static_cast<gpio_num_t>(CONFIG_DALI2MQTT_DALI_RX_PIN);
     gpio_num_t tx = static_cast<gpio_num_t>(CONFIG_DALI2MQTT_DALI_TX_PIN);
 
-    esp_err_t err = DaliAPI::getInstance().init(rx, tx);
+    esp_err_t err = DaliAdapter::Instance().init(rx, tx);
     TEST_ASSERT_EQUAL(ESP_OK, err);
-    TEST_ASSERT_TRUE(DaliAPI::getInstance().isInitialized());
+    TEST_ASSERT_TRUE(DaliAdapter::Instance().isInitialized());
 }
 
 static void test_dali_controller_singleton() {
-    auto& ctrl = DaliDeviceController::getInstance();
+    auto& ctrl = DaliDeviceController::Instance();
     ctrl.init();
     auto devices = ctrl.getDevices();
     (void)devices;

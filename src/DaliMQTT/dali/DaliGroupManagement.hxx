@@ -1,6 +1,6 @@
 #ifndef DALIMQTT_DALIGROUPMANAGEMENT_HXX
 #define DALIMQTT_DALIGROUPMANAGEMENT_HXX
-#include "dali/DaliTypes.hxx"
+#include "dali/DaliСommon.hxx"
 
 namespace daliMQTT
 {
@@ -11,7 +11,7 @@ namespace daliMQTT
         DaliGroupManagement(const DaliGroupManagement&) = delete;
         DaliGroupManagement& operator=(const DaliGroupManagement&) = delete;
 
-        static DaliGroupManagement& getInstance() {
+        static DaliGroupManagement& Instance() {
             static DaliGroupManagement instance;
             return instance;
         }
@@ -38,7 +38,7 @@ namespace daliMQTT
         [[nodiscard]] DaliGroup getGroupState(uint8_t group_id) const;
 
         /** Updates the state of a group. */
-        void updateGroupState(uint8_t group_id, const DaliState& state);
+        void updateGroupState(uint8_t group_id, const DaliPublishState& state);
 
         /** Restores the group level. */
         void restoreGroupLevel(uint8_t group_id);

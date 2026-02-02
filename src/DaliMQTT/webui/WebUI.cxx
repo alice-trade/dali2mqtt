@@ -153,7 +153,7 @@ namespace daliMQTT
             return send_unauthorized();
         }
 
-        const auto cfg = ConfigManager::getInstance().getConfig();
+        const auto cfg = ConfigManager::Instance().getConfig();
         if (decoded_sv.substr(0, colon_pos) == cfg.http_user && decoded_sv.substr(colon_pos + 1) == cfg.http_pass) {
             return ESP_OK;
         }

@@ -50,7 +50,7 @@ namespace daliMQTT {
         }
 
         if (target_group_id.has_value()) {
-            auto all_assignments = DaliGroupManagement::getInstance().getAllAssignments();
+            auto all_assignments = DaliGroupManagement::Instance().getAllAssignments();
             for (const auto& [long_addr, groups] : all_assignments) {
                 if (groups.test(target_group_id.value())) {
                     affected_devices.push_back(long_addr);
@@ -59,7 +59,7 @@ namespace daliMQTT {
         }
 
         if (target_group_id.has_value()) {
-            auto& group_mgr = DaliGroupManagement::getInstance();
+            auto& group_mgr = DaliGroupManagement::Instance();
             const uint8_t gid = target_group_id.value();
             if ((addr_byte & 0x01) == 0) { // DACP
                 group_mgr.updateGroupState(gid, {.level = cmd_byte});
@@ -116,11 +116,13 @@ namespace daliMQTT {
                         std::lock_guard<std::mutex> lock(m_devices_mutex);
                         for (const auto& long_addr : affected_devices) {
                             if (auto it = m_devices.find(long_addr); it != m_devices.end()) {
-                                if (it->second.current_level == 0) {
-                                    uint8_t target = (it->second.last_level > 0) ? it->second.last_level : 254;
-                                    optimistic_updates.emplace_back(long_addr, target);
-                                } else {
-                                    any_requires_query = true;
+                                if (auto* gear = std::get_if<ControlGear>(&it->second)) {
+                                    if (gear->current_level == 0) {
+                                        uint8_t target = (gear->last_level > 0) ? gear->last_level : 254;
+                                        optimistic_updates.emplace_back(long_addr, target);
+                                    } else {
+                                        any_requires_query = true;
+                                    }
                                 }
                             }
                         }
@@ -141,8 +143,9 @@ namespace daliMQTT {
                     {
                         std::lock_guard<std::mutex> lock(m_devices_mutex);
                         if (affected_devices.size() == 1) {
-                            const auto& dev = m_devices[affected_devices[0]];
-                            known_level = dev.max_level;
+                            if (auto* gear = std::get_if<ControlGear>(&m_devices[affected_devices[0]])) {
+                                known_level = gear->max_level;
+                            }
                         } else {
                             known_level = 254; // FIXME
                         }
@@ -152,8 +155,9 @@ namespace daliMQTT {
                 {
                     std::lock_guard<std::mutex> lock(m_devices_mutex);
                     if (affected_devices.size() == 1) {
-                        const auto& dev = m_devices[affected_devices[0]];
-                        known_level = dev.min_level;
+                        if (auto* gear = std::get_if<ControlGear>(&m_devices[affected_devices[0]])) {
+                            known_level = gear->min_level;
+                        }
                     } else {
                         known_level = 1; // FIXME
                     }

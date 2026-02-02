@@ -1,7 +1,7 @@
 #ifndef DALIMQTT_DALIDEVICECONTROLLER_HXX
 #define DALIMQTT_DALIDEVICECONTROLLER_HXX
 
-#include "dali/DaliAPI.hxx"
+#include "dali/DaliAdapter.hxx"
 
 namespace daliMQTT
 {
@@ -10,7 +10,7 @@ namespace daliMQTT
         DaliDeviceController(const DaliDeviceController&) = delete;
         DaliDeviceController& operator=(const DaliDeviceController&) = delete;
 
-        static DaliDeviceController& getInstance() {
+        static DaliDeviceController& Instance() {
             static DaliDeviceController instance;
             return instance;
         }
@@ -50,7 +50,7 @@ namespace daliMQTT
         /**
          * @brief Updates the state of a device in the cache and publishes to MQTT.
          */
-        void updateDeviceState(DaliLongAddress_t longAddr, const DaliState& state);
+        void updateDeviceState(DaliLongAddress_t longAddr, const DaliPublishState& state);
 
         /**
          * @brief Publishes device attributes (extended info) to MQTT.
@@ -80,10 +80,16 @@ namespace daliMQTT
         bool validateAddressMap();
         void pollSingleDevice(uint8_t shortAddr);
 
+        std::optional<uint8_t> pollAvailabilityAndLevel(uint8_t shortAddr, DaliLongAddress_t longAddr);
+        void checkDT8Features(uint8_t shortAddr, DaliLongAddress_t longAddr);
+        ColorPollResult pollColorDataCyclic(uint8_t shortAddr, DaliLongAddress_t longAddr, uint8_t current_level);
+        void performInitialGroupSync(DaliLongAddress_t longAddr, uint8_t level, const ColorPollResult& colorData);
+        void initialStaticDataFetch(uint8_t shortAddr, DaliLongAddress_t longAddr);
+
         [[noreturn]] static void daliEventHandlerTask(void* pvParameters);
         [[noreturn]] static void daliSyncTask(void* pvParameters);
 
-        static void publishState(DaliLongAddress_t long_addr, const DaliDevice& device);
+        void publishState(const DaliLongAddress_t long_addr, const ControlGear& device) const;
         static void publishAvailability(DaliLongAddress_t long_addr, bool is_available);
         [[nodiscard]] std::optional<DaliLongAddress_t> getInputDeviceLongAddress(uint8_t shortAddress) const;
 

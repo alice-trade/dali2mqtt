@@ -226,10 +226,9 @@ cmake --build build --target test-monitor
 ├── Kconfig/              # Project compile-time configuration
 ├── src/DaliMQX           # JS Library source code
 ├── src/DaliMQTT          # Firmware source code
-│   ├── config/           # Configuration Manager
+│   ├── system/           # System control flow
 │   ├── dali/             # High-level DALI API
 │   │   └── driver/       # Low-level DALI driver (gptimer, GPIO)
-│   ├── lifecycle/        # Application lifecycle and mode coordination
 │   ├── mqtt/             # MQTT client and Auto-Discovery logic
 │   ├── webui/            # Web UI source code (Vue.js + C++)
 │   ├── wifi/             # Wi-Fi connection manager

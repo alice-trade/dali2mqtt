@@ -11,6 +11,7 @@
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
+#include <variant>
 #include <functional>
 #include <map>
 #include <mutex>
