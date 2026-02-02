@@ -393,8 +393,13 @@ namespace daliMQTT
                                         g_state.level = gear->current_level;
                                     }
                                     if (gear->color.has_value())
+                                    {
                                         if (gear->color->supports_rgb && gear->color->current_rgb.has_value()) {
-                                        g_state.rgb = gear->color->current_rgb;
+                                            g_state.rgb = gear->color->current_rgb;
+                                        }
+                                        if (gear->color->supports_tc && gear->color->current_tc.has_value()) {
+                                            g_state.color_temp = gear->color->current_tc;
+                                        }
                                     }
                                 }
                             }
@@ -515,165 +520,155 @@ namespace daliMQTT
         }
     }
 
- void DaliDeviceController::pollSingleDevice(const uint8_t shortAddr) {
-        DaliLongAddress_t long_addr = 0;
-        bool known_device = false;
-        {
-            std::lock_guard<std::mutex> lock(m_devices_mutex);
-            if (const auto it = m_short_to_long_map.find(shortAddr); it != m_short_to_long_map.end()) {
-                long_addr = it->second;
-                known_device = true;
-            }
-        }
-        if (!known_device) {
-            return;
-        }
-
+    std::optional<uint8_t> DaliDeviceController::pollAvailabilityAndLevel(const uint8_t shortAddr, const DaliLongAddress_t longAddr) {
         auto& dali = DaliAdapter::getInstance();
         const auto level_opt = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddr, DALI_COMMAND_QUERY_ACTUAL_LEVEL);
-        const bool is_device_responding = level_opt.has_value();
+        const bool is_responding = level_opt.has_value();
+
+        bool previously_available = false;
+        uint8_t cached_level = 0;
 
         {
             std::lock_guard<std::mutex> lock(m_devices_mutex);
-            if (m_devices.contains(long_addr)) {
-                auto& dev_var = m_devices[long_addr];
+            if (m_devices.contains(longAddr)) {
+                auto& dev_var = m_devices[longAddr];
                 auto& id = getIdentity(dev_var);
-                if (id.available != is_device_responding) {
-                    id.available = is_device_responding;
+                previously_available = id.available;
+
+                if (id.available != is_responding) {
+                    id.available = is_responding;
                     if (std::holds_alternative<ControlGear>(dev_var)) {
-                        publishAvailability(long_addr, is_device_responding);
+                        publishAvailability(longAddr, is_responding);
                     }
+                }
+
+                if (const auto* gear = std::get_if<ControlGear>(&dev_var)) {
+                    cached_level = gear->current_level;
                 }
             } else {
-                return;
+                return std::nullopt; // dev removed from map during query
             }
         }
 
-        if (!is_device_responding) return;
+        if (!is_responding) return std::nullopt;
+        return (level_opt.value() == 255) ? cached_level : level_opt.value();
+    }
 
-        ControlGear* gear = nullptr;
+    void DaliDeviceController::checkDT8Features(const uint8_t shortAddr, const DaliLongAddress_t longAddr) {
+        bool needs_check = false;
         {
             std::lock_guard<std::mutex> lock(m_devices_mutex);
-            if (m_devices.contains(long_addr)) {
-                gear = std::get_if<ControlGear>(&m_devices[long_addr]);
+            if (m_devices.contains(longAddr)) {
+                if (const auto* gear = std::get_if<ControlGear>(&m_devices[longAddr])) {
+                    if (gear->device_type.value_or(0xFF) == 8) {
+                        if (!gear->static_data_loaded && (!gear->color.has_value() || (!gear->color->supports_tc && !gear->color->supports_rgb))) {
+                            needs_check = true;
+                        }
+                    }
+                }
             }
         }
 
-        if (!gear) return; // Not a ControlGear or device removed
+        if (!needs_check) return;
 
-        const auto status_opt = dali.getDeviceStatus(shortAddr);
+        auto& dali = DaliAdapter::getInstance();
+        const auto features_opt = dali.getDT8Features(shortAddr);
 
-        bool is_dt8 = false;
-        bool features_known = false;
+        if (features_opt.has_value()) {
+            const uint8_t feat = *features_opt;
+            const bool supports_tc = (feat & 0x02) != 0;
+            const bool supports_rgb = (feat & 0x08) != 0;
+
+            ESP_LOGD(TAG, "DT8 Device %d features: Tc=%d, RGB=%d (Raw: 0x%02X)", shortAddr, supports_tc, supports_rgb, feat);
+
+            std::lock_guard<std::mutex> lock(m_devices_mutex);
+            if (m_devices.contains(longAddr)) {
+                if (auto* g = std::get_if<ControlGear>(&m_devices[longAddr])) {
+                    if (!g->color.has_value()) g->color = ColorFeatures();
+                    g->color->supports_tc = supports_tc;
+                    g->color->supports_rgb = supports_rgb;
+                    m_nvs_dirty = true;
+                    m_last_nvs_change_ts = esp_timer_get_time() / 1000;
+                }
+            }
+        }
+    }
+
+    ColorPollResult DaliDeviceController::pollColorDataCyclic(const uint8_t shortAddr, const DaliLongAddress_t longAddr, const uint8_t current_level) {
+        ColorPollResult result;
+        if (current_level == 0) return result;
+
+        bool should_poll = false;
         bool supports_tc = false;
         bool supports_rgb = false;
-        bool is_initial_sync = false;
-        uint8_t current_cached_level = 0;
-
-        {
-             std::lock_guard<std::mutex> lock(m_devices_mutex);
-             if (m_devices.contains(long_addr)) {
-                 if (auto* safe_gear = std::get_if<ControlGear>(&m_devices[long_addr])) {
-                     current_cached_level = safe_gear->current_level;
-                     is_initial_sync = safe_gear->initial_sync_needed;
-                     if (safe_gear->device_type.has_value() && safe_gear->device_type.value() == 8) {
-                         is_dt8 = true;
-                         features_known = safe_gear->static_data_loaded;
-                         if (safe_gear->color.has_value()) {
-                             supports_tc = safe_gear->color->supports_tc;
-                             supports_rgb = safe_gear->color->supports_rgb;
-                         }
-                     }
-                 }
-             }
-        }
-
-        if (is_dt8 && !features_known) {
-            auto features_opt = dali.getDT8Features(shortAddr);
-            if (features_opt.has_value()) {
-                uint8_t feat = *features_opt;
-                supports_tc = (feat & 0x02) != 0;
-                supports_rgb = (feat & 0x08) != 0;
-                ESP_LOGD(TAG, "DT8 Device %d features: Tc=%d, RGB=%d (Raw: 0x%02X)",
-                    shortAddr, supports_tc, supports_rgb, feat);
-                {
-                    std::lock_guard<std::mutex> lock(m_devices_mutex);
-                    if (m_devices.contains(long_addr)) {
-                        if (auto* g = std::get_if<ControlGear>(&m_devices[long_addr])) {
-                            if (!g->color.has_value()) g->color = ColorFeatures();
-                            g->color->supports_tc = supports_tc;
-                            g->color->supports_rgb = supports_rgb;
-                            m_nvs_dirty = true;
-                            m_last_nvs_change_ts = esp_timer_get_time() / 1000;
-                        }
-                    }
-                }
-            }
-        }
-
-        const uint8_t actual_level = (level_opt.value() == 255) ? current_cached_level : level_opt.value();
-        std::optional<uint16_t> polled_tc = std::nullopt;
-        std::optional<DaliRGB> polled_rgb = std::nullopt;
-
         const int64_t now_sec = esp_timer_get_time() / 1000000;
         constexpr int64_t COLOR_POLL_INTERVAL_SEC = 60;
-        bool should_poll_color = false;
 
         {
             std::lock_guard<std::mutex> lock(m_devices_mutex);
-            if (auto* g = std::get_if<ControlGear>(&m_devices[long_addr])) {
-                if (actual_level > 0 && g->color.has_value()) {
-                    if (g->color->supports_tc || g->color->supports_rgb) {
-                        if ((now_sec - g->color->last_poll_ts) > 60) {
-                            should_poll_color = true;
+            if (m_devices.contains(longAddr)) {
+                if (auto* g = std::get_if<ControlGear>(&m_devices[longAddr])) {
+                    if (g->color.has_value()) {
+                        if ((g->color->supports_tc || g->color->supports_rgb) &&
+                            (now_sec - g->color->last_poll_ts) > COLOR_POLL_INTERVAL_SEC) {
+                            should_poll = true;
+                            supports_tc = g->color->supports_tc;
+                            supports_rgb = g->color->supports_rgb;
                         }
                     }
                 }
             }
         }
 
-        if (should_poll_color) {
-            bool poll_tc = supports_tc;
-            bool poll_rgb = supports_rgb;
-
-            if (poll_tc) {
-                polled_tc = dali.getDT8ColorTemp(shortAddr);
+        if (should_poll) {
+            auto& dali = DaliAdapter::getInstance();
+            if (supports_tc) {
+                result.tc = dali.getDT8ColorTemp(shortAddr);
             }
-            if (poll_rgb) {
-                polled_rgb = dali.getDT8RGB(shortAddr);
+            if (supports_rgb) {
+                result.rgb = dali.getDT8RGB(shortAddr);
             }
 
-            {
-                std::lock_guard<std::mutex> lock(m_devices_mutex);
-                if(m_devices.contains(long_addr)) {
-                    if (auto* g = std::get_if<ControlGear>(&m_devices[long_addr])) {
-                        if (g->color) g->color->last_poll_ts = now_sec;
-                    }
+            std::lock_guard<std::mutex> lock(m_devices_mutex);
+            if (m_devices.contains(longAddr)) {
+                if (auto* g = std::get_if<ControlGear>(&m_devices[longAddr])) {
+                    if (g->color) g->color->last_poll_ts = now_sec;
                 }
             }
         }
+        return result;
+    }
 
-        updateDeviceState(long_addr, {
-            .level = actual_level,
-            .status_byte = status_opt,
-            .color_temp = polled_tc,
-            .rgb = polled_rgb,
-        });
+    void DaliDeviceController::performInitialGroupSync(const DaliLongAddress_t longAddr, const uint8_t level, const ColorPollResult& colorData) {
+        bool is_initial_sync = false;
+        bool is_dt8 = false;
+
+        {
+            std::lock_guard<std::mutex> lock(m_devices_mutex);
+            if (const auto it = m_devices.find(longAddr); it != m_devices.end()) {
+                if (const auto* gear = std::get_if<ControlGear>(&it->second)) {
+                    is_initial_sync = gear->initial_sync_needed;
+                    is_dt8 = gear->color.has_value();
+                }
+            }
+        }
 
         if (is_initial_sync) {
-            auto groups_opt = DaliGroupManagement::getInstance().getGroupsForDevice(long_addr);
-            if (groups_opt) {
+            if (const auto groups_opt = DaliGroupManagement::getInstance().getGroupsForDevice(longAddr)) {
                 for (uint8_t i = 0; i < 16; ++i) {
                     if (groups_opt->test(i)) {
-                        auto current_grp = DaliGroupManagement::getInstance().getGroupState(i);
+                        const auto current_grp = DaliGroupManagement::getInstance().getGroupState(i);
                         DaliPublishState groupUpdate;
-                        if (actual_level > current_grp.current_level) {
-                            groupUpdate.level = actual_level;
+
+                        // group takes max level of any member
+                        if (level > current_grp.current_level) {
+                            groupUpdate.level = level;
                         }
                         if (is_dt8) {
-                            groupUpdate.color_temp = polled_tc;
-                            groupUpdate.rgb = polled_rgb;
+                            groupUpdate.color_temp = colorData.tc;
+                            groupUpdate.rgb = colorData.rgb;
                         }
+
                         if (groupUpdate.level.has_value() || groupUpdate.color_temp.has_value() || groupUpdate.rgb.has_value()) {
                             DaliGroupManagement::getInstance().updateGroupState(i, groupUpdate);
                         }
@@ -681,47 +676,91 @@ namespace daliMQTT
                 }
             }
         }
+    }
 
-        bool needs_static_data = false;
+    void DaliDeviceController::initialStaticDataFetch(const uint8_t shortAddr, const DaliLongAddress_t longAddr) {
+        bool needs_load = false;
         {
             std::lock_guard<std::mutex> lock(m_devices_mutex);
-            if (m_devices.contains(long_addr)) {
-                 if (auto* g = std::get_if<ControlGear>(&m_devices[long_addr])) {
-                     if (!g->static_data_loaded) needs_static_data = true;
-                 }
+            if (m_devices.contains(longAddr)) {
+                if (const auto* g = std::get_if<ControlGear>(&m_devices[longAddr])) {
+                    if (!g->static_data_loaded) needs_load = true;
+                }
             }
         }
 
-        if (needs_static_data) {
-            const auto min_opt = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddr, DALI_COMMAND_QUERY_MIN_LEVEL);
-            const auto max_opt = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddr, DALI_COMMAND_QUERY_MAX_LEVEL);
-            const auto power_on_opt = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddr, DALI_COMMAND_QUERY_POWER_ON_LEVEL);
-            const auto fail_opt = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddr, DALI_COMMAND_QUERY_SYSTEM_FAILURE_LEVEL);
-            const auto gtin_opt = dali.getGTIN(shortAddr);
-            const auto dt_opt = dali.getDeviceType(shortAddr);
+        if (!needs_load) return;
 
-            {
-                std::lock_guard<std::mutex> lock(m_devices_mutex);
-                if(m_devices.contains(long_addr)) {
-                    if (auto* g = std::get_if<ControlGear>(&m_devices[long_addr])) {
-                        bool changed = false;
-                        if (gtin_opt.has_value()) { g->gtin = gtin_opt.value(); changed = true; }
-                        if (dt_opt.has_value()) { g->device_type = dt_opt; changed = true; }
-                        if (min_opt.has_value()) { g->min_level = *min_opt; changed = true; }
-                        if (max_opt.has_value()) { g->max_level = *max_opt; changed = true; }
-                        if (power_on_opt.has_value()) { g->power_on_level = *power_on_opt; changed = true; }
-                        if (fail_opt.has_value()) { g->system_failure_level = *fail_opt; changed = true; }
+        auto& dali = DaliAdapter::getInstance();
+        const auto min_opt = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddr, DALI_COMMAND_QUERY_MIN_LEVEL);
+        const auto max_opt = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddr, DALI_COMMAND_QUERY_MAX_LEVEL);
+        const auto power_on_opt = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddr, DALI_COMMAND_QUERY_POWER_ON_LEVEL);
+        const auto fail_opt = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddr, DALI_COMMAND_QUERY_SYSTEM_FAILURE_LEVEL);
+        const auto gtin_opt = dali.getGTIN(shortAddr);
+        const auto dt_opt = dali.getDeviceType(shortAddr);
 
-                        g->static_data_loaded = true;
-                        if (changed) {
-                            m_nvs_dirty = true;
-                            m_last_nvs_change_ts = esp_timer_get_time() / 1000;
-                        }
+        {
+            std::lock_guard<std::mutex> lock(m_devices_mutex);
+            if (m_devices.contains(longAddr)) {
+                if (auto* g = std::get_if<ControlGear>(&m_devices[longAddr])) {
+                    bool changed = false;
+                    if (gtin_opt.has_value()) { g->gtin = gtin_opt.value(); changed = true; }
+                    if (dt_opt.has_value()) { g->device_type = dt_opt; changed = true; }
+                    if (min_opt.has_value()) { g->min_level = *min_opt; changed = true; }
+                    if (max_opt.has_value()) { g->max_level = *max_opt; changed = true; }
+                    if (power_on_opt.has_value()) { g->power_on_level = *power_on_opt; changed = true; }
+                    if (fail_opt.has_value()) { g->system_failure_level = *fail_opt; changed = true; }
+
+                    g->static_data_loaded = true;
+                    if (changed) {
+                        m_nvs_dirty = true;
+                        m_last_nvs_change_ts = esp_timer_get_time() / 1000;
                     }
                 }
             }
-            publishAttributes(long_addr);
         }
+        publishAttributes(longAddr);
+    }
+    void DaliDeviceController::pollSingleDevice(const uint8_t shortAddr) {
+        DaliLongAddress_t longAddr = 0;
+        bool known_device = false;
+
+        {
+            std::lock_guard<std::mutex> lock(m_devices_mutex);
+            if (const auto it = m_short_to_long_map.find(shortAddr); it != m_short_to_long_map.end()) {
+                longAddr = it->second;
+                known_device = true;
+            }
+        }
+        if (!known_device) return;
+
+        const auto levelOpt = pollAvailabilityAndLevel(shortAddr, longAddr);
+        if (!levelOpt) return; // Offline
+        const uint8_t actualLevel = *levelOpt;
+
+        bool isControlGear = false;
+        {
+            std::lock_guard<std::mutex> lock(m_devices_mutex);
+            if (m_devices.contains(longAddr)) {
+                isControlGear = std::holds_alternative<ControlGear>(m_devices.at(longAddr));
+            }
+        }
+        if (!isControlGear) return;
+        auto& dali = DaliAdapter::getInstance();
+        const auto statusOpt = dali.getDeviceStatus(shortAddr);
+
+        checkDT8Features(shortAddr, longAddr);
+        const auto colorData = pollColorDataCyclic(shortAddr, longAddr, actualLevel);
+
+        updateDeviceState(longAddr, {
+            .level = actualLevel,
+            .status_byte = statusOpt,
+            .color_temp = colorData.tc,
+            .rgb = colorData.rgb,
+        });
+
+        performInitialGroupSync(longAddr, actualLevel, colorData);
+        initialStaticDataFetch(shortAddr, longAddr);
     }
 
     std::bitset<64> DaliDeviceController::performFullInitialization() {

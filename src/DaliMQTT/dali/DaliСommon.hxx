@@ -56,6 +56,11 @@ namespace daliMQTT
         uint8_t short_address;
         int64_t execute_at_ts; // Timestamp (ms)
     };
+
+    struct ColorPollResult {
+        std::optional<uint16_t> tc;
+        std::optional<DaliRGB> rgb;
+    };
 } // daliMQTT
 
 #endif //DALIMQTT_DALITYPES_HXX

@@ -80,6 +80,12 @@ namespace daliMQTT
         bool validateAddressMap();
         void pollSingleDevice(uint8_t shortAddr);
 
+        std::optional<uint8_t> pollAvailabilityAndLevel(uint8_t shortAddr, DaliLongAddress_t longAddr);
+        void checkDT8Features(uint8_t shortAddr, DaliLongAddress_t longAddr);
+        ColorPollResult pollColorDataCyclic(uint8_t shortAddr, DaliLongAddress_t longAddr, uint8_t current_level);
+        void performInitialGroupSync(DaliLongAddress_t longAddr, uint8_t level, const ColorPollResult& colorData);
+        void initialStaticDataFetch(uint8_t shortAddr, DaliLongAddress_t longAddr);
+
         [[noreturn]] static void daliEventHandlerTask(void* pvParameters);
         [[noreturn]] static void daliSyncTask(void* pvParameters);
 
