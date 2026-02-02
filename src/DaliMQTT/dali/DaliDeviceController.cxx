@@ -14,7 +14,7 @@ namespace daliMQTT
 
     void DaliDeviceController::init() {
         ESP_LOGI(TAG, "Initializing DALI Device Controller...");
-        if (!DaliAdapter::getInstance().isInitialized()) {
+        if (!DaliAdapter::Instance().isInitialized()) {
             ESP_LOGW(TAG, "DALI Driver not initialized. Device discovery skipped.");
             return;
         }
@@ -34,7 +34,7 @@ namespace daliMQTT
             return;
         }
 
-        auto& dali_api = DaliAdapter::getInstance();
+        auto& dali_api = DaliAdapter::Instance();
         if (dali_api.isInitialized()) {
             dali_api.startSniffer();
             xTaskCreate(daliEventHandlerTask, "dali_event_handler", 4096, this, 5, &m_event_handler_task);
@@ -46,8 +46,8 @@ namespace daliMQTT
     }
 
     void DaliDeviceController::publishState(const DaliLongAddress_t long_addr, const ControlGear& device) const {
-        auto const& mqtt = MQTTClient::getInstance();
-        const auto config = ConfigManager::getInstance().getConfig();
+        auto const& mqtt = MQTTClient::Instance();
+        const auto config = ConfigManager::Instance().getConfig();
 
         const auto addr_str = utils::longAddressToString(long_addr);
         const std::string state_topic = utils::stringFormat("%s/light/%s/state", config.mqtt_base_topic.c_str(), addr_str.data());
@@ -82,8 +82,8 @@ namespace daliMQTT
     }
 
     void DaliDeviceController::publishAvailability(const DaliLongAddress_t long_addr, const bool is_available) {
-        auto const& mqtt = MQTTClient::getInstance();
-        const auto config = ConfigManager::getInstance().getConfig();
+        auto const& mqtt = MQTTClient::Instance();
+        const auto config = ConfigManager::Instance().getConfig();
 
         const auto addr_str = utils::longAddressToString(long_addr);
         const std::string status_topic = utils::stringFormat("%s/light/%s/status", config.mqtt_base_topic.c_str(), addr_str.data());
@@ -147,15 +147,15 @@ namespace daliMQTT
     }
 
     void DaliDeviceController::publishAttributes(const DaliLongAddress_t long_addr) const {
-        auto const& mqtt = MQTTClient::getInstance();
-        const auto config = ConfigManager::getInstance().getConfig();
+        auto const& mqtt = MQTTClient::Instance();
+        const auto config = ConfigManager::Instance().getConfig();
         const auto addr_str = utils::longAddressToString(long_addr);
 
         ControlGear dev_copy;
         {
             std::lock_guard<std::mutex> lock(m_devices_mutex);
-            if (!getInstance().m_devices.contains(long_addr)) return;
-            if (const auto* gear = std::get_if<ControlGear>(&getInstance().m_devices.at(long_addr))) {
+            if (!Instance().m_devices.contains(long_addr)) return;
+            if (const auto* gear = std::get_if<ControlGear>(&Instance().m_devices.at(long_addr))) {
                 dev_copy = *gear;
             } else {
                 return;
@@ -201,7 +201,7 @@ namespace daliMQTT
 
     bool DaliDeviceController::validateAddressMap() {
         ESP_LOGI(TAG, "Validating cached DALI address map...");
-        auto& dali = DaliAdapter::getInstance();
+        auto& dali = DaliAdapter::Instance();
 
         struct ValidationItem {
             DaliLongAddress_t long_addr;
@@ -252,7 +252,7 @@ namespace daliMQTT
     }
     [[noreturn]] void DaliDeviceController::daliEventHandlerTask(void* pvParameters) {
         auto* self = static_cast<DaliDeviceController*>(pvParameters);
-        const auto& dali_api = DaliAdapter::getInstance();
+        const auto& dali_api = DaliAdapter::Instance();
         const QueueHandle_t queue = dali_api.getEventQueue();
         dali_frame_t frame;
 
@@ -260,11 +260,11 @@ namespace daliMQTT
             if (xQueueReceive(queue, &frame, portMAX_DELAY) == pdPASS) {
                 #ifdef CONFIG_DALI2MQTT_SNIFFER_DEBUG_PUBLISH_MQTT
                     {
-                        auto const& mqtt = MQTTClient::getInstance();
+                        auto const& mqtt = MQTTClient::Instance();
                         if (mqtt.getStatus() == MqttStatus::CONNECTED) {
                             static std::string cached_topic;
                             if (cached_topic.empty()) {
-                                cached_topic = ConfigManager::getInstance().getMqttBaseTopic() + "/debug/sniffer_raw";
+                                cached_topic = ConfigManager::Instance().getMqttBaseTopic() + "/debug/sniffer_raw";
                             }
 
                             char payload_buffer[128];
@@ -305,7 +305,7 @@ namespace daliMQTT
         self->requestBroadcastSync(200, 150);
 
         ESP_LOGI(TAG, "Dali Adaptive Sync Task Started.");
-        const auto config = ConfigManager::getInstance().getConfig();
+        const auto config = ConfigManager::Instance().getConfig();
 
         const uint32_t safe_cycle_time = std::max<uint32_t>(1000, config.dali_poll_interval_ms);
         const uint32_t calc_delay_ms = safe_cycle_time >> 6;
@@ -370,7 +370,7 @@ namespace daliMQTT
                     self->m_round_robin_index = 0;
 
                     // Sync Group states from device info
-                    auto all_assignments = DaliGroupManagement::getInstance().getAllAssignments();
+                    auto all_assignments = DaliGroupManagement::Instance().getAllAssignments();
                     std::map<DaliLongAddress_t, DaliDevice> devices_snapshot;
                     {
                         std::lock_guard<std::mutex> lock(self->m_devices_mutex);
@@ -407,7 +407,7 @@ namespace daliMQTT
                     }
 
                     for(const auto& [group_id, state] : group_sync_states) {
-                        DaliGroupManagement::getInstance().updateGroupState(group_id, state);
+                        DaliGroupManagement::Instance().updateGroupState(group_id, state);
                     }
                 }
                 vTaskDelay(rr_delay_ticks);
@@ -493,8 +493,8 @@ namespace daliMQTT
         cJSON_Delete(root);
 
         if (json_payload) {
-            auto const& mqtt = MQTTClient::getInstance();
-            const auto config = ConfigManager::getInstance().getConfig();
+            auto const& mqtt = MQTTClient::Instance();
+            const auto config = ConfigManager::Instance().getConfig();
 
             std::string topic = utils::stringFormat("%s/event/%s/%s", // base/event/{address_type}/{address_str}
                 config.mqtt_base_topic.c_str(),
@@ -521,7 +521,7 @@ namespace daliMQTT
     }
 
     std::optional<uint8_t> DaliDeviceController::pollAvailabilityAndLevel(const uint8_t shortAddr, const DaliLongAddress_t longAddr) {
-        auto& dali = DaliAdapter::getInstance();
+        auto& dali = DaliAdapter::Instance();
         const auto level_opt = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddr, DALI_COMMAND_QUERY_ACTUAL_LEVEL);
         const bool is_responding = level_opt.has_value();
 
@@ -571,7 +571,7 @@ namespace daliMQTT
 
         if (!needs_check) return;
 
-        auto& dali = DaliAdapter::getInstance();
+        auto& dali = DaliAdapter::Instance();
         const auto features_opt = dali.getDT8Features(shortAddr);
 
         if (features_opt.has_value()) {
@@ -621,7 +621,7 @@ namespace daliMQTT
         }
 
         if (should_poll) {
-            auto& dali = DaliAdapter::getInstance();
+            auto& dali = DaliAdapter::Instance();
             if (supports_tc) {
                 result.tc = dali.getDT8ColorTemp(shortAddr);
             }
@@ -654,10 +654,10 @@ namespace daliMQTT
         }
 
         if (is_initial_sync) {
-            if (const auto groups_opt = DaliGroupManagement::getInstance().getGroupsForDevice(longAddr)) {
+            if (const auto groups_opt = DaliGroupManagement::Instance().getGroupsForDevice(longAddr)) {
                 for (uint8_t i = 0; i < 16; ++i) {
                     if (groups_opt->test(i)) {
-                        const auto current_grp = DaliGroupManagement::getInstance().getGroupState(i);
+                        const auto current_grp = DaliGroupManagement::Instance().getGroupState(i);
                         DaliPublishState groupUpdate;
 
                         // group takes max level of any member
@@ -670,7 +670,7 @@ namespace daliMQTT
                         }
 
                         if (groupUpdate.level.has_value() || groupUpdate.color_temp.has_value() || groupUpdate.rgb.has_value()) {
-                            DaliGroupManagement::getInstance().updateGroupState(i, groupUpdate);
+                            DaliGroupManagement::Instance().updateGroupState(i, groupUpdate);
                         }
                     }
                 }
@@ -691,7 +691,7 @@ namespace daliMQTT
 
         if (!needs_load) return;
 
-        auto& dali = DaliAdapter::getInstance();
+        auto& dali = DaliAdapter::Instance();
         const auto min_opt = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddr, DALI_COMMAND_QUERY_MIN_LEVEL);
         const auto max_opt = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddr, DALI_COMMAND_QUERY_MAX_LEVEL);
         const auto power_on_opt = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddr, DALI_COMMAND_QUERY_POWER_ON_LEVEL);
@@ -746,7 +746,7 @@ namespace daliMQTT
             }
         }
         if (!isControlGear) return;
-        auto& dali = DaliAdapter::getInstance();
+        auto& dali = DaliAdapter::Instance();
         const auto statusOpt = dali.getDeviceStatus(shortAddr);
 
         checkDT8Features(shortAddr, longAddr);
@@ -764,25 +764,25 @@ namespace daliMQTT
     }
 
     std::bitset<64> DaliDeviceController::performFullInitialization() {
-        if (!DaliAdapter::getInstance().isInitialized()) {
+        if (!DaliAdapter::Instance().isInitialized()) {
             ESP_LOGE(TAG, "Cannot initialize DALI bus: DALI driver is not initialized.");
             return {};
         }
-        DaliAdapter::getInstance().initializeBus();
+        DaliAdapter::Instance().initializeBus();
         return discoverAndMapDevices();
     }
 
     std::bitset<64> DaliDeviceController::perform24BitDeviceInitialization() {
-        if (!DaliAdapter::getInstance().isInitialized()) {
+        if (!DaliAdapter::Instance().isInitialized()) {
             ESP_LOGE(TAG, "Cannot initialize DALI bus: DALI driver is not initialized.");
             return {};
         }
-        DaliAdapter::getInstance().initialize24BitDevicesBus();
+        DaliAdapter::Instance().initialize24BitDevicesBus();
         return discoverAndMapDevices();
     }
 
     std::bitset<64> DaliDeviceController::performScan() {
-        if (!DaliAdapter::getInstance().isInitialized()) {
+        if (!DaliAdapter::Instance().isInitialized()) {
             ESP_LOGE(TAG, "Cannot scan DALI bus: DALI driver is not initialized.");
             return {};
         }
@@ -791,7 +791,7 @@ namespace daliMQTT
 
     std::bitset<64> DaliDeviceController::discoverAndMapDevices() {
         ESP_LOGI(TAG, "Starting DALI device discovery and mapping...");
-        auto& dali = DaliAdapter::getInstance();
+        auto& dali = DaliAdapter::Instance();
         std::map<DaliLongAddress_t, DaliDevice> new_devices;
         std::map<uint8_t, DaliLongAddress_t> new_short_to_long_map;
         std::bitset<64> found_devices;
@@ -844,7 +844,7 @@ namespace daliMQTT
     }
 
     std::optional<DaliLongAddress_t> DaliDeviceController::getInputDeviceLongAddress(const uint8_t shortAddress) const {
-        auto& dali = DaliAdapter::getInstance();
+        auto& dali = DaliAdapter::Instance();
         auto readByte = [&](uint8_t offset) -> std::optional<uint8_t> {
             dali.sendInputDeviceCommand(shortAddress, 0x31, 0x00); // Bank 0
             dali.sendInputDeviceCommand(shortAddress, 0x30, offset); // Offset

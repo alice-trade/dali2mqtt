@@ -111,7 +111,7 @@ namespace daliMQTT
             ESP_LOGE(TAG, "mDNS Init failed: %s", esp_err_to_name(err));
             return;
         }
-        auto config = ConfigManager::getInstance().getConfig();
+        auto config = ConfigManager::Instance().getConfig();
 
         std::string hostname = config.http_domain;
         ESP_ERROR_CHECK(mdns_hostname_set(hostname.c_str()));

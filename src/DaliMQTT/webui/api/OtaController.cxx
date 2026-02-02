@@ -9,7 +9,7 @@ namespace daliMQTT {
     esp_err_t WebUI::api::OtaUpdateHandler(httpd_req_t *req) {
         if (checkAuth(req) != ESP_OK) return ESP_FAIL;
 
-        if (AppUpdateManager::getInstance().isUpdateInProgress()) {
+        if (AppUpdateManager::Instance().isUpdateInProgress()) {
             httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Update already in progress");
             return ESP_FAIL;
         }
@@ -37,7 +37,7 @@ namespace daliMQTT {
         }
 
         if (target_url.empty()) {
-            target_url = ConfigManager::getInstance().getConfig().app_ota_url;
+            target_url = ConfigManager::Instance().getConfig().app_ota_url;
         }
 
         if (target_url.empty()) {
@@ -45,7 +45,7 @@ namespace daliMQTT {
             return ESP_FAIL;
         }
 
-        const bool started = AppUpdateManager::getInstance().startUpdateAsync(target_url, update_type);
+        const bool started = AppUpdateManager::Instance().startUpdateAsync(target_url, update_type);
 
         if (started) {
             httpd_resp_send(req, "{\"status\": \"ok\", \"message\": \"OTA update started via system\"}", -1);

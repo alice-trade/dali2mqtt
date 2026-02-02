@@ -50,7 +50,7 @@ namespace daliMQTT {
         }
 
         if (target_group_id.has_value()) {
-            auto all_assignments = DaliGroupManagement::getInstance().getAllAssignments();
+            auto all_assignments = DaliGroupManagement::Instance().getAllAssignments();
             for (const auto& [long_addr, groups] : all_assignments) {
                 if (groups.test(target_group_id.value())) {
                     affected_devices.push_back(long_addr);
@@ -59,7 +59,7 @@ namespace daliMQTT {
         }
 
         if (target_group_id.has_value()) {
-            auto& group_mgr = DaliGroupManagement::getInstance();
+            auto& group_mgr = DaliGroupManagement::Instance();
             const uint8_t gid = target_group_id.value();
             if ((addr_byte & 0x01) == 0) { // DACP
                 group_mgr.updateGroupState(gid, {.level = cmd_byte});

@@ -15,8 +15,8 @@ namespace daliMQTT {
 
     static void dali_scan_task(void*) {
         ESP_LOGI(TAG, "Starting background DALI scan...");
-        DaliDeviceController::getInstance().performScan();
-        DaliGroupManagement::getInstance().refreshAssignmentsFromBus();
+        DaliDeviceController::Instance().performScan();
+        DaliGroupManagement::Instance().refreshAssignmentsFromBus();
         ESP_LOGI(TAG, "Background DALI scan finished.");
         g_dali_task_status = DaliTaskStatus::IDLE;
         vTaskDelete(nullptr);
@@ -25,7 +25,7 @@ namespace daliMQTT {
     esp_err_t WebUI::api::DaliGetDevicesHandler(httpd_req_t *req) {
         if (checkAuth(req) != ESP_OK) return ESP_FAIL;
 
-        auto devices = DaliDeviceController::getInstance().getDevices();
+        auto devices = DaliDeviceController::Instance().getDevices();
         cJSON *root = cJSON_CreateArray();
 
         for (const auto& [long_addr, dev] : devices) {
@@ -98,8 +98,8 @@ namespace daliMQTT {
 
     static void dali_init_task(void*) {
         ESP_LOGI(TAG, "Starting background DALI initialization...");
-        DaliDeviceController::getInstance().performFullInitialization();
-        DaliGroupManagement::getInstance().refreshAssignmentsFromBus();
+        DaliDeviceController::Instance().performFullInitialization();
+        DaliGroupManagement::Instance().refreshAssignmentsFromBus();
         ESP_LOGI(TAG, "Background DALI initialization finished.");
         g_dali_task_status = DaliTaskStatus::IDLE;
         vTaskDelete(nullptr);
@@ -151,7 +151,7 @@ namespace daliMQTT {
 
     esp_err_t WebUI::api::DaliGetNamesHandler(httpd_req_t *req) {
         if (checkAuth(req) != ESP_OK) return ESP_FAIL;
-        const auto cfg = ConfigManager::getInstance().getConfig();
+        const auto cfg = ConfigManager::Instance().getConfig();
         httpd_resp_set_type(req, "application/json");
         httpd_resp_send(req, cfg.dali_device_identificators.c_str(), HTTPD_RESP_USE_STRLEN);
         return ESP_OK;
@@ -197,7 +197,7 @@ namespace daliMQTT {
         }
         ESP_LOGD(TAG, "Called set names with JSON: %s", clean_json_string);
 
-        ConfigManager::getInstance().saveDaliDeviceIdentificators(clean_json_string);
+        ConfigManager::Instance().saveDaliDeviceIdentificators(clean_json_string);
         free(clean_json_string);
 
         httpd_resp_send(req, R"({"status":"ok", "message":"Device names saved."})", -1);
@@ -207,7 +207,7 @@ namespace daliMQTT {
     esp_err_t WebUI::api::DaliGetGroupsHandler(httpd_req_t *req) {
         if (checkAuth(req) != ESP_OK) return ESP_FAIL;
 
-        const auto assignments = DaliGroupManagement::getInstance().getAllAssignments();
+        const auto assignments = DaliGroupManagement::Instance().getAllAssignments();
         cJSON *root = cJSON_CreateObject();
 
         for (const auto& [long_addr, groups] : assignments) {
@@ -267,7 +267,7 @@ namespace daliMQTT {
         }
         cJSON_Delete(root);
 
-        DaliGroupManagement::getInstance().setAllAssignments(new_assignments);
+        DaliGroupManagement::Instance().setAllAssignments(new_assignments);
 
         httpd_resp_send(req, R"({"status":"ok", "message":"Group assignments saved."})", -1);
         return ESP_OK;
@@ -300,7 +300,7 @@ namespace daliMQTT {
 
         const uint8_t scene_id = scene_id_item->valueint;
         SceneDeviceLevels levels; // This is map<short_addr, level>
-        const auto& controller = DaliDeviceController::getInstance();
+        const auto& controller = DaliDeviceController::Instance();
 
         const cJSON* level_item = nullptr;
         cJSON_ArrayForEach(level_item, levels_item) {
@@ -316,7 +316,7 @@ namespace daliMQTT {
 
         cJSON_Delete(root);
 
-        DaliSceneManagement::getInstance().saveScene(scene_id, levels);
+        DaliSceneManagement::Instance().saveScene(scene_id, levels);
 
         httpd_resp_send(req, R"({"status":"ok", "message":"Scene configuration saved to devices."})", -1);
         return ESP_OK;
@@ -324,7 +324,7 @@ namespace daliMQTT {
 
     static void dali_refresh_groups_task(void*) {
         ESP_LOGI(TAG, "Starting background DALI group refresh...");
-        DaliGroupManagement::getInstance().refreshAssignmentsFromBus();
+        DaliGroupManagement::Instance().refreshAssignmentsFromBus();
         ESP_LOGI(TAG, "Background DALI group refresh finished.");
         g_dali_task_status = DaliTaskStatus::IDLE;
         vTaskDelete(nullptr);
@@ -368,13 +368,13 @@ namespace daliMQTT {
             return ESP_FAIL;
         }
 
-        auto levels = DaliSceneManagement::getInstance().getSceneLevels(static_cast<uint8_t>(scene_id));
+        auto levels = DaliSceneManagement::Instance().getSceneLevels(static_cast<uint8_t>(scene_id));
 
         cJSON *root = cJSON_CreateObject();
         cJSON_AddNumberToObject(root, "scene_id", scene_id);
 
         cJSON *levels_obj = cJSON_CreateObject();
-        const auto& controller = DaliDeviceController::getInstance();
+        const auto& controller = DaliDeviceController::Instance();
 
         for (const auto& [short_addr, level] : levels) {
             auto long_addr_opt = controller.getLongAddress(short_addr);

@@ -1,6 +1,7 @@
 #include <webui/WebUI.hxx>
 #include "system/ConfigManager.hxx"
 #include "dali/DaliAdapter.hxx"
+#include "system/AppController.hxx"
 
 namespace daliMQTT {
     static constexpr char TAG[] = "WebUIConfig";
@@ -17,29 +18,34 @@ namespace daliMQTT {
         if (ret <= 0) return ESP_FAIL;
         buf[ret] = '\0';
 
-        bool reboot_needed = false;
-        esp_err_t err = ConfigManager::getInstance().updateConfigFromJson(buf.data(), reboot_needed);
+        ConfigUpdateResult config_update_result = ConfigManager::Instance().updateConfigFromJson(buf.data());
 
-        if (err == ESP_ERR_INVALID_ARG) {
-            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST,
-                                "Invalid Configuration (Missing SSID/URI or Malformed JSON)");
-            return ESP_FAIL;
-        }
-        if (err != ESP_OK) {
-            ESP_LOGE(TAG, "Failed to save configuration: %s", esp_err_to_name(err));
-            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to save settings to flash.");
-            return ESP_FAIL;
-        }
 
-        if (reboot_needed) {
-            httpd_resp_send(req, R"({"status":"ok", "message":"Settings saved. Restarting..."})",
-                            HTTPD_RESP_USE_STRLEN);
-            ESP_LOGI(TAG, "Configuration saved via WebUI. Restarting in 3 seconds...");
-            vTaskDelay(pdMS_TO_TICKS(3000));
+        switch (config_update_result) {
+        case ConfigUpdateResult::MQTTUpdate:
+            ESP_LOGI(TAG, "MQTT Settings changed. Triggering hot reload via AppController.");
+            httpd_resp_send(req, R"({"status":"ok", "message":"MQTT configuration updated. Reconnecting services..."})", HTTPD_RESP_USE_STRLEN);
+            xTaskCreate([](void*){
+                vTaskDelay(pdMS_TO_TICKS(200));
+                AppController::Instance().onConfigReloadRequest();
+                vTaskDelete(nullptr);
+            }, "mqtt_reload_task", 4096, nullptr, 5, nullptr);
+            break;
+
+        case ConfigUpdateResult::WIFIUpdate:
+        case ConfigUpdateResult::SystemUpdate:
+            ESP_LOGW(TAG, "System/WiFi settings changed. Reboot required.");
+            httpd_resp_send(req, R"({"status":"ok", "message":"System settings saved. Restarting device..."})", HTTPD_RESP_USE_STRLEN);
+
+            vTaskDelay(pdMS_TO_TICKS(1000));
             esp_restart();
-        } else {
-            httpd_resp_send(req, R"({"status":"ok", "message":"Settings saved (no changes or non-critical)."})",
-                            HTTPD_RESP_USE_STRLEN);
+            break;
+
+        case ConfigUpdateResult::NoUpdate:
+        default:
+            ESP_LOGI(TAG, "Configuration updated but no active services require restart.");
+            httpd_resp_send(req, R"({"status":"ok", "message":"Settings saved."})", HTTPD_RESP_USE_STRLEN);
+            break;
         }
 
         return ESP_OK;
@@ -48,7 +54,7 @@ namespace daliMQTT {
     esp_err_t WebUI::api::GetConfigHandler(httpd_req_t *req) {
         if (checkAuth(req) != ESP_OK) return ESP_FAIL;
 
-        cJSON *root = ConfigManager::getInstance().getSerializedConfig(true);
+        cJSON *root = ConfigManager::Instance().getSerializedConfig(true);
 
         char *json_string = cJSON_Print(root);
         httpd_resp_set_type(req, "application/json");

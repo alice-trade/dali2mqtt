@@ -17,7 +17,7 @@ namespace daliMQTT
         Wifi(const Wifi&) = delete;
         Wifi& operator=(const Wifi&) = delete;
 
-        static Wifi& getInstance() {
+        static Wifi& Instance() {
             static Wifi instance;
             return instance;
         }

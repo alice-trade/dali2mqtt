@@ -6,7 +6,7 @@
 using namespace daliMQTT;
 
 static void test_config_init_and_defaults() {
-    auto& cm = ConfigManager::getInstance();
+    auto& cm = ConfigManager::Instance();
     TEST_ASSERT_EQUAL(ESP_OK, cm.init());
 
     TEST_ASSERT_EQUAL(ESP_OK, cm.load());
@@ -17,7 +17,7 @@ static void test_config_init_and_defaults() {
 }
 
 static void test_config_save_load_cycle() {
-    auto& cm = ConfigManager::getInstance();
+    auto& cm = ConfigManager::Instance();
     AppConfig original = cm.getConfig();
 
     AppConfig testConfig = original;
@@ -36,23 +36,28 @@ static void test_config_save_load_cycle() {
 }
 
 static void test_json_update() {
-    auto& cm = ConfigManager::getInstance();
-    bool reboot = false;
+    auto& cm = ConfigManager::Instance();
 
     const char* json = R"({"wifi_ssid": "NEW_WIFI", "mqtt_uri": "mqtt://test"})";
-    esp_err_t err = cm.updateConfigFromJson(json, reboot);
+    ConfigUpdateResult result = cm.updateConfigFromJson(json);
 
-    TEST_ASSERT_EQUAL(ESP_OK, err);
-    TEST_ASSERT_TRUE(reboot);
+    TEST_ASSERT_EQUAL(ConfigUpdateResult::WIFIUpdate, result);
 
-    AppConfig cfg = cm.getConfig();
+    const AppConfig cfg = cm.getConfig();
     TEST_ASSERT_EQUAL_STRING("NEW_WIFI", cfg.wifi_ssid.c_str());
+    TEST_ASSERT_EQUAL_STRING("mqtt://test", cfg.mqtt_uri.c_str());
+
+    const char* mqtt_json = R"({"mqtt_uri": "mqtt://new-broker", "mqtt_user": "admin"})";
+    result = cm.updateConfigFromJson(mqtt_json);
+    TEST_ASSERT_EQUAL(ConfigUpdateResult::MQTTUpdate, result);
 
     const char* bad_json = R"({"garbage": 1})";
+    result = cm.updateConfigFromJson(bad_json);
 
-    bool rb2 = false;
-    cm.updateConfigFromJson(bad_json, rb2);
-    TEST_ASSERT_FALSE(rb2);
+    TEST_ASSERT_EQUAL(ConfigUpdateResult::NoUpdate, result);
+
+    result = cm.updateConfigFromJson(mqtt_json);
+    TEST_ASSERT_EQUAL(ConfigUpdateResult::NoUpdate, result);
 }
 
 void run_config_manager_tests() {

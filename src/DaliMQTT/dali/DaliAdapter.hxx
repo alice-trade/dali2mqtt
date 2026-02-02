@@ -14,7 +14,7 @@ namespace daliMQTT
         DaliAdapter(const DaliAdapter&) = delete;
         DaliAdapter& operator=(const DaliAdapter&) = delete;
 
-        static DaliAdapter& getInstance() {
+        static DaliAdapter& Instance() {
             static DaliAdapter instance;
             return instance;
         }

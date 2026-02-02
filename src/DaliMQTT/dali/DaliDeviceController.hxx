@@ -10,7 +10,7 @@ namespace daliMQTT
         DaliDeviceController(const DaliDeviceController&) = delete;
         DaliDeviceController& operator=(const DaliDeviceController&) = delete;
 
-        static DaliDeviceController& getInstance() {
+        static DaliDeviceController& Instance() {
             static DaliDeviceController instance;
             return instance;
         }

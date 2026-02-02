@@ -8,7 +8,7 @@ namespace daliMQTT {
         public:
             MQTTCommandProcess(const MQTTCommandProcess&) = delete;
             MQTTCommandProcess& operator=(const MQTTCommandProcess&) = delete;
-            static MQTTCommandProcess& getInstance() {
+            static MQTTCommandProcess& Instance() {
                 static MQTTCommandProcess instance;
                 return instance;
             }

@@ -45,9 +45,9 @@ namespace daliMQTT {
         const auto* params = static_cast<TaskParams*>(pvParameter);
 
         if (params->type == 1) {
-            AppUpdateManager::getInstance().performSpiffsUpdate(params->url);
+            AppUpdateManager::Instance().performSpiffsUpdate(params->url);
         } else {
-            AppUpdateManager::getInstance().performUpdate(params->url);
+            AppUpdateManager::Instance().performUpdate(params->url);
         }
 
         delete params;

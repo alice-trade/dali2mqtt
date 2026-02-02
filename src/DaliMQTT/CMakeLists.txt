@@ -14,7 +14,6 @@ target_compile_definitions(DaliMQTT-Core PUBLIC  $<$<CONFIG:Debug>:_DEBUG_DALIMQ
 set(MODULE_DIRS
         system
         wifi
-        lifecycle
         webui
         webui/api
         dali

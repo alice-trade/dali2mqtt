@@ -298,15 +298,15 @@ namespace daliMQTT
         return root;
     }
 
-    esp_err_t ConfigManager::updateConfigFromJson(const char* json_str, bool& reboot_needed) {
+    ConfigUpdateResult ConfigManager::updateConfigFromJson(const char* json_str) {
         cJSON *root = cJSON_Parse(json_str);
         if (root == nullptr) {
             ESP_LOGE(TAG, "Failed to parse configuration JSON");
-            return ESP_ERR_INVALID_ARG;
+            return ConfigUpdateResult::NoUpdate;
         }
 
-        reboot_needed = false;
         AppConfig current_cfg = getConfig();
+        AppConfig old_cfg = current_cfg;
         bool changed = false;
 
         #define JsonSetStrConfig(NAME, KEY) \
@@ -382,19 +382,31 @@ namespace daliMQTT
         cJSON_Delete(root);
 
         if (!changed) {
-            ESP_LOGI(TAG, "No configuration changes detected.");
-            return ESP_OK;
+            return ConfigUpdateResult::NoUpdate;
         }
 
         if(current_cfg.wifi_ssid.empty() || current_cfg.mqtt_uri.empty()) {
             ESP_LOGE(TAG, "SSID and MQTT URI cannot be empty");
-            return ESP_ERR_INVALID_ARG;
+            return ConfigUpdateResult::NoUpdate;
         }
 
-        esp_err_t err = saveMainConfig(current_cfg);
-        if (err == ESP_OK) {
-            reboot_needed = true;
+        if (esp_err_t saveResult = saveMainConfig(current_cfg); saveResult != ESP_OK) {
+            return ConfigUpdateResult::NoUpdate;
         }
-        return err;
+
+        if (old_cfg.wifi_ssid != current_cfg.wifi_ssid ||
+            old_cfg.wifi_password != current_cfg.wifi_password) {
+            return ConfigUpdateResult::WIFIUpdate;
+            }
+
+        if (old_cfg.mqtt_uri != current_cfg.mqtt_uri ||
+            old_cfg.mqtt_user != current_cfg.mqtt_user ||
+            old_cfg.mqtt_pass != current_cfg.mqtt_pass ||
+            old_cfg.mqtt_base_topic != current_cfg.mqtt_base_topic ||
+            old_cfg.client_id != current_cfg.client_id) {
+            return ConfigUpdateResult::MQTTUpdate;
+            }
+
+        return ConfigUpdateResult::SystemUpdate;
     }
 }

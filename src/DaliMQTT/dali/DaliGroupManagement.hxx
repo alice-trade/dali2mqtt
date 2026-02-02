@@ -11,7 +11,7 @@ namespace daliMQTT
         DaliGroupManagement(const DaliGroupManagement&) = delete;
         DaliGroupManagement& operator=(const DaliGroupManagement&) = delete;
 
-        static DaliGroupManagement& getInstance() {
+        static DaliGroupManagement& Instance() {
             static DaliGroupManagement instance;
             return instance;
         }

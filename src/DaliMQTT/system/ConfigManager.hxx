@@ -39,47 +39,44 @@ namespace daliMQTT
 
         bool configured{false};
     };
-
+    enum class ConfigUpdateResult {
+        NoUpdate,
+        MQTTUpdate,
+        WIFIUpdate,
+        SystemUpdate
+    };
     class ConfigManager {
         public:
             ConfigManager(const ConfigManager&) = delete;
             ConfigManager& operator=(const ConfigManager&) = delete;
 
-            // Получение единственного экземпляра класса
-            [[nodiscard]] static ConfigManager& getInstance() {
+            [[nodiscard]] static ConfigManager& Instance() {
                 static ConfigManager instance;
                 return instance;
             }
 
-            // Инициализация NVS и SPIFFS
             esp_err_t init();
 
-            // Загрузка конфигурации из NVS
             esp_err_t load();
 
-            // Гранулярные методы сохранения
             esp_err_t saveMainConfig(const AppConfig& new_config);
             esp_err_t saveDaliDeviceIdentificators(const std::string& identificators);
             esp_err_t saveDaliGroupAssignments(const std::string& assignments);
-            // Сохранение конфигурации в NVS
             esp_err_t save();
 
             esp_err_t resetConfiguredFlag();
 
-            // Получение текущей конфигурации
             [[nodiscard]] AppConfig getConfig() const;
 
             [[nodiscard]] std::string getMqttBaseTopic() const;
 
-            // Установка новой конфигурации
             void setConfig(const AppConfig& new_config);
 
-            // Проверка, была ли система сконфигурирована
             [[nodiscard]] bool isConfigured() const;
 
             struct cJSON* getSerializedConfig(bool mask_passwords = true) const;
 
-            esp_err_t updateConfigFromJson(const char* json_str, bool& reboot_needed);
+            ConfigUpdateResult updateConfigFromJson(const char* json_str);
 
         private:
             ConfigManager() = default;

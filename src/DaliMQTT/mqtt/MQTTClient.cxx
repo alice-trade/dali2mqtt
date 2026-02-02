@@ -82,7 +82,7 @@ namespace daliMQTT
                 break;
             case MQTT_EVENT_DATA:
                 ESP_LOGI(TAG, "MQTT_EVENT_DATA");
-                MQTTCommandProcess::getInstance().enqueueMqttMessage(
+                MQTTCommandProcess::Instance().enqueueMqttMessage(
                    event->topic,
                    event->topic_len,
                    event->data,
@@ -96,5 +96,14 @@ namespace daliMQTT
                 ESP_LOGI(TAG, "Other event id:%d", event->event_id);
                 break;
         }
+    }
+    void MQTTClient::reloadConfig(const std::string& uri, const std::string& client_id, const std::string& username, const std::string& password, const std::string& availability_topic) {
+        disconnect();
+        if (client_handle) {
+            esp_mqtt_client_destroy(client_handle);
+            client_handle = nullptr;
+        }
+        init(uri, client_id, availability_topic, username, password);
+        connect();
     }
 } // daliMQTT

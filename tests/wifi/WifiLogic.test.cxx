@@ -4,14 +4,14 @@
 using namespace daliMQTT;
 
 static void test_wifi_init() {
-    auto& wifi = Wifi::getInstance();
+    auto& wifi = Wifi::Instance();
 
     esp_err_t err = wifi.init();
     TEST_ASSERT_EQUAL(ESP_OK, err);
 }
 
 static void test_wifi_ip_string() {
-    auto& wifi = Wifi::getInstance();
+    auto& wifi = Wifi::Instance();
     std::string ip = wifi.getIpAddress();
     TEST_ASSERT_EQUAL_STRING("0.0.0.0", ip.c_str());
 }

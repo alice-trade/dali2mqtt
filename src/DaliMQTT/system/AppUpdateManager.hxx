@@ -8,7 +8,7 @@ namespace daliMQTT
         AppUpdateManager(const AppUpdateManager&) = delete;
         AppUpdateManager& operator=(const AppUpdateManager&) = delete;
 
-        static AppUpdateManager& getInstance() {
+        static AppUpdateManager& Instance() {
             static AppUpdateManager instance;
             return instance;
         }

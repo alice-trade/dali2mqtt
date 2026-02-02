@@ -16,7 +16,7 @@ namespace daliMQTT
             MQTTClient(const MQTTClient&) = delete;
             MQTTClient& operator=(const MQTTClient&) = delete;
 
-            static MQTTClient& getInstance() {
+            static MQTTClient& Instance() {
                 static MQTTClient instance;
                 return instance;
             }
@@ -29,7 +29,7 @@ namespace daliMQTT
 
             void publish(const std::string& topic, const std::string& payload, int qos = 0, bool retain = false) const;
             void subscribe(const std::string& topic, int qos = 0) const;
-
+            void reloadConfig(const std::string& uri, const std::string& client_id, const std::string& username, const std::string& password, const std::string& availability_topic);
             // Callbacks
             std::function<void()> onConnected;
             std::function<void()> onDisconnected;

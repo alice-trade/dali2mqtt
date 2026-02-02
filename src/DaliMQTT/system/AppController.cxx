@@ -1,10 +1,10 @@
 #include "system/ConfigManager.hxx"
 #include "dali/DaliAdapter.hxx"
 #include "mqtt/MQTTCommandProcess.hxx"
-#include "system/SystemControl.hxx"
+#include "system/SystemHardwareControls.hxx"
 #include "dali/DaliGroupManagement.hxx"
 #include "dali/DaliSceneManagement.hxx"
-#include "lifecycle/Lifecycle.hxx"
+#include "system/AppController.hxx"
 #include "mqtt/MQTTClient.hxx"
 #include "dali/DaliDeviceController.hxx"
 #include "mqtt/HADiscovery.hxx"
@@ -15,75 +15,91 @@
 
 namespace daliMQTT
 {
-    static constexpr  char TAG[] = "LifecycleBase";
+    static constexpr  char TAG[] = "AppController";
 
-    void Lifecycle::startProvisioningMode() {
+    void AppController::startProvisioningMode() {
         ESP_LOGI(TAG, "Starting in provisioning mode...");
-        SystemControl::checkOtaValidation();
-        auto& wifi = Wifi::getInstance();
+        SystemHardwareControls::checkOtaValidation();
+        auto& wifi = Wifi::Instance();
         wifi.init();
 
         wifi.startAP(CONFIG_DALI2MQTT_WIFI_AP_SSID, CONFIG_DALI2MQTT_WIFI_AP_PASS);
 
-        auto& web = WebUI::getInstance();
-        web.start();
-
-        ESP_LOGI(TAG, "Web server for provisioning is running.");
+        WebUI::Instance().start();
+        ESP_LOGI(TAG, "Web service for provisioning is running.");
     }
 
-    void Lifecycle::startNormalMode() {
+    void AppController::startNormalMode() {
         ESP_LOGI(TAG, "Starting in normal mode...");
-        auto config = ConfigManager::getInstance().getConfig();
-        SystemControl::checkOtaValidation();
-        SystemControl::startResetConfigurationButtonMonitor();
 
-        auto& wifi = Wifi::getInstance();
-        wifi.init();
-        wifi.onConnected = [config]() {
-            ESP_LOGI(TAG, "WiFi connected, starting MQTT...");
-            if (config.syslog_enabled && !config.syslog_server.empty()) {
-                SyslogConfig::getInstance().init(config.syslog_server);
-            }
-            auto& mqtt = MQTTClient::getInstance();
-            MQTTCommandProcess::getInstance().init();
+        SystemHardwareControls::checkOtaValidation();
+        SystemHardwareControls::startResetConfigurationButtonMonitor();
+        initDaliSubsystem();
+        MQTTCommandProcess::Instance().init();
+        WebUI::Instance().start();
+        initNetworkSubsystem();
+    }
 
-            const std::string availability_topic = utils::stringFormat("%s%s", config.mqtt_base_topic.c_str(), CONFIG_DALI2MQTT_MQTT_AVAILABILITY_TOPIC);            mqtt.init(config.mqtt_uri, config.client_id, availability_topic, config.mqtt_user, config.mqtt_pass);
-            mqtt.onConnected = []() { onMqttConnected(); };
-
-            mqtt.connect();
-        };
-        wifi.onDisconnected = []() {
-            ESP_LOGW(TAG, "WiFi disconnected, stopping MQTT.");
-            MQTTClient::getInstance().disconnect();
-        };
-
-        auto& dali_api = DaliAdapter::getInstance();
+    void AppController::initDaliSubsystem() {
+        ESP_LOGI(TAG, "Initializing DALI Subsystem...");
+        auto& dali_api = DaliAdapter::Instance();
         dali_api.init(static_cast<gpio_num_t>(CONFIG_DALI2MQTT_DALI_RX_PIN), static_cast<gpio_num_t>(CONFIG_DALI2MQTT_DALI_TX_PIN));
 
-        auto& dali_manager = DaliDeviceController::getInstance();
+        auto& dali_manager = DaliDeviceController::Instance();
         dali_manager.init();
+        dali_manager.start();
 
-        auto& group_manager = DaliGroupManagement::getInstance();
-        group_manager.init();
+        DaliGroupManagement::Instance().init();
+        DaliSceneManagement::Instance().init();
+    }
 
-        auto& scene_manager = DaliSceneManagement::getInstance();
-        scene_manager.init();
+    void AppController::initNetworkSubsystem() {
+        const auto config = ConfigManager::Instance().getConfig();
+        auto& wifi = Wifi::Instance();
 
-        auto& web = WebUI::getInstance();
-        web.start();
+        wifi.init();
+
+        wifi.onConnected = [this]() { this->onNetworkConnected(); };
+        wifi.onDisconnected = [this]() { this->onNetworkDisconnected(); };
+
         wifi.connectToAP(config.wifi_ssid, config.wifi_password);
     }
 
-    void Lifecycle::onMqttConnected() {
+    void AppController::onNetworkConnected() {
+        ESP_LOGI(TAG, "Network Connected. IP: %s", Wifi::Instance().getIpAddress().c_str());
+        m_network_connected = true;
+
+        const auto config = ConfigManager::Instance().getConfig();
+
+        if (config.syslog_enabled && !config.syslog_server.empty()) {
+            SyslogConfig::Instance().init(config.syslog_server);
+        }
+
+        auto& mqtt = MQTTClient::Instance();
+        const std::string availability_topic = utils::stringFormat("%s%s", config.mqtt_base_topic.c_str(), CONFIG_DALI2MQTT_MQTT_AVAILABILITY_TOPIC);
+
+        mqtt.init(config.mqtt_uri, config.client_id, availability_topic, config.mqtt_user, config.mqtt_pass);
+        mqtt.onConnected = [this]() { this->onMqttConnected(); };
+        mqtt.onDisconnected = [this]() { this->onMqttDisconnected(); };
+        mqtt.connect();
+    }
+
+    void AppController::onNetworkDisconnected() {
+        ESP_LOGW(TAG, "Network Disconnected.");
+        m_network_connected = false;
+    }
+
+    void AppController::onMqttConnected() {
         ESP_LOGI(TAG, "MQTT connected successfully.");
-        auto config = ConfigManager::getInstance().getConfig();
-        auto const& mqtt = MQTTClient::getInstance();
+        m_mqtt_connected = true;
+        auto config = ConfigManager::Instance().getConfig();
+        auto const& mqtt = MQTTClient::Instance();
 
         std::string availability_topic = utils::stringFormat("%s%s", config.mqtt_base_topic.c_str(), CONFIG_DALI2MQTT_MQTT_AVAILABILITY_TOPIC);
         mqtt.publish(availability_topic, CONFIG_DALI2MQTT_MQTT_PAYLOAD_ONLINE, 1, true);
 
         std::string ip_topic = utils::stringFormat("%s/ip_addr", config.mqtt_base_topic.c_str());
-        std::string ip_addr = Wifi::getInstance().getIpAddress();
+        std::string ip_addr = Wifi::Instance().getIpAddress();
         mqtt.publish(ip_topic, ip_addr, 1, true);
 
         std::string version_topic = utils::stringFormat("%s/version", config.mqtt_base_topic.c_str());
@@ -143,13 +159,39 @@ namespace daliMQTT
         ESP_LOGI(TAG, "Subscribed to system config management: %s, %s", config_get_topic.c_str(), config_set_topic.c_str());
 
         if (config.hass_discovery_enabled) {
-            MQTTHomeAssistantDiscovery hass_discovery;
-            hass_discovery.publishAllDevices();
-            ESP_LOGI(TAG, "MQTT discovery messages published.");
+            publishHAMqttDiscovery();
         }
 
-        DaliGroupManagement::getInstance().publishAllGroups();
+        DaliGroupManagement::Instance().publishAllGroups();
+    }
 
-        DaliDeviceController::getInstance().start();
+    void AppController::onMqttDisconnected() {
+        ESP_LOGW(TAG, "MQTT Disconnected.");
+        m_mqtt_connected = false;
+    }
+
+    void AppController::publishHAMqttDiscovery() const
+    {
+        if (!m_mqtt_connected) {
+            ESP_LOGW(TAG, "Cannot publish discovery: MQTT not connected.");
+            return;
+        }
+        ESP_LOGI(TAG, "Publishing HA Discovery...");
+        MQTTHomeAssistantDiscovery hass_discovery;
+        hass_discovery.publishAllDevices();
+    }
+
+    void AppController::onConfigReloadRequest() {
+        ESP_LOGI(TAG, "Hot-reloading MQTT Configuration...");
+        const auto config = ConfigManager::Instance().getConfig();
+        const std::string availability_topic = utils::stringFormat("%s%s", config.mqtt_base_topic.c_str(), CONFIG_DALI2MQTT_MQTT_AVAILABILITY_TOPIC);
+
+        MQTTClient::Instance().reloadConfig(
+            config.mqtt_uri,
+            config.client_id,
+            config.mqtt_user,
+            config.mqtt_pass,
+            availability_topic
+        );
     }
 } // daliMQTT

@@ -2,27 +2,29 @@
 #include <esp_log.h>
 #include <string>
 #include <mutex>
+#include <atomic>
 #include <nvs_flash.h>
 
 #include <system/ConfigManager.hxx>
-#include <lifecycle/Lifecycle.hxx>
+#include <system/AppController.hxx>
 
 static constexpr char  TAG[] = "daliMQTT";
 extern "C" void app_main(void) {
     ESP_LOGI("", "DALI-to-MQTT Bridge v.%s (configured at: %s)", DALIMQTT_VERSION, DALIMQTT_CONFIGURED_TIMESTAMP);
     ESP_LOGI(TAG, "DALI-to-MQTT Bridge starting...");
 
-    auto& config = daliMQTT::ConfigManager::getInstance();
+    auto& config = daliMQTT::ConfigManager::Instance();
     ESP_ERROR_CHECK(config.init());
     ESP_ERROR_CHECK(config.load());
 
+    auto& app = daliMQTT::AppController::Instance();
 
     if (config.isConfigured()) {
         ESP_LOGI(TAG, "Device is configured. Starting normal mode.");
-        daliMQTT::Lifecycle::startNormalMode();
+        app.startNormalMode();
     } else {
         ESP_LOGI(TAG, "Device is not configured. Starting provisioning mode.");
-        daliMQTT::Lifecycle::startProvisioningMode();
+        app.startProvisioningMode();
     }
 
     ESP_LOGI(TAG, "Application setup complete. Logic running in background tasks.");
