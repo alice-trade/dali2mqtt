@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Alice-Trade Inc.
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 #include <dali/DaliDeviceController.hxx>
 #include <dali/DaliGroupManagement.hxx>
 #include <dali/DaliSceneManagement.hxx>

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Alice-Trade Inc.
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 #include <esp_err.h>
 #include <esp_log.h>
 #include <string>

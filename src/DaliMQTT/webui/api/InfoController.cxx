@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Alice-Trade Inc.
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 #include <esp_chip_info.h>
 #include <esp_system.h>
 #include <esp_timer.h>

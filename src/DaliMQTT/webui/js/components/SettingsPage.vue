@@ -1,3 +1,8 @@
+<!--
+  - Copyright (c) 2026 Alice-Trade Inc.
+  - SPDX-License-Identifier: GPL-2.0-or-later
+  -->
+
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { api } from '../api';

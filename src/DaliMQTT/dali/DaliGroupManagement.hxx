@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Alice-Trade Inc.
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 #ifndef DALIMQTT_DALIGROUPMANAGEMENT_HXX
 #define DALIMQTT_DALIGROUPMANAGEMENT_HXX
 #include "dali/DaliСommon.hxx"

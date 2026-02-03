@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Alice-Trade Inc.
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 #include <esp_netif.h>
 #include <esp_sleep.h>
 #include <lwip/ip4_addr.h>

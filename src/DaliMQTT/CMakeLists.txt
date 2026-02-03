@@ -1,3 +1,5 @@
+# Copyright (c) 2025-2026 Alice-Trade Inc.
+# SPDX-License-Identifier: GPL-2.0-or-later
 project(DaliMQTT-Core LANGUAGES CXX)
 
 add_library(DaliMQTT-Core STATIC)
