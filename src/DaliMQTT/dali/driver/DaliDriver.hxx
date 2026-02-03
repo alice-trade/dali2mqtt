@@ -137,10 +137,12 @@ namespace daliMQTT::Driver {
             static void driverTaskWrapper(void* arg);
             [[noreturn]] void driverTaskLoop();
             static rmt_symbol_word_t make_symbol(uint32_t duration, uint8_t level);
+            rmt_symbol_word_t m_tx_static_buffer[64]{};
+
             /**
              * @brief Helper to encode DALI frame to RMT symbols
              */
-            std::vector<rmt_symbol_word_t> encodeFrame(uint32_t data, uint8_t bits) const;
+            size_t encodeFrame(uint32_t data, uint8_t bits);
     };
 } // namespace daliMQTT::Driver
 

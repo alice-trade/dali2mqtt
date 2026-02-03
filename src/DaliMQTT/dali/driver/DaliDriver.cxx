@@ -55,6 +55,8 @@ namespace daliMQTT::Driver {
             .trans_queue_depth = 4,
             .flags = { .invert_out = false, .with_dma = false },
         };
+        gpio_set_level(m_config.tx_pin, Constants::RMT_LEVEL_IDLE); // ?
+
         ESP_RETURN_ON_ERROR(rmt_new_tx_channel(&tx_cfg, &m_tx_channel), TAG, "New TX failed");
 
         rmt_copy_encoder_config_t enc_cfg = {};
@@ -167,36 +169,39 @@ namespace daliMQTT::Driver {
                     m_tx_state.start_ts = esp_timer_get_time();
                 }
 
-                auto symbols = encodeFrame(tx_msg.data, tx_msg.length);
+                size_t symbols = encodeFrame(tx_msg.data, tx_msg.length);
                 rmt_transmit_config_t tx_conf = { .loop_count = 0 };
-                ESP_ERROR_CHECK(rmt_transmit(m_tx_channel, m_dali_encoder, symbols.data(), symbols.size(), &tx_conf));
+                ESP_ERROR_CHECK(rmt_transmit(m_tx_channel, m_dali_encoder, m_tx_static_buffer, symbols, &tx_conf));
             }
         }
     }
 
-    std::vector<rmt_symbol_word_t> DaliDriver::encodeFrame(const uint32_t data, const uint8_t bits) const {
-        std::vector<rmt_symbol_word_t> syms;
-        syms.reserve(bits * 2 + 2);
+    size_t DaliDriver::encodeFrame(const uint32_t data, const uint8_t bits) {
+        size_t count = 0;
+
+        auto push_sym = [&](const uint32_t duration, const uint8_t level) {
+            m_tx_static_buffer[count++].val = make_symbol(duration, level).val;
+        };
 
         // Start Bit: Logic 1 (Active -> Idle)
-        syms.push_back(make_symbol(Constants::T_TE, Constants::RMT_LEVEL_ACTIVE));
-        syms.push_back(make_symbol(Constants::T_TE, Constants::RMT_LEVEL_IDLE));
+        push_sym(Constants::T_TE, Constants::RMT_LEVEL_ACTIVE);
+        push_sym(Constants::T_TE, Constants::RMT_LEVEL_IDLE);
 
         for (int i = bits - 1; i >= 0; --i) {
             const bool bit = (data >> i) & 1;
             if (bit) { // Logic 1
-                syms.push_back(make_symbol(Constants::T_TE, Constants::RMT_LEVEL_ACTIVE));
-                syms.push_back(make_symbol(Constants::T_TE, Constants::RMT_LEVEL_IDLE));
+                push_sym(Constants::T_TE, Constants::RMT_LEVEL_ACTIVE);
+                push_sym(Constants::T_TE, Constants::RMT_LEVEL_IDLE);
             } else {   // Logic 0
-                syms.push_back(make_symbol(Constants::T_TE, Constants::RMT_LEVEL_IDLE));
-                syms.push_back(make_symbol(Constants::T_TE, Constants::RMT_LEVEL_ACTIVE));
+                push_sym(Constants::T_TE, Constants::RMT_LEVEL_IDLE);
+                push_sym(Constants::T_TE, Constants::RMT_LEVEL_ACTIVE);
             }
         }
 
         // Stop Bit: Idle level for 2 Te
-        syms.push_back(make_symbol(2 * Constants::T_TE, Constants::RMT_LEVEL_IDLE));
+        push_sym(2 * Constants::T_TE, Constants::RMT_LEVEL_IDLE);
 
-        return syms;
+        return count;
     }
 
     void DaliDriver::processRxSymbols(const rmt_symbol_word_t* symbols, size_t count) {
@@ -242,7 +247,7 @@ namespace daliMQTT::Driver {
 
         int pending_phase_val = -1;
 
-        while (bits_cnt < 24 && idx < count) {
+        while (bits_cnt < 32 && idx < count) {
             uint32_t t = get_time(symbols[idx]);
             uint8_t  l = get_level(symbols[idx]);
             
@@ -322,6 +327,11 @@ namespace daliMQTT::Driver {
             } else {
                 msg.type = DaliEventType::FrameReceived;
             }
+
+            if (bits_cnt != 8 && bits_cnt != 16 && bits_cnt != 24 && bits_cnt != 25) {
+                ESP_LOGD(TAG, "Non-standard frame length: %d", bits_cnt);
+            }
+
             xQueueSend(m_event_queue, &msg, 0);
         } else if (error) {
             std::lock_guard<std::mutex> lock(m_state_mutex);
