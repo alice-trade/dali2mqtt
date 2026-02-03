@@ -147,31 +147,31 @@ namespace daliMQTT::Commands {
     };
 
     namespace Factory {
-        [[nodiscard]] inline constexpr Frame DACP(uint8_t shortAddr, uint8_t level) {
-            return { makeFrame16(makeAddressByte(AddressType::Short, shortAddr, CmdType::DirectArcPower), level), 16 };
+        [[nodiscard]] inline constexpr Frame DACP(const uint8_t shortAddr, const uint8_t level) {
+            return { makeFrame16(makeAddressByte(DaliAddressType::Short, shortAddr, CmdType::DirectArcPower), level), 16 };
         }
-        [[nodiscard]] inline constexpr Frame DACPGroup(uint8_t groupAddr, uint8_t level) {
-            return { makeFrame16(makeAddressByte(AddressType::Group, groupAddr, CmdType::DirectArcPower), level), 16 };
+        [[nodiscard]] inline constexpr Frame DACPGroup(const uint8_t groupAddr, const uint8_t level) {
+            return { makeFrame16(makeAddressByte(DaliAddressType::Group, groupAddr, CmdType::DirectArcPower), level), 16 };
         }
-        [[nodiscard]] inline constexpr Frame DACPBroadcast(uint8_t level) {
-            return { makeFrame16(makeAddressByte(AddressType::Broadcast, 0, CmdType::DirectArcPower), level), 16 };
+        [[nodiscard]] inline constexpr Frame DACPBroadcast(const uint8_t level) {
+            return { makeFrame16(makeAddressByte(DaliAddressType::Broadcast, 0, CmdType::DirectArcPower), level), 16 };
         }
 
-        [[nodiscard]] inline constexpr Frame Command(uint8_t shortAddr, OpCode cmd) {
-            return { makeFrame16(makeAddressByte(AddressType::Short, shortAddr, CmdType::StandardCmd), static_cast<uint8_t>(cmd)), 16 };
+        [[nodiscard]] inline constexpr Frame Command(const uint8_t shortAddr, OpCode cmd) {
+            return { makeFrame16(makeAddressByte(DaliAddressType::Short, shortAddr, CmdType::StandardCmd), static_cast<uint8_t>(cmd)), 16 };
         }
-        [[nodiscard]] inline constexpr Frame CommandGroup(uint8_t groupAddr, OpCode cmd) {
-            return { makeFrame16(makeAddressByte(AddressType::Group, groupAddr, CmdType::StandardCmd), static_cast<uint8_t>(cmd)), 16 };
+        [[nodiscard]] inline constexpr Frame CommandGroup(const uint8_t groupAddr, OpCode cmd) {
+            return { makeFrame16(makeAddressByte(DaliAddressType::Group, groupAddr, CmdType::StandardCmd), static_cast<uint8_t>(cmd)), 16 };
         }
         [[nodiscard]] inline constexpr Frame CommandBroadcast(OpCode cmd) {
-            return { makeFrame16(makeAddressByte(AddressType::Broadcast, 0, CmdType::StandardCmd), static_cast<uint8_t>(cmd)), 16 };
+            return { makeFrame16(makeAddressByte(DaliAddressType::Broadcast, 0, CmdType::StandardCmd), static_cast<uint8_t>(cmd)), 16 };
         }
 
-        [[nodiscard]] inline constexpr Frame Special(SpecialOpCode cmd, uint8_t data) {
+        [[nodiscard]] inline constexpr Frame Special(SpecialOpCode cmd, const uint8_t data) {
             return { makeFrame16(static_cast<uint8_t>(cmd), data), 16 };
         }
 
-        [[nodiscard]] inline constexpr Frame InputDeviceCmd(uint8_t addrByte, uint8_t instByte, uint8_t opCode) {
+        [[nodiscard]] inline constexpr Frame InputDeviceCmd(const uint8_t addrByte, const uint8_t instByte, const uint8_t opCode) {
             uint32_t data = (static_cast<uint32_t>(addrByte) << 16) | (static_cast<uint32_t>(instByte) << 8) | opCode;
             return { data, 24 };
         }
