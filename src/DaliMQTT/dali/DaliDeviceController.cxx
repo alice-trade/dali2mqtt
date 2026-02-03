@@ -223,7 +223,7 @@ namespace daliMQTT
         }
 
         for (const auto& [long_addr, short_addr] : devices_to_validate) {
-            if (auto status_opt = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, short_addr, DALI_COMMAND_QUERY_STATUS); status_opt.has_value()) {
+            if (auto status_opt = dali.sendQuery(DaliAddressType::Short, short_addr, DALI_COMMAND_QUERY_STATUS); status_opt.has_value()) {
                 if (auto long_addr_from_bus_opt = dali.getLongAddress(short_addr)) {
                     if (*long_addr_from_bus_opt != long_addr) {
                         ESP_LOGW(TAG, "Validation CONFLICT: Short Addr %d has Long Addr %lX, expected %lX. Full scan required.",
@@ -522,7 +522,7 @@ namespace daliMQTT
 
     std::optional<uint8_t> DaliDeviceController::pollAvailabilityAndLevel(const uint8_t shortAddr, const DaliLongAddress_t longAddr) {
         auto& dali = DaliAdapter::Instance();
-        const auto level_opt = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddr, DALI_COMMAND_QUERY_ACTUAL_LEVEL);
+        const auto level_opt = dali.sendQuery(DaliAddressType::Short, shortAddr, DALI_COMMAND_QUERY_ACTUAL_LEVEL);
         const bool is_responding = level_opt.has_value();
 
         bool previously_available = false;
@@ -692,10 +692,10 @@ namespace daliMQTT
         if (!needs_load) return;
 
         auto& dali = DaliAdapter::Instance();
-        const auto min_opt = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddr, DALI_COMMAND_QUERY_MIN_LEVEL);
-        const auto max_opt = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddr, DALI_COMMAND_QUERY_MAX_LEVEL);
-        const auto power_on_opt = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddr, DALI_COMMAND_QUERY_POWER_ON_LEVEL);
-        const auto fail_opt = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddr, DALI_COMMAND_QUERY_SYSTEM_FAILURE_LEVEL);
+        const auto min_opt = dali.sendQuery(DaliAddressType::Short, shortAddr, DALI_COMMAND_QUERY_MIN_LEVEL);
+        const auto max_opt = dali.sendQuery(DaliAddressType::Short, shortAddr, DALI_COMMAND_QUERY_MAX_LEVEL);
+        const auto power_on_opt = dali.sendQuery(DaliAddressType::Short, shortAddr, DALI_COMMAND_QUERY_POWER_ON_LEVEL);
+        const auto fail_opt = dali.sendQuery(DaliAddressType::Short, shortAddr, DALI_COMMAND_QUERY_SYSTEM_FAILURE_LEVEL);
         const auto gtin_opt = dali.getGTIN(shortAddr);
         const auto dt_opt = dali.getDeviceType(shortAddr);
 
@@ -797,7 +797,7 @@ namespace daliMQTT
         std::bitset<64> found_devices;
 
         for (uint8_t sa = 0; sa < 64; ++sa) {
-            if (auto status_opt = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, sa, DALI_COMMAND_QUERY_STATUS); status_opt.has_value()) {
+            if (auto status_opt = dali.sendQuery(DaliAddressType::Short, sa, DALI_COMMAND_QUERY_STATUS); status_opt.has_value()) {
                 found_devices.set(sa);
                 ESP_LOGI(TAG, "Gear found at SA %d", sa);
                 if (auto long_addr_opt = dali.getLongAddress(sa)) {

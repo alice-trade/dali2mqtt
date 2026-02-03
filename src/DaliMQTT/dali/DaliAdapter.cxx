@@ -1,512 +1,435 @@
-#include "DaliAdapter.hxx"
+#include "dali/DaliAdapter.hxx"
 
-namespace daliMQTT
-{
+namespace daliMQTT {
     static constexpr char TAG[] = "DaliAdapter";
-    constexpr int DALI_EVENT_QUEUE_SIZE = 32;
-    constexpr uint32_t DALI_TIMER_RESOLUTION_HZ = 24000000; // 24MHz
-    constexpr uint32_t DALI_TIMER_ALARM_PERIOD_US = 2500; // 24'000'000 / 9600 = 2500
-
-    static uint8_t IRAM_ATTR bus_is_high() {
-        return gpio_get_level(static_cast<gpio_num_t>(CONFIG_DALI2MQTT_DALI_RX_PIN));
-    }
-    static void IRAM_ATTR bus_set_low() {
-        gpio_set_level(static_cast<gpio_num_t>(CONFIG_DALI2MQTT_DALI_TX_PIN), 1);
-    }
-    static void IRAM_ATTR bus_set_high() {
-        gpio_set_level(static_cast<gpio_num_t>(CONFIG_DALI2MQTT_DALI_TX_PIN), 0);
-    }
-
-    static bool IRAM_ATTR dali_timer_isr_callback([[maybe_unused]] gptimer_handle_t timer, [[maybe_unused]] const gptimer_alarm_event_data_t *edata, void *user_ctx) {
-        if (const auto dali_instance = static_cast<Dali *>(user_ctx)) {
-            dali_instance->timer();
-        }
-        return false;
-    }
+    using namespace Commands;
 
     esp_err_t DaliAdapter::init(gpio_num_t rx_pin, gpio_num_t tx_pin) {
-        if (m_initialized) {
-            return ESP_OK;
+        if (m_initialized) return ESP_OK;
+
+        Driver::DaliDriverConfig drv_cfg = {
+            .rx_pin = rx_pin,
+            .tx_pin = tx_pin,
+        };
+
+        esp_err_t init_result = m_driver.init(drv_cfg);
+        if (init_result != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to init RMT Driver: %s", esp_err_to_name(init_result));
+            return init_result;
         }
 
-        ESP_LOGI(TAG, "Configuring DALI GPIOs: RX=%d, TX=%d", rx_pin, tx_pin);
-        gpio_config_t tx_conf = {
-            .pin_bit_mask = (1ULL << tx_pin),
-            .mode = GPIO_MODE_OUTPUT,
-            .pull_up_en = GPIO_PULLUP_DISABLE,
-            .pull_down_en = GPIO_PULLDOWN_DISABLE,
-            .intr_type = GPIO_INTR_DISABLE,
-        };
-        ESP_ERROR_CHECK(gpio_config(&tx_conf));
-
-        gpio_config_t rx_conf = {
-            .pin_bit_mask = (1ULL << rx_pin),
-            .mode = GPIO_MODE_INPUT,
-            .pull_up_en = GPIO_PULLUP_DISABLE,
-            .pull_down_en = GPIO_PULLDOWN_DISABLE,
-            .intr_type = GPIO_INTR_DISABLE,
-        };
-        ESP_ERROR_CHECK(gpio_config(&rx_conf));
-
-        bus_set_high();
-
-        m_dali_impl.begin(bus_is_high, bus_set_low, bus_set_high);
-        m_dali_impl.setRxCallback(rx_complete_isr, this);
-
-        ESP_LOGI(TAG, "Configuring DALI GPTimer...");
-        gptimer_config_t timer_config = {
-            .clk_src = GPTIMER_CLK_SRC_DEFAULT,
-            .direction = GPTIMER_COUNT_UP,
-            .resolution_hz = DALI_TIMER_RESOLUTION_HZ,
-        };
-        ESP_ERROR_CHECK(gptimer_new_timer(&timer_config, &m_dali_timer));
-
-        gptimer_event_callbacks_t cbs = {
-            .on_alarm = dali_timer_isr_callback,
-        };
-        ESP_ERROR_CHECK(gptimer_register_event_callbacks(m_dali_timer, &cbs, &m_dali_impl));
-        ESP_ERROR_CHECK(gptimer_enable(m_dali_timer));
-
-        gptimer_alarm_config_t alarm_config = {
-            .alarm_count = DALI_TIMER_ALARM_PERIOD_US,
-            .reload_count = 0,
-            .flags = {
-                .auto_reload_on_alarm = true,
-            },
-        };
-        ESP_ERROR_CHECK(gptimer_set_alarm_action(m_dali_timer, &alarm_config));
-        ESP_ERROR_CHECK(gptimer_start(m_dali_timer));
-
-        if (!m_dali_event_queue) {
-            m_dali_event_queue = xQueueCreate(DALI_EVENT_QUEUE_SIZE, sizeof(dali_frame_t));
-            if (!m_dali_event_queue) {
-                ESP_LOGE(TAG, "Failed to create DALI event queue");
-                return ESP_ERR_NO_MEM;
-            }
-        }
-
+        m_dali_event_queue = xQueueCreate(32, sizeof(dali_frame_t));
+        m_response_queue = xQueueCreate(1, sizeof(uint8_t));
+        xTaskCreate(busWorkerTask, "dali_bus_worker", 4096, this, configMAX_PRIORITIES - 2, &m_worker_task_handle);
         m_initialized = true;
-        ESP_LOGI(TAG, "DaliAPI initialized with Lib_DALI (timer mode)");
+
+        ESP_LOGI(TAG, "Adapter initialized with DALI Driver (RMT).");
         return ESP_OK;
     }
 
-    esp_err_t DaliAdapter::startSniffer() {
-        if (!m_initialized) return ESP_ERR_INVALID_STATE;
-        if (m_sniffer_task_handle) {
-            ESP_LOGW(TAG, "Sniffer task already running.");
-            return ESP_OK;
-        }
-        ESP_LOGI(TAG, "Starting DALI sniffer task...");
-        xTaskCreate(DaliAdapter::dali_sniffer_task, "dali_sniffer_task", 4096, this, 5, &m_sniffer_task_handle);        return ESP_OK;
-    }
-
-    esp_err_t DaliAdapter::stopSniffer() {
-        if (m_sniffer_task_handle) {
-            ESP_LOGI(TAG, "Stopping DALI sniffer task...");
-            vTaskDelete(m_sniffer_task_handle);
-            m_sniffer_task_handle = nullptr;
-        }
-        return ESP_OK;
+    bool DaliAdapter::isInitialized() const {
+        return m_initialized;
     }
 
     QueueHandle_t DaliAdapter::getEventQueue() const {
         return m_dali_event_queue;
     }
-
-    esp_err_t DaliAdapter::sendDACP(const dali_addressType_t addr_type, const uint8_t addr, const uint8_t level) {
-        std::lock_guard lock(bus_mutex);
-        uint8_t dali_addr;
-        switch (addr_type) {
-            case DALI_ADDRESS_TYPE_SHORT: dali_addr = addr; break;
-            case DALI_ADDRESS_TYPE_GROUP: dali_addr = 0x40 | addr; break;
-            case DALI_ADDRESS_TYPE_BROADCAST: dali_addr = 0x7F; break;
-            default: return ESP_ERR_INVALID_ARG;
-        }
-        m_dali_impl.set_level(level, dali_addr);
+    esp_err_t DaliAdapter::startSniffer() {
+        m_sniffer_enabled = true;
         return ESP_OK;
     }
 
-    esp_err_t DaliAdapter::sendCommand(dali_addressType_t addr_type, uint8_t addr, uint8_t command, bool send_twice) {
-        std::lock_guard lock(bus_mutex);
-        uint8_t dali_arg;
-        uint16_t dali_cmd = command;
-        if (send_twice) {
-            dali_cmd |= 0x0200;
-        }
-        ESP_LOGD(TAG, "Got Command: %u", dali_cmd);
-        if (addr_type == DALI_ADDRESS_TYPE_SPECIAL_CMD) {
-            dali_cmd |= 0x0100;
-            ESP_LOGD(TAG, "Sending Special Command: %u", dali_cmd);
-            dali_arg = addr;
-        } else {
-            switch (addr_type) {
-                case DALI_ADDRESS_TYPE_SHORT:
-                    dali_arg = addr;
-                    ESP_LOGD(TAG,"Short addr execution command for: %u", dali_arg);
-                    break;
-                case DALI_ADDRESS_TYPE_GROUP:
-                    dali_arg = 0x40 | addr;
-                    ESP_LOGD(TAG,"Group command execution command for: %u", dali_arg);
-                    break;
-                case DALI_ADDRESS_TYPE_BROADCAST:
-                    dali_arg = 0x7F;
-                    ESP_LOGD(TAG,"Got Broadcast command from: %u with cmd %u", addr, command);
-                    break;
-                default: return ESP_ERR_INVALID_ARG;
-            }
-        }
-
-        m_dali_impl.cmd(dali_cmd, dali_arg, false);
-        ESP_LOGD(TAG,"Executed Command: %u", dali_cmd);
-        vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
+    esp_err_t DaliAdapter::stopSniffer() {
+        m_sniffer_enabled = false;
         return ESP_OK;
     }
-
-    std::optional<uint8_t> DaliAdapter::sendQuery(const dali_addressType_t addr_type, const uint8_t addr, const uint8_t command) {
-        std::lock_guard lock(bus_mutex);
-        uint8_t dali_arg;
-        uint16_t dali_cmd = command;
-
-        if (addr_type == DALI_ADDRESS_TYPE_SPECIAL_CMD) {
-            dali_cmd |= 0x0100;
-            dali_arg = addr;
-        } else {
-             switch (addr_type) {
-                case DALI_ADDRESS_TYPE_SHORT: dali_arg = addr; break;
-                case DALI_ADDRESS_TYPE_GROUP: dali_arg = 0x40 | addr; break;
-                case DALI_ADDRESS_TYPE_BROADCAST: dali_arg = 0x7F; break;
-                default: return std::nullopt;
-            }
-        }
-
-        const int16_t result = m_dali_impl.cmd(dali_cmd, dali_arg);
-        vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
-
-        if (result >= 0) {
-            return static_cast<uint8_t>(result);
-        }
-        return std::nullopt;
+    esp_err_t DaliAdapter::sendRaw(const uint32_t data, const uint8_t bits) {
+        std::lock_guard<std::mutex> lock(m_transaction_mutex);
+        return m_driver.sendAsync(data, bits);
     }
 
-    std::optional<uint8_t> DaliAdapter::sendRaw(const uint32_t data, const uint8_t bits, const bool reply) {
-        std::lock_guard lock(bus_mutex);
-        std::optional<int16_t> result = std::nullopt;
+    std::optional<uint8_t> DaliAdapter::sendRawQuery(const uint32_t data, const uint8_t bits) {
+        std::lock_guard<std::mutex> lock(m_transaction_mutex);
 
-        if (bits == 16) {
-            const uint8_t b1 = (data >> 8) & 0xFF;
-            const uint8_t b2 = data & 0xFF;
+        xQueueReset(m_response_queue);
+        m_expecting_response = true;
+        m_driver.flushRxQueue();
 
-            if (reply) {
-                result = m_dali_impl.tx_wait_rx(b1, b2);
-                ESP_LOGD(TAG, "Raw TX (16bit with Reply): 0x%02X 0x%02X -> Result: %d", b1, b2, *result);
-            } else {
-                uint8_t frame[2] = {b1, b2};
-                m_dali_impl.tx_wait(frame, 16);
-                ESP_LOGD(TAG, "Raw TX (16bit No Reply): 0x%02X 0x%02X", b1, b2);
-            }
-        }
-        else if (bits == 24) {
-            const uint8_t b1 = (data >> 16) & 0xFF;
-            const uint8_t b2 = (data >> 8) & 0xFF;
-            const uint8_t b3 = data & 0xFF;
-
-            if (reply) {
-                result = m_dali_impl.tx_wait_rx(b1, b2, b3);
-                ESP_LOGD(TAG, "Raw TX (24bit with Reply): 0x%02X 0x%02X 0x%02X -> Result: %d", b1, b2, b3, result);
-            } else {
-                uint8_t frame[3] = {b1, b2, b3};
-                m_dali_impl.tx_wait(frame, 24);
-                ESP_LOGD(TAG, "Raw TX (24bit No Reply): 0x%02X 0x%02X 0x%02X", b1, b2, b3);
-            }
-        }
-        else {
-            ESP_LOGW(TAG, "Invalid bit length for sendRaw: %d", bits);
+        const esp_err_t sent_res = m_driver.sendAsync(data, bits);
+        if (sent_res != ESP_OK) {
+            m_expecting_response = false;
             return std::nullopt;
         }
-        vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
-        if (result.has_value() && result >= 0) {
-            return static_cast<uint8_t>(*result);
+
+        uint8_t response_byte = 0;
+        if (xQueueReceive(m_response_queue, &response_byte, pdMS_TO_TICKS(60)) == pdTRUE) {
+            m_expecting_response = false;
+            return response_byte;
         }
+
+        m_expecting_response = false;
         return std::nullopt;
     }
+
+    esp_err_t DaliAdapter::sendCommand(const DaliAddressType addr_type, const uint8_t addr, const uint8_t command, const bool send_twice) {
+        if (addr_type == DaliAddressType::Special) {
+            auto [data, bits] = Factory::Special(static_cast<SpecialOpCode>(command), addr);
+            sendRaw(data, 16);
+            if (send_twice) {
+                vTaskDelay(pdMS_TO_TICKS(10));
+                sendRaw(data, 16);
+            }
+            return ESP_OK;
+        }
+
+        Frame frame;
+
+        if (addr_type == DaliAddressType::Broadcast) frame = Factory::CommandBroadcast(static_cast<OpCode>(command));
+        else if (addr_type == DaliAddressType::Group) frame = Factory::CommandGroup(addr, static_cast<OpCode>(command));
+        else frame = Factory::Command(addr, static_cast<OpCode>(command));
+
+        sendRaw(frame.data, 16);
+        if (send_twice) {
+            vTaskDelay(pdMS_TO_TICKS(10));
+            sendRaw(frame.data, 16);
+        }
+        return ESP_OK;
+    }
+
+    esp_err_t DaliAdapter::sendDACP(const DaliAddressType addr_type, const uint8_t addr, const uint8_t level) {
+        Frame frame;
+
+        if (addr_type == DaliAddressType::Broadcast) frame = Factory::DACPBroadcast(level);
+        else if (addr_type == DaliAddressType::Group) frame = Factory::DACPGroup(addr, level);
+        else frame = Factory::DACP(addr, level);
+
+        return sendRaw(frame.data, 16);
+    }
+
+    std::optional<uint8_t> DaliAdapter::sendQuery(const DaliAddressType addr_type, const uint8_t addr, const uint8_t command) {
+        if (addr_type == DaliAddressType::Special) {
+            auto [data, bits] = Factory::Special(static_cast<SpecialOpCode>(command), addr);
+            return sendRawQuery(data, 16);
+        }
+
+        Frame frame;
+
+        if (addr_type == DaliAddressType::Broadcast) frame = Factory::CommandBroadcast(static_cast<OpCode>(command));
+        else if (addr_type == DaliAddressType::Group) frame = Factory::CommandGroup(addr, static_cast<OpCode>(command));
+        else frame = Factory::Command(addr, static_cast<OpCode>(command));
+
+        return sendRawQuery(frame.data, 16);
+    }
+
 
     std::optional<uint8_t> DaliAdapter::sendInputDeviceCommand(const uint8_t shortAddress, const uint8_t opcode, const std::optional<uint8_t> param) {
-        std::lock_guard lock(bus_mutex);
-        const uint8_t addr_byte = (shortAddress << 1) | 1;
-        const uint8_t param_byte = param.value_or(0x00);
+        // DALI-2 24-bit frame: AAAAAA1 (Short Addr) + INST + OPCODE
+        const uint8_t addrByte = (shortAddress << 1) | 1;
+        const uint8_t instByte = param.value_or(0x00);
 
-        const int16_t result = m_dali_impl.tx_wait_rx(addr_byte, opcode, param_byte);
-
-        vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
-
-
-        if (result >= 0) {
-            return static_cast<uint8_t>(result);
-        }
-        return std::nullopt;
-    }
-    uint8_t DaliAdapter::initializeBus() {
-        std::lock_guard lock(bus_mutex);
-        ESP_LOGI(TAG, "Starting DALI commissioning process...");
-        uint8_t assigned_devices = m_dali_impl.commission(0xff);
-        ESP_LOGI(TAG, "Commissioning finished. Assigned %u devices", assigned_devices);
-        return assigned_devices;
-    }
-    uint8_t DaliAdapter::initialize24BitDevicesBus() {
-        std::lock_guard lock(bus_mutex);
-        ESP_LOGI(TAG, "Starting DALI commissioning process (Input Devices)...");
-        uint8_t assigned_devices = m_dali_impl.commission_id(0xff);
-        ESP_LOGI(TAG, "Input Device Commissioning finished. Assigned %u devices", assigned_devices);
-        return assigned_devices;
-    }
-    esp_err_t DaliAdapter::assignToGroup(const uint8_t shortAddress, const uint8_t group) {
-        if (group >= 16) return ESP_ERR_INVALID_ARG;
-        ESP_LOGD(TAG, "Process group addition of %u to %u", shortAddress, group);
-        return sendCommand(DALI_ADDRESS_TYPE_SHORT, shortAddress, DALI_COMMAND_ADD_TO_GROUP_0 + group, true);
+        auto [data, bits] = Factory::InputDeviceCmd(addrByte, instByte, opcode);
+        return sendRawQuery(data, 24);
     }
 
-    esp_err_t DaliAdapter::removeFromGroup(const uint8_t shortAddress, const uint8_t group) {
-        if (group >= 16) return ESP_ERR_INVALID_ARG;
-        return sendCommand(DALI_ADDRESS_TYPE_SHORT, shortAddress, DALI_COMMAND_REMOVE_FROM_GROUP_0 + group, true);
-    }
-
-    std::optional<std::bitset<16>> DaliAdapter::getDeviceGroups(const uint8_t shortAddress) {
-        const auto groups_0_7 = sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddress, DALI_COMMAND_QUERY_GROUPS_0_7);
-        vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
-        const auto groups_8_15 = sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddress, DALI_COMMAND_QUERY_GROUPS_8_15);
-
-        if (groups_0_7.has_value() && groups_8_15.has_value()) {
-            const uint16_t combined = (groups_8_15.value() << 8) | groups_0_7.value();
-            return std::bitset<16>(combined);
-        }
-        return std::nullopt;
-    }
-
-    [[noreturn]] void DaliAdapter::dali_sniffer_task(void* arg) {
+    [[noreturn]] void DaliAdapter::busWorkerTask(void* arg) {
         auto* self = static_cast<DaliAdapter*>(arg);
-        QueueHandle_t queue = self->m_dali_event_queue;
-
-        uint8_t decoded_data[4];
+        auto queue = self->m_driver.getEventQueue();
+        Driver::DaliMessage msg;
 
         while (true) {
-            ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-
-            uint8_t bit_len;
-            {
-                std::lock_guard lock(self->bus_mutex);
-                bit_len = self->m_dali_impl.rx(decoded_data);
-            }
-
-            if (bit_len > 2) {
-                dali_frame_t frame = {};
-                frame.length = bit_len;
-
-                if (bit_len == 8) {
-                    frame.is_backward_frame = true;
-                    frame.data = decoded_data[0];
-                    ESP_LOGD(TAG, "Sniffed Backward Frame: 0x%02X", frame.data);
-                } else if (bit_len == 16) {
-                    frame.is_backward_frame = false;
-                    frame.data = (decoded_data[0] << 8) | decoded_data[1];
-                    ESP_LOGD(TAG, "Sniffed Forward Frame: 0x%04X", frame.data);
-                } else if (bit_len == 24) {
-                    frame.is_backward_frame = false;
-                    frame.data = (static_cast<uint32_t>(decoded_data[0]) << 16) |
-                                 (static_cast<uint32_t>(decoded_data[1]) << 8) |
-                                 decoded_data[2];
-                    ESP_LOGD(TAG, "Sniffed Forward Frame (24): 0x%06lX", frame.data);
-                } else {
-                    ESP_LOGW(TAG, "Sniffed frame with unusual bit length: %d", bit_len);
-                    continue;
+            if (xQueueReceive(queue, &msg, portMAX_DELAY) == pdTRUE) {
+                if (msg.type == Driver::DaliEventType::FrameReceived && msg.is_backward && self->m_expecting_response) {
+                    uint8_t data = static_cast<uint8_t>(msg.data & 0xFF);
+                    xQueueSend(self->m_response_queue, &data, 0);
                 }
 
-                if (queue) {
-                    xQueueSend(queue, &frame, 0);
+                if (self->m_sniffer_enabled && self->m_dali_event_queue) {
+                    dali_frame_t frame = {};
+                    frame.data = msg.data;
+                    frame.length = msg.length;
+                    frame.is_backward_frame = msg.is_backward;
+
+                    if (msg.type == Driver::DaliEventType::TxCompleted) {
+                        frame.is_backward_frame = false;
+                    } else if (msg.type == Driver::DaliEventType::CollisionDetected) {
+                        ESP_LOGD(TAG, "Bus Collision Detected");
+                        continue;
+                    } else if (msg.type == Driver::DaliEventType::FrameError) {
+                        continue;
+                    }
+
+                    xQueueSend(self->m_dali_event_queue, &frame, 0);
                 }
             }
         }
     }
 
-    void DaliAdapter::rx_complete_isr(void* arg) {
-        const auto* self = static_cast<DaliAdapter*>(arg);
-        BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-        if (self->m_sniffer_task_handle) {
-            vTaskNotifyGiveFromISR(self->m_sniffer_task_handle, &xHigherPriorityTaskWoken);
+    void DaliAdapter::setDtr0(const uint8_t val) {
+        sendRaw(Factory::Special(SpecialOpCode::Dtr0, val).data, 16);
+    }
+    void DaliAdapter::setDtr1(const uint8_t val) {
+        sendRaw(Factory::Special(SpecialOpCode::Dtr1, val).data, 16);
+    }
+
+    uint8_t DaliAdapter::initializeBus(const bool provision_all) {
+        ESP_LOGI(TAG, "Starting Commissioning (Control Gear)...");
+
+        sendRaw(Factory::Special(SpecialOpCode::Terminate, 0).data, 16);
+        sendRaw(Factory::Special(SpecialOpCode::Terminate, 0).data, 16);
+
+        // Initialise
+        const uint8_t init_arg = provision_all ? 0xFF : 0x00; // 0xFF = Unaddressed, 0x00 = All
+        sendRaw(Factory::Special(SpecialOpCode::Initialise, init_arg).data, 16);
+        sendRaw(Factory::Special(SpecialOpCode::Initialise, init_arg).data, 16); // Send twice
+
+        // Randomise
+        sendRaw(Factory::Special(SpecialOpCode::Randomise, 0).data, 16);
+        sendRaw(Factory::Special(SpecialOpCode::Randomise, 0).data, 16); // Send twice
+        vTaskDelay(pdMS_TO_TICKS(100));
+
+        // Binary Search loop
+        uint8_t devices_found = 0;
+        while (true) {
+            uint32_t longAddr = findAddressBinarySearch(false);
+            if (longAddr > 0xFFFFFF) break; // No more devices
+            uint8_t prog_byte = (devices_found << 1) | 1;
+            if (devices_found >= 64) {
+                ESP_LOGW(TAG, "More than 64 devices found. Skipping assignment.");
+                sendRaw(Factory::Special(SpecialOpCode::Withdraw, 0).data, 16);
+                continue;
+            }
+
+            sendRaw(Factory::Special(SpecialOpCode::ProgramShortAddr, prog_byte).data, 16);
+            ESP_LOGI(TAG, "Assigned Short Addr %d to Long Addr 0x%06lX", devices_found, longAddr);
+
+            devices_found++;
+            sendRaw(Factory::Special(SpecialOpCode::Withdraw, 0).data, 16);
         }
-        #ifndef traceISR_EXIT_TO_SCHEDULER // underlying macro define
-            #define traceISR_EXIT_TO_SCHEDULER()
-        #endif
-        portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+
+        sendRaw(Factory::Special(SpecialOpCode::Terminate, 0).data, 16);
+        return devices_found;
+    }
+
+    uint32_t DaliAdapter::findAddressBinarySearch(const bool input_devices) {
+        uint32_t low = 0;
+        uint32_t high = 0xFFFFFF;
+        uint32_t searchAddr = 0xFFFFFF;
+
+        auto sendSearchAddr = [&](const uint32_t addr) {
+            if (input_devices) {
+                // Input Device Ops: 0x08 (H), 0x09 (M), 0x0A (L)
+                sendRaw(Factory::InputDeviceCmd(0xFF, (addr >> 16) & 0xFF, 0x08).data, 24);
+                sendRaw(Factory::InputDeviceCmd(0xFF, (addr >> 8) & 0xFF,  0x09).data, 24);
+                sendRaw(Factory::InputDeviceCmd(0xFF, addr & 0xFF,         0x0A).data, 24);
+            } else {
+                sendRaw(Factory::Special(SpecialOpCode::SearchAddrH, (addr >> 16) & 0xFF).data, 16);
+                sendRaw(Factory::Special(SpecialOpCode::SearchAddrM, (addr >> 8) & 0xFF).data, 16);
+                sendRaw(Factory::Special(SpecialOpCode::SearchAddrL, (addr) & 0xFF).data, 16);
+            }
+        };
+
+        auto sendCompare = [&]() -> bool {
+            if (input_devices) {
+                auto res = sendRawQuery(Factory::InputDeviceCmd(0xFF, 0xFF, 0x02).data, 24);
+                return res.has_value();
+            } else {
+                auto res = sendRawQuery(Factory::Special(SpecialOpCode::Compare, 0).data, 16);
+                return res.has_value();
+            }
+        };
+
+        sendSearchAddr(0xFFFFFF);
+        if (!sendCompare()) return 0xFFFFFFFF; // No devices
+
+        while ((high - low) > 0) {
+            searchAddr = low + (high - low) / 2;
+            sendSearchAddr(searchAddr);
+
+            if (sendCompare()) {
+                high = searchAddr;
+            } else {
+                low = searchAddr + 1;
+            }
+        }
+
+        // Verify
+        searchAddr = low;
+        sendSearchAddr(searchAddr);
+        if (sendCompare()) return searchAddr;
+
+        return 0xFFFFFFFF;
+    }
+
+    uint8_t DaliAdapter::initialize24BitDevicesBus() {
+        ESP_LOGI(TAG, "Starting Commissioning (Input Devices)...");
+
+        // Terminate
+        sendRaw(Factory::InputDeviceCmd(0xFF, 0xFF, 0x06).data, 24);
+
+        // Initialise (0x00 = All, 0xFF = Unaddressed)
+        sendRaw(Factory::InputDeviceCmd(0xFF, 0xFF, 0x00).data, 24);
+        sendRaw(Factory::InputDeviceCmd(0xFF, 0xFF, 0x00).data, 24);
+
+        // Randomise
+        sendRaw(Factory::InputDeviceCmd(0xFF, 0xFF, 0x01).data, 24);
+        sendRaw(Factory::InputDeviceCmd(0xFF, 0xFF, 0x01).data, 24);
+        vTaskDelay(pdMS_TO_TICKS(100));
+
+        uint8_t devices_found = 0;
+
+        while (true) {
+            uint32_t longAddr = findAddressBinarySearch(true);
+            if (longAddr > 0xFFFFFF) break;
+
+            if (devices_found >= 64) {
+                // Withdraw (0x03)
+                sendRaw(Factory::InputDeviceCmd(0xFF, 0xFF, 0x03).data, 24);
+                continue;
+            }
+            uint8_t progData = (devices_found << 1) | 1;
+            sendRaw(Factory::InputDeviceCmd(0xFF, progData, 0x07).data, 24);
+
+            ESP_LOGI(TAG, "Found Input Device at 0x%06lX -> SA %d", longAddr, devices_found);
+            devices_found++;
+
+            // Withdraw (0x03)
+            sendRaw(Factory::InputDeviceCmd(0xFF, 0xFF, 0x03).data, 24);
+        }
+
+        // Terminate
+        sendRaw(Factory::InputDeviceCmd(0xFF, 0xFF, 0x06).data, 24);
+        return devices_found;
     }
 
     std::optional<DaliLongAddress_t> DaliAdapter::getLongAddress(const uint8_t shortAddress) {
-        const auto h_opt = sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddress, DALI_COMMAND_QUERY_RANDOM_ADDRESS_H);
-        vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
-        const auto m_opt = sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddress, DALI_COMMAND_QUERY_RANDOM_ADDRESS_M);
-        vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
-        const auto l_opt = sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddress, DALI_COMMAND_QUERY_RANDOM_ADDRESS_L);
+        const auto h = sendQuery(DaliAddressType::Short, shortAddress, static_cast<uint8_t>(OpCode::QueryRandomAddrH));
+        if (!h) return std::nullopt;
+        const auto m = sendQuery(DaliAddressType::Short, shortAddress, static_cast<uint8_t>(OpCode::QueryRandomAddrM));
+        if (!m) return std::nullopt;
+        const auto l = sendQuery(DaliAddressType::Short, shortAddress, static_cast<uint8_t>(OpCode::QueryRandomAddrL));
+        if (!l) return std::nullopt;
 
-        if (h_opt && m_opt && l_opt) {
-            return (static_cast<DaliLongAddress_t>(h_opt.value()) << 16) | (static_cast<DaliLongAddress_t>(m_opt.value()) << 8) | l_opt.value();
-        }
-        return std::nullopt;
-    }
-    std::optional<uint8_t> DaliAdapter::getDeviceType(const uint8_t shortAddress) {
-        // QUERY DEVICE TYPE
-        return sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddress, DALI_COMMAND_QUERY_DEVICE_TYPE);
+        return (static_cast<uint32_t>(*h) << 16) | (static_cast<uint32_t>(*m) << 8) | (*l);
     }
 
     std::optional<uint8_t> DaliAdapter::getDeviceStatus(const uint8_t shortAddress) {
-        // QUERY STATUS
-        return sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddress, DALI_COMMAND_QUERY_STATUS);
+        return sendQuery(DaliAddressType::Short, shortAddress, static_cast<uint8_t>(OpCode::QueryStatus));
+    }
+
+    std::optional<uint8_t> DaliAdapter::getDeviceType(const uint8_t shortAddress) {
+        return sendQuery(DaliAddressType::Short, shortAddress, static_cast<uint8_t>(OpCode::QueryDeviceType));
+    }
+
+    std::optional<std::bitset<16>> DaliAdapter::getDeviceGroups(const uint8_t shortAddress) {
+        const auto g0_7 = sendQuery(DaliAddressType::Short, shortAddress, static_cast<uint8_t>(OpCode::QueryGroups0_7));
+        const auto g8_15 = sendQuery(DaliAddressType::Short, shortAddress, static_cast<uint8_t>(OpCode::QueryGroups8_15));
+
+        if (g0_7 && g8_15) {
+            uint16_t mask = (*g8_15 << 8) | *g0_7;
+            return std::bitset<16>(mask);
+        }
+        return std::nullopt;
     }
 
     std::optional<std::string> DaliAdapter::getGTIN(const uint8_t shortAddress) {
-        std::lock_guard lock(bus_mutex);
-
-        m_dali_impl.set_dtr1(0, shortAddress);
-
-        std::string gtin_res;
-        for (uint8_t offset = 0x03; offset <= 0x08; ++offset) {
-            m_dali_impl.set_dtr0(offset, shortAddress);
-            const int16_t byte_val = m_dali_impl.cmd(DALI_READ_MEMORY_LOCATION, shortAddress);
-
-            if (byte_val >= 0) {
-                char buf[4];
-                snprintf(buf, sizeof(buf), "%02X", static_cast<uint8_t>(byte_val));
-                gtin_res += buf;
+        std::string gtin;
+        for(uint8_t i=0; i<6; i++) {
+            auto byte = readMemoryLocation(shortAddress, 0, 3 + i);
+            if(byte) {
+                char hex[3];
+                snprintf(hex, sizeof(hex), "%02X", *byte);
+                gtin += hex;
             } else {
                 return std::nullopt;
             }
-            vTaskDelay(pdMS_TO_TICKS(5));
         }
-        return gtin_res;
-    }
-
-     esp_err_t DaliAdapter::sendSpecialCmdDT8(const uint8_t shortAddr, const uint8_t cmd) {
-        m_dali_impl.cmd(DALI_SPECIAL_COMMAND_ENABLE_DEVICE_TYPE_X | 0x0100, 8, false);
-        m_dali_impl.cmd(cmd, shortAddr, false);
-        return ESP_OK;
-    }
-    static uint8_t make_dali_command_address(const dali_addressType_t type, const uint8_t addr) {
-        switch (type) {
-            case DALI_ADDRESS_TYPE_SHORT:
-                return addr;
-            case DALI_ADDRESS_TYPE_GROUP:
-                return 0x40 | (addr & 0x0F);
-            case DALI_ADDRESS_TYPE_BROADCAST:
-                return 0x7F;
-            default:
-                return addr;
-        }
-    }
-    esp_err_t DaliAdapter::setDT8ColorTemp(const dali_addressType_t addr_type, const uint8_t addr, const uint16_t mireds) {
-        std::lock_guard lock(bus_mutex);
-
-        m_dali_impl.cmd(DALI_SPECIAL_COMMAND_DATA_TRANSFER_REGISTER_1, (mireds >> 8) & 0xFF, false);
-        m_dali_impl.cmd(DALI_SPECIAL_COMMAND_DATA_TRANSFER_REGISTER, mireds & 0xFF, false);
-        const uint8_t target_addr_byte = make_dali_command_address(addr_type, addr);
-
-        sendSpecialCmdDT8(target_addr_byte, DALI_COMMAND_DT8_SET_COLOUR_TEMP_TC);
-        sendSpecialCmdDT8(target_addr_byte, DALI_COMMAND_DT8_ACTIVATE);
-
-        ESP_LOGD(TAG, "DT8 Set Tc: %d mireds to AddrType %d, Val %d", mireds, addr_type, addr);
-        vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
-        return ESP_OK;
-    }
-
-    esp_err_t DaliAdapter::setDT8RGB(const dali_addressType_t addr_type, const uint8_t addr, const uint8_t r, const uint8_t g, const uint8_t b) {
-        std::lock_guard lock(bus_mutex);
-        const uint8_t target_addr_byte = make_dali_command_address(addr_type, addr);
-
-        m_dali_impl.cmd(DALI_SPECIAL_COMMAND_DATA_TRANSFER_REGISTER_1, 0x01, false); // DTR1 = Mask R
-        m_dali_impl.cmd(DALI_SPECIAL_COMMAND_DATA_TRANSFER_REGISTER, r, false);      // DTR0 = Value R
-        sendSpecialCmdDT8(target_addr_byte, DALI_COMMAND_DT8_SET_TEMPORARY_RGB_DIMLEVEL);
-
-        m_dali_impl.cmd(DALI_SPECIAL_COMMAND_DATA_TRANSFER_REGISTER_1, 0x02, false); // DTR1 = Mask G
-        m_dali_impl.cmd(DALI_SPECIAL_COMMAND_DATA_TRANSFER_REGISTER, g, false);      // DTR0 = Value G
-        sendSpecialCmdDT8(target_addr_byte, DALI_COMMAND_DT8_SET_TEMPORARY_RGB_DIMLEVEL);
-
-        m_dali_impl.cmd(DALI_SPECIAL_COMMAND_DATA_TRANSFER_REGISTER_1, 0x04, false); // DTR1 = Mask B
-        m_dali_impl.cmd(DALI_SPECIAL_COMMAND_DATA_TRANSFER_REGISTER, b, false);      // DTR0 = Value B
-        sendSpecialCmdDT8(target_addr_byte, DALI_COMMAND_DT8_SET_TEMPORARY_RGB_DIMLEVEL);
-
-        sendSpecialCmdDT8(target_addr_byte, DALI_COMMAND_DT8_ACTIVATE);
-        ESP_LOGD(TAG, "DT8 Set RGB: %d,%d,%d to AddrType %d, Val %d", r, g, b, addr_type, addr);
-        vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
-        return ESP_OK;
-    }
-
-    std::optional<uint8_t> DaliAdapter::getDT8Features(const uint8_t shortAddress) {
-        std::lock_guard lock(bus_mutex);
-        m_dali_impl.cmd(DALI_SPECIAL_COMMAND_ENABLE_DEVICE_TYPE_X | 0x0100, 8, false);
-
-        const int16_t result = m_dali_impl.cmd(DALI_COMMAND_DT8_QUERY_COLOUR_TYPE_FEATURES, shortAddress);
-
-        vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
-
-        if (result >= 0) {
-            return static_cast<uint8_t>(result);
-        }
-        return std::nullopt;
+        return gtin;
     }
 
     std::optional<uint8_t> DaliAdapter::readMemoryLocation(const uint8_t shortAddress, const uint8_t bank, const uint8_t offset) {
-        std::lock_guard lock(bus_mutex);
-
-        m_dali_impl.set_dtr1(bank, shortAddress);
-        m_dali_impl.set_dtr0(offset, shortAddress);
-        const int16_t result = m_dali_impl.cmd(DALI_READ_MEMORY_LOCATION, shortAddress);
-
-        vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
-
-        if (result >= 0) {
-            return static_cast<uint8_t>(result);
-        }
-        ESP_LOGW(TAG, "Failed to read memory loc: SA=%d, Bank=%d, Off=%d, Res=%d", shortAddress, bank, offset, result);
-        return std::nullopt;
+        setDtr1(bank);
+        setDtr0(offset);
+        return sendQuery(DaliAddressType::Short, shortAddress, static_cast<uint8_t>(OpCode::ReadMemoryLocation));
     }
+
+    esp_err_t DaliAdapter::assignToGroup(const uint8_t shortAddress, const uint8_t group) {
+        return sendCommand(DaliAddressType::Short, shortAddress, 0x60 + group, true);
+    }
+
+    esp_err_t DaliAdapter::removeFromGroup(const uint8_t shortAddress, const uint8_t group) {
+        return sendCommand(DaliAddressType::Short, shortAddress, 0x70 + group, true);
+    }
+
+    std::optional<uint8_t> DaliAdapter::getDT8Features(const uint8_t shortAddress) {
+        sendSpecialCmdDT8(shortAddress, static_cast<uint8_t>(SpecialOpCode::EnableDeviceTypeX));
+        return sendQuery(DaliAddressType::Short, shortAddress, static_cast<uint8_t>(DT8OpCode::QueryColourType));
+    }
+
     std::optional<uint8_t> DaliAdapter::queryDT8Value(const uint8_t shortAddress, const uint8_t dtr0_selector) {
-        std::lock_guard lock(bus_mutex);
-
-        if (m_dali_impl.set_dtr0(dtr0_selector, shortAddress) != 0) {
-            ESP_LOGW(TAG, "Failed to set DTR0 for SA %d", shortAddress);
-            return std::nullopt;
-        }
-        m_dali_impl.cmd(DALI_SPECIAL_COMMAND_ENABLE_DEVICE_TYPE_X | 0x0100, 8, false);
-        const int16_t result = m_dali_impl.cmd(DALI_COMMAND_DT8_QUERY_COLOUR_VALUE, shortAddress);
-
-        vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
-
-        if (result >= 0) {
-            return static_cast<uint8_t>(result);
-        }
-        return std::nullopt;
+        setDtr0(dtr0_selector);
+        sendSpecialCmdDT8(shortAddress, static_cast<uint8_t>(SpecialOpCode::EnableDeviceTypeX));
+        return sendQuery(DaliAddressType::Short, shortAddress, static_cast<uint8_t>(DT8OpCode::QueryColourValue));
     }
+
     std::optional<uint16_t> DaliAdapter::getDT8ColorTemp(const uint8_t shortAddress) {
-        const auto msb = queryDT8Value(shortAddress, 0x00);
-        if (!msb) return std::nullopt;
-
-        const auto lsb = queryDT8Value(shortAddress, 0x01);
-        if (!lsb) return std::nullopt;
-
+        const auto msb = queryDT8Value(shortAddress, 0); // High byte
+        if(!msb) return std::nullopt;
+        const auto lsb = queryDT8Value(shortAddress, 1); // Low byte
+        if(!lsb) return std::nullopt;
         return (static_cast<uint16_t>(*msb) << 8) | *lsb;
     }
 
     std::optional<DaliRGB> DaliAdapter::getDT8RGB(const uint8_t shortAddress) {
-        const auto r = queryDT8Value(shortAddress, 0x00);
-        if (!r) return std::nullopt;
-
-        const auto g = queryDT8Value(shortAddress, 0x01);
-        if (!g) return std::nullopt;
-
-        const auto b = queryDT8Value(shortAddress, 0x02);
-        if (!b) return std::nullopt;
-
-        return DaliRGB{ *r, *g, *b };
+        const auto r = queryDT8Value(shortAddress, 2);
+        const auto g = queryDT8Value(shortAddress, 3);
+        const auto b = queryDT8Value(shortAddress, 4);
+        if(r && g && b) return DaliRGB{*r, *g, *b};
+        return std::nullopt;
     }
 
-    bool DaliAdapter::isInitialized() const {
-        return m_initialized;
+    esp_err_t DaliAdapter::sendSpecialCmdDT8(const uint8_t shortAddr, const uint8_t cmd) {
+        // Frame: 0xC1 <Type> (Special command).
+        sendRaw(Factory::Special(SpecialOpCode::EnableDeviceTypeX, 8).data, 16);
+        return sendCommand(DaliAddressType::Short, shortAddr, cmd, false);
+    }
+
+    esp_err_t DaliAdapter::setDT8ColorTemp(const DaliAddressType addr_type, const uint8_t addr, const uint16_t mireds) {
+        // Set DTR1 (High Byte)
+        setDtr1((mireds >> 8) & 0xFF);
+        // Set DTR0 (Low Byte)
+        setDtr0(mireds & 0xFF);
+
+        // Enable DT8
+        sendRaw(Factory::Special(SpecialOpCode::EnableDeviceTypeX, 8).data, 16);
+
+        // Send SET COLOUR TEMPERATURE TC (0xE7)
+        sendCommand(addr_type, addr, static_cast<uint8_t>(DT8OpCode::SetTempTc), false);
+
+        // Activate
+        sendRaw(Factory::Special(SpecialOpCode::EnableDeviceTypeX, 8).data, 16);
+        sendCommand(addr_type, addr, static_cast<uint8_t>(DT8OpCode::Activate), false);
+
+        return ESP_OK;
+    }
+
+    esp_err_t DaliAdapter::setDT8RGB(const DaliAddressType addr_type, const uint8_t addr, const uint8_t r, const uint8_t g, const uint8_t b) {
+        // Sequence: DTR1=Mask, DTR0=Val -> Set Temporary RGB Dimlevel (0xEB)
+
+        auto sendColorComp = [&](const uint8_t mask, const uint8_t val) {
+            setDtr1(mask);
+            setDtr0(val);
+            sendRaw(Factory::Special(SpecialOpCode::EnableDeviceTypeX, 8).data, 16);
+            sendCommand(addr_type, addr, static_cast<uint8_t>(DT8OpCode::SetTempRGB), false);
+        };
+
+        sendColorComp(1, r);
+        sendColorComp(2, g);
+        sendColorComp(4, b);
+
+        // Activate
+        sendRaw(Factory::Special(SpecialOpCode::EnableDeviceTypeX, 8).data, 16);
+        sendCommand(addr_type, addr, static_cast<uint8_t>(DT8OpCode::Activate), false);
+
+        return ESP_OK;
     }
 } // daliMQTT

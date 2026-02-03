@@ -17,7 +17,7 @@ namespace daliMQTT
         }
         ESP_LOGI(TAG, "Activating DALI Scene %d", sceneId);
         auto& dali = DaliAdapter::Instance();
-        return dali.sendCommand(DALI_ADDRESS_TYPE_BROADCAST, 0, DALI_COMMAND_GO_TO_SCENE_0 + sceneId);
+        return dali.sendCommand(DaliAddressType::Broadcast, 0, DALI_COMMAND_GO_TO_SCENE_0 + sceneId);
     }
 
     esp_err_t DaliSceneManagement::saveScene(uint8_t sceneId, const SceneDeviceLevels& levels) const
@@ -32,7 +32,7 @@ namespace daliMQTT
             ESP_LOGD(TAG, "Setting device %d to level %d for scene %d", addr, level, sceneId);
 
             esp_err_t res = dali.sendCommand(
-                DALI_ADDRESS_TYPE_SPECIAL_CMD,
+                DaliAddressType::Special,
                 level,
                 DALI_SPECIAL_COMMAND_DATA_TRANSFER_REGISTER
             );
@@ -44,7 +44,7 @@ namespace daliMQTT
 
 
             res = dali.sendCommand(
-                DALI_ADDRESS_TYPE_SHORT,
+                DaliAddressType::Short,
                 addr,
                 DALI_COMMAND_STORE_DTR_AS_SCENE_0 + sceneId,
                 true
@@ -74,7 +74,7 @@ namespace daliMQTT
             if (!gear->available) continue;
 
             auto level_opt = dali.sendQuery(
-                DALI_ADDRESS_TYPE_SHORT,
+                DaliAddressType::Short,
                 gear->short_address,
                 DALI_COMMAND_QUERY_SCENE_LEVEL_0 + sceneId
             );

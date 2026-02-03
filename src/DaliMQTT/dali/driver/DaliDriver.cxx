@@ -1,928 +1,334 @@
-/*###########################################################################
-        copyright qqqlab.com / github.com/qqqlab
+#include "dali/driver/DaliDriver.hxx"
+#include <esp_check.h>
+#include <esp_timer.h>
 
-        This program is free software: you can redistribute it and/or modify
-        it under the terms of the GNU General Public License as published by
-        the Free Software Foundation, either version 3 of the License, or
-        (at your option) any later version.
+namespace daliMQTT::Driver {
 
-        This program is distributed in the hope that it will be useful,
-        but WITHOUT ANY WARRANTY; without even the implied warranty of
-        MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-        GNU General Public License for more details.
+    static constexpr char TAG[] = "DaliDriver";
 
-        You should have received a copy of the GNU General Public License
-        along with this program.  If not, see <http://www.gnu.org/licenses/>.
+    DaliDriver::DaliDriver() {
+        m_tx_queue = xQueueCreate(16, sizeof(DaliMessage));
+        m_event_queue = xQueueCreate(64, sizeof(DaliMessage));
+        m_rx_buffer = new rmt_symbol_word_t[RX_BUFFER_SIZE];
+    }
 
-----------------------------------------------------------------------------
-Changelog:
-2020-11-14 Rewrite with sampling instead of pinchange
-2020-11-10 Split off hardware specific code into separate class
-2020-11-08 Created & tested on ATMega328 @ 8Mhz
+    DaliDriver::~DaliDriver() {
+        if (m_driver_task) vTaskDelete(m_driver_task);
+        if (m_tx_channel) { rmt_disable(m_tx_channel); rmt_del_channel(m_tx_channel); }
+        if (m_rx_channel) { rmt_disable(m_rx_channel); rmt_del_channel(m_rx_channel); }
+        if (m_dali_encoder) rmt_del_encoder(m_dali_encoder);
+        if (m_tx_queue) vQueueDelete(m_tx_queue);
+        if (m_event_queue) vQueueDelete(m_event_queue);
+        delete[] m_rx_buffer;
+    }
 
-Patched: daliMQTT Project
-###########################################################################*/
+    esp_err_t DaliDriver::init(const DaliDriverConfig& config) {
+        if (m_initialized) return ESP_OK;
+        m_config = config;
 
-//=================================================================
-// LOW LEVEL DRIVER
-//=================================================================
-#include "DaliDriver.hxx"
+        ESP_LOGI(TAG, "Init DALI: RX=%d, TX=%d", config.rx_pin, config.tx_pin);
 
-#include "esp_task_wdt.h"
-#include "esp_timer.h"
+        ESP_RETURN_ON_ERROR(setupTx(), TAG, "TX Setup failed");
+        ESP_RETURN_ON_ERROR(setupRx(), TAG, "RX Setup failed");
 
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "esp_log.h"
+        xTaskCreate(driverTaskWrapper, "dali_rmt_task", 4096, this, configMAX_PRIORITIES - 1, &m_driver_task);
 
-// timing
-#define BEFORE_CMD_IDLE_TICKS 100
-// busstate
-#define IDLE 0
-#define RX 1
-#define COLLISION_RX 2
-#define TX 3
-#define COLLISION_TX 4
+        rmt_receive_config_t rx_config = {
+            .signal_range_min_ns = 50000,   // 50us noise filter
+            .signal_range_max_ns = Constants::RX_IDLE_THRESH_NS, // 1.8ms Idle = Stop Condition
+        };
+        ESP_ERROR_CHECK(rmt_receive(m_rx_channel, m_rx_buffer, RX_BUFFER_SIZE * sizeof(rmt_symbol_word_t), &rx_config));
 
-static constexpr const char* TAG = "DALILibDriver";
+        m_initialized = true;
+        return ESP_OK;
+    }
 
-void Dali::begin(uint8_t (*bus_is_high)(), void (*bus_set_low)(), void (*bus_set_high)())
-{
-    this->bus_is_high = bus_is_high;
-    this->bus_set_low = bus_set_low;
-    this->bus_set_high = bus_set_high;
-    _init();
-}
+    esp_err_t DaliDriver::setupTx() {
+        rmt_tx_channel_config_t tx_cfg = {
+            .gpio_num = m_config.tx_pin,
+            .clk_src = RMT_CLK_SRC_DEFAULT,
+            .resolution_hz = m_config.resolution_hz,
+            .mem_block_symbols = 64,
+            .trans_queue_depth = 4,
+            .flags = { .invert_out = false, .with_dma = false },
+        };
+        ESP_RETURN_ON_ERROR(rmt_new_tx_channel(&tx_cfg, &m_tx_channel), TAG, "New TX failed");
 
-void IRAM_ATTR Dali::_set_busstate_idle()
-{
-    bus_set_high();
-    idlecnt = 0;
-    busstate = IDLE;
-}
+        rmt_copy_encoder_config_t enc_cfg = {};
+        ESP_RETURN_ON_ERROR(rmt_new_copy_encoder(&enc_cfg, &m_dali_encoder), TAG, "Encoder failed");
 
-void Dali::_init()
-{
-    _set_busstate_idle();
-    rxstate = EMPTY;
-    txcollision = 0;
-}
+        rmt_tx_event_callbacks_t cbs = { .on_trans_done = rmt_tx_done_callback };
+        ESP_RETURN_ON_ERROR(rmt_tx_register_event_callbacks(m_tx_channel, &cbs, this), TAG, "TX CB failed");
 
-uint32_t IRAM_ATTR Dali::milli()
-{
-    // // while(ticks==0xFF); //wait for _millis update to finish
-    // // return _milli;
-    return esp_timer_get_time() / 1000LL;
-}
+        ESP_RETURN_ON_ERROR(rmt_enable(m_tx_channel), TAG, "TX Enable failed");
+        return ESP_OK;
+    }
 
-// timer interrupt service routine, called 9600 times per second
-void IRAM_ATTR Dali::timer()
-{
+    esp_err_t DaliDriver::setupRx() {
+        rmt_rx_channel_config_t rx_cfg = {
+            .gpio_num = m_config.rx_pin,
+            .clk_src = RMT_CLK_SRC_DEFAULT,
+            .resolution_hz = m_config.resolution_hz,
+            .mem_block_symbols = 64,
+            .flags = { .with_dma = false },
+        };
+        ESP_RETURN_ON_ERROR(rmt_new_rx_channel(&rx_cfg, &m_rx_channel), TAG, "New RX failed");
 
-    // get bus sample
-    uint8_t busishigh = (bus_is_high() ? 1 : 0); // bus_high is 1 on high (non-asserted), 0 on low (asserted)
+        rmt_rx_event_callbacks_t cbs = { .on_recv_done = rmt_rx_done_callback };
+        ESP_RETURN_ON_ERROR(rmt_rx_register_event_callbacks(m_rx_channel, &cbs, this), TAG, "RX CB failed");
 
-    // // //millis update
-    // // ticks++;
-    // // if(ticks==10) {
-    // //   ticks = 0xff; //signal _millis is updating
-    // //   _milli++;
-    // //   ticks = 0;
-    // // }
+        ESP_RETURN_ON_ERROR(rmt_enable(m_rx_channel), TAG, "RX Enable failed");
+        return ESP_OK;
+    }
 
-    switch (busstate) {
-    case IDLE:
-        if (busishigh) {
-            if (idlecnt != 0xff)
-                idlecnt = idlecnt + 1;
-            break;
+    esp_err_t DaliDriver::sendAsync(const uint32_t data, const uint8_t bits) const {
+        DaliMessage msg{};
+        msg.data = data;
+        msg.length = bits;
+        if (xQueueSend(m_tx_queue, &msg, pdMS_TO_TICKS(10)) != pdTRUE) {
+            return ESP_FAIL;
         }
-        // set busstate = RX
-        rxpos = 0;
-        rxbitcnt = 0;
-        rxidle = 0;
-        rxstate = RECEIVING;
-        busstate = RX;
-        // fall-thru to RX
-    case RX:
-        // store sample
-        rxbyte = (rxbyte << 1) | busishigh;
-        rxbitcnt = rxbitcnt + 1;
-        if (rxbitcnt == 8) {
-            rxdata[rxpos] = rxbyte;
-            rxpos = rxpos + 1;
-            if (rxpos > DALI_RX_BUF_SIZE - 1)
-                rxpos = DALI_RX_BUF_SIZE - 1;
-            rxbitcnt = 0;
-        }
-        // check for reception of 2 stop bits
-        if (busishigh) {
-            rxidle = rxidle + 1;
-            if (rxidle >= 16) {
-                rxdata[rxpos] = 0xFF;
-                rxpos = rxpos + 1;
-                rxstate = COMPLETED;
-                _set_busstate_idle();
+        if (m_driver_task) xTaskNotify(m_driver_task, 0, eNoAction);
+        return ESP_OK;
+    }
 
-                if (_rx_callback) {
-                    _rx_callback(_rx_callback_arg);
+    void DaliDriver::flushRxQueue() const {
+        xQueueReset(m_event_queue);
+    }
+
+
+    rmt_symbol_word_t DaliDriver::make_symbol(const uint32_t duration, const uint8_t level) {
+        rmt_symbol_word_t sym;
+        sym.val = (duration & 0x7FFF) | ((level & 1) << 15);
+        return sym;
+    }
+
+    bool IRAM_ATTR DaliDriver::rmt_tx_done_callback(rmt_channel_handle_t tx_chan, const rmt_tx_done_event_data_t *edata, void *user_ctx) {
+        return false; 
+    }
+
+    bool IRAM_ATTR DaliDriver::rmt_rx_done_callback(rmt_channel_handle_t rx_chan, const rmt_rx_done_event_data_t *edata, void *user_ctx) {
+        const auto* driver = static_cast<DaliDriver*>(user_ctx);
+        BaseType_t high_task_wakeup = pdFALSE;
+        xTaskNotifyFromISR(driver->m_driver_task, edata->num_symbols, eSetValueWithOverwrite, &high_task_wakeup);
+        return high_task_wakeup == pdTRUE;
+    }
+
+    void DaliDriver::driverTaskWrapper(void* arg) {
+        static_cast<DaliDriver*>(arg)->driverTaskLoop();
+        vTaskDelete(nullptr);
+    }
+
+    void DaliDriver::driverTaskLoop() {
+        DaliMessage tx_msg;
+        uint32_t notify_val = 0;
+
+        while (true) {
+            if (xTaskNotifyWait(0, 0xFFFFFFFF, &notify_val, pdMS_TO_TICKS(5)) == pdTRUE) {
+                if (notify_val > 0) {
+                    processRxSymbols(m_rx_buffer, notify_val);
+                    rmt_receive_config_t rx_config = {
+                        .signal_range_min_ns = 50000, 
+                        .signal_range_max_ns = Constants::RX_IDLE_THRESH_NS,
+                    };
+                    ESP_ERROR_CHECK(rmt_receive(m_rx_channel, m_rx_buffer, RX_BUFFER_SIZE * sizeof(rmt_symbol_word_t), &rx_config));
                 }
-
-                break;
             }
-        } else {
-            rxidle = 0;
-        }
-        break;
-    case TX:
-        if (txhbcnt >= txhblen) {
-            // all bits transmitted, go back to IDLE
-            _set_busstate_idle();
-        } else {
-            // check for collisions (transmitting high but bus is low)
-            if ((
-                    txcollisionhandling == DALI_TX_COLLISSION_ON // handle all
-                    || (txcollisionhandling == DALI_TX_COLLISSION_AUTO && txhblen != 2 + 8 + 4) // handle only if not transmitting 8 bits (2+8+4 half bits)
-                    )
-                && (txhigh && !busishigh) // transmitting high, but bus is low
-                && (txspcnt == 1 || txspcnt == 2)) // in middle of transmitting low period
+
+            bool is_tx_active;
             {
-                if (txcollision != 0xFF)
-                    txcollision = txcollision + 1;
-                txspcnt = 0;
-                busstate = COLLISION_TX;
-                return;
+                std::lock_guard<std::mutex> lock(m_state_mutex);
+                is_tx_active = m_tx_state.active;
             }
 
-            // send data bits (MSB first) to bus every 4th sample time
-            if (txspcnt == 0) {
-                // send bit
-                uint8_t pos = txhbcnt >> 3;
-                uint8_t bitmask = 1 << (7 - (txhbcnt & 0x7));
-                if (txhbdata[pos] & bitmask) {
-                    bus_set_low();
-                    txhigh = 0;
+            if (is_tx_active) {
+                if ((esp_timer_get_time() - m_tx_state.start_ts) > Constants::TX_WATCHDOG_TIMEOUT_US ) {
+                    DaliMessage err_msg;
+                    err_msg.type = DaliEventType::CollisionDetected; 
+                    err_msg.timestamp = esp_timer_get_time();
+                    xQueueSend(m_event_queue, &err_msg, 0);
+                    
+                    std::lock_guard<std::mutex> lock(m_state_mutex);
+                    m_tx_state.active = false;
+                    is_tx_active = false;
+                    ESP_LOGD(TAG, "TX Timeout (No Echo)");
+                }
+            }
+
+            if (!is_tx_active && xQueueReceive(m_tx_queue, &tx_msg, 0) == pdTRUE) {
+                {
+                    std::lock_guard<std::mutex> lock(m_state_mutex);
+                    m_tx_state.active = true;
+                    m_tx_state.data = tx_msg.data;
+                    m_tx_state.bits = tx_msg.length;
+                    m_tx_state.start_ts = esp_timer_get_time();
+                }
+
+                auto symbols = encodeFrame(tx_msg.data, tx_msg.length);
+                rmt_transmit_config_t tx_conf = { .loop_count = 0 };
+                ESP_ERROR_CHECK(rmt_transmit(m_tx_channel, m_dali_encoder, symbols.data(), symbols.size(), &tx_conf));
+            }
+        }
+    }
+
+    std::vector<rmt_symbol_word_t> DaliDriver::encodeFrame(const uint32_t data, const uint8_t bits) const {
+        std::vector<rmt_symbol_word_t> syms;
+        syms.reserve(bits * 2 + 2);
+
+        // Start Bit: Logic 1 (Active -> Idle)
+        syms.push_back(make_symbol(Constants::T_TE, Constants::RMT_LEVEL_ACTIVE));
+        syms.push_back(make_symbol(Constants::T_TE, Constants::RMT_LEVEL_IDLE));
+
+        for (int i = bits - 1; i >= 0; --i) {
+            const bool bit = (data >> i) & 1;
+            if (bit) { // Logic 1
+                syms.push_back(make_symbol(Constants::T_TE, Constants::RMT_LEVEL_ACTIVE));
+                syms.push_back(make_symbol(Constants::T_TE, Constants::RMT_LEVEL_IDLE));
+            } else {   // Logic 0
+                syms.push_back(make_symbol(Constants::T_TE, Constants::RMT_LEVEL_IDLE));
+                syms.push_back(make_symbol(Constants::T_TE, Constants::RMT_LEVEL_ACTIVE));
+            }
+        }
+
+        // Stop Bit: Idle level for 2 Te
+        syms.push_back(make_symbol(2 * Constants::T_TE, Constants::RMT_LEVEL_IDLE));
+
+        return syms;
+    }
+
+    void DaliDriver::processRxSymbols(const rmt_symbol_word_t* symbols, size_t count) {
+        if (count < 2) return;
+
+        size_t idx = 0;
+        bool found_start = false;
+
+        auto get_level = [](const rmt_symbol_word_t& s) -> uint8_t {
+            return (s.val >> 15) & 1;
+        };
+        auto get_time = [](const rmt_symbol_word_t& s) -> uint32_t {
+            return s.val & 0x7FFF;
+        };
+
+        for (; idx < count - 1; ++idx) {
+            uint32_t t1 = get_time(symbols[idx]);
+            uint8_t  l1 = get_level(symbols[idx]);
+            uint32_t t2 = get_time(symbols[idx+1]);
+            uint8_t  l2 = get_level(symbols[idx+1]);
+
+            if (l1 == Constants::RMT_LEVEL_ACTIVE && t1 >= Constants::T_TE_MIN && t1 <= Constants::T_TE_MAX &&
+                l2 == Constants::RMT_LEVEL_IDLE   && t2 >= Constants::T_TE_MIN && t2 <= Constants::T_TE_MAX) {
+                found_start = true;
+                idx += 2;
+                break;
+            }
+        }
+
+        if (!found_start) {
+            std::lock_guard<std::mutex> lock(m_state_mutex);
+            if (m_tx_state.active) {
+                DaliMessage msg{ .data=0, .length=0, .is_backward=false, .type = DaliEventType::CollisionDetected, .timestamp = esp_timer_get_time() };
+                xQueueSend(m_event_queue, &msg, 0);
+                m_tx_state.active = false;
+            }
+            return;
+        }
+
+        uint32_t rx_data = 0;
+        uint8_t bits_cnt = 0;
+        bool error = false;
+
+        int pending_phase_val = -1;
+
+        while (bits_cnt < 24 && idx < count) {
+            uint32_t t = get_time(symbols[idx]);
+            uint8_t  l = get_level(symbols[idx]);
+            
+            if (l == Constants::RMT_LEVEL_IDLE && t > Constants::T_2TE_MAX) {
+                break;
+            }
+
+            int dur_te = 0;
+            if (t >= Constants::T_TE_MIN && t <= Constants::T_TE_MAX) dur_te = 1;
+                else if (t >= Constants::T_2TE_MIN && t <= Constants::T_2TE_MAX) dur_te = 2;
+                else { error = true; break; } // Noise
+
+            uint8_t first_half_level;
+            
+            if (pending_phase_val != -1) {
+                first_half_level = static_cast<uint8_t>(pending_phase_val);
+                pending_phase_val = -1;
+
+                if (l == first_half_level) { error = true; break; }
+                if (dur_te == 1) {
+                    idx++;
+                } else { // dur_te == 2
+                    pending_phase_val = l;
+                    idx++;
+                }
+            } else {
+                first_half_level = l;
+                
+                if (dur_te == 1) {
+                    idx++;
+                    if (idx >= count) { error = true; break; }
+                    
+                    uint32_t t_next = get_time(symbols[idx]);
+                    uint8_t  l_next = get_level(symbols[idx]);
+                    
+                    if (l_next == first_half_level) { error = true; break; }
+                    
+                    int dur_next = 0;
+                    if (t_next >= Constants::T_TE_MIN && t_next <= Constants::T_TE_MAX) dur_next = 1;
+                    else if (t_next >= Constants::T_2TE_MIN && t_next <= Constants::T_2TE_MAX) dur_next = 2;
+                    else { error = true; break; }
+                    
+                    if (dur_next == 1) {
+                        idx++;
+                    } else { // 2
+                        pending_phase_val = l_next;
+                        idx++;
+                    }
+                } else { // dur_te == 2
+                    error = true; break;
+                }
+            }
+
+            // Active -> ... = 1
+            // Idle -> ... = 0
+            bool logic_val = (first_half_level == Constants::RMT_LEVEL_ACTIVE);
+            rx_data = (rx_data << 1) | (logic_val ? 1 : 0);
+            bits_cnt++;
+        }
+
+        if (!error && bits_cnt > 0) {
+            DaliMessage msg;
+            msg.data = rx_data;
+            msg.length = bits_cnt;
+            msg.timestamp = esp_timer_get_time();
+            msg.is_backward = (bits_cnt == 8);
+
+            std::lock_guard<std::mutex> lock(m_state_mutex);
+            if (m_tx_state.active) {
+                if (m_tx_state.bits == bits_cnt && m_tx_state.data == rx_data) {
+                    msg.type = DaliEventType::TxCompleted;
                 } else {
-                    bus_set_high();
-                    txhigh = 1;
+                    msg.type = DaliEventType::CollisionDetected;
+                    ESP_LOGD(TAG, "Collision: Exp %06lX Got %06lX", m_tx_state.data, rx_data);
                 }
-                // update half bit counter
-                txhbcnt = txhbcnt + 1;
-                // next transmit in 4 sample times
-                txspcnt = 4;
+                m_tx_state.active = false;
+            } else {
+                msg.type = DaliEventType::FrameReceived;
             }
-            txspcnt = txspcnt - 1;
-        }
-        break;
-    case COLLISION_TX:
-        // keep bus low for 16 samples = 4 TE
-        bus_set_low();
-        txspcnt = txspcnt + 1;
-        if (txspcnt >= 16)
-            _set_busstate_idle();
-        break;
-    }
-}
-
-// push 2 half bits into the half bit transmit buffer, MSB first, 0x0=stop, 0x1= bit value 0, 0x2= bit value 1/start
-void Dali::_tx_push_2hb(uint8_t hb)
-{
-    uint8_t pos = txhblen >> 3;
-    uint8_t shift = 6 - (txhblen & 0x7);
-    txhbdata[pos] |= hb << shift;
-    txhblen += 2;
-}
-
-// non-blocking transmit
-// transmit if bus is IDLE, without checking hold off times, sends start+stop bits
-uint8_t Dali::tx(uint8_t* data, uint8_t bitlen)
-{
-    if (bitlen > 32)
-        return DALI_RESULT_FRAME_TOO_LONG;
-    if (busstate != IDLE)
-        return DALI_RESULT_BUS_NOT_IDLE;
-
-    // clear data
-    for (uint8_t i = 0; i < 9; i++)
-        txhbdata[i] = 0;
-
-    // push data in transmit buffer
-    txhblen = 0;
-    _tx_push_2hb(0x2); // start bit
-    // data bits MSB first
-    for (uint8_t i = 0; i < bitlen; i++) {
-        uint8_t pos = i >> 3;
-        uint8_t mask = 1 << (7 - (i & 0x7));
-        _tx_push_2hb(data[pos] & mask ? 0x2 : 0x1);
-    }
-    _tx_push_2hb(0x0); // stop bit
-    _tx_push_2hb(0x0); // stop bit
-
-    // setup tx vars
-    txhbcnt = 0;
-    txspcnt = 0;
-    txcollision = 0;
-    rxstate = EMPTY;
-    busstate = TX;
-    return DALI_OK;
-}
-
-uint8_t Dali::tx_state()
-{
-    if (txcollision) {
-        txcollision = 0;
-        return DALI_RESULT_COLLISION;
-    }
-    if (busstate == TX)
-        return DALI_RESULT_TRANSMITTING;
-    return DALI_OK;
-}
-
-//-------------------------------------------------------------------
-// manchester decode
-/*
-
-Prefectly matched transmitter and sampling: 8 samples per bit
----------+   +---+   +-------+       +-------+   +------------------------
-         |   |   |   |       |       |       |   |
-         +---+   +---+       +-------+       +---+
-sample-> 012345670123456701234567012345670123456701234567012345670
-sync->   ^       ^       ^       ^       ^       ^       ^       ^
-decode-> start   1       1       0       1       0       stop    stop
-
-
-slow transmitter: 9 samples per bit
----------+   +----+    +--------+        +--------+   +------------------------
-         |   |    |    |        |        |        |   |
-         +---+    +----+        +--------+        +---+
-sample-> 0123456780123456780123456780123456780123456780123456780123456780
-sync->   ^        ^        ^        ^        ^        ^        ^        ^
-decode-> start    1        1        0        1        0        stop     stop
-
-*/
-
-// compute weight for a 8 bit sample i
-uint8_t Dali::_man_weight(uint8_t i)
-{
-    int8_t w = 0;
-    w += ((i >> 7) & 1) ? 1 : -1;
-    w += ((i >> 6) & 1) ? 2 : -2; // put more weight in middle
-    w += ((i >> 5) & 1) ? 2 : -2; // put more weight in middle
-    w += ((i >> 4) & 1) ? 1 : -1;
-    w -= ((i >> 3) & 1) ? 1 : -1;
-    w -= ((i >> 2) & 1) ? 2 : -2; // put more weight in middle
-    w -= ((i >> 1) & 1) ? 2 : -2; // put more weight in middle
-    w -= ((i >> 0) & 1) ? 1 : -1;
-    // w at this point:
-    // w = -12 perfect manchester encoded value 1
-    //...
-    // w =  -2 very weak value 1
-    // w =   0 unknown (all samples high or low)
-    //...
-    // w =  12 perfect manchester encoded value 0
-
-    w *= 2;
-    if (w < 0)
-        w = -w + 1;
-    return w;
-}
-
-// call with bitpos <= DALI_RX_BUF_SIZE*8-8;
-uint8_t Dali::_man_sample(volatile uint8_t* edata, uint16_t bitpos, uint8_t* stop_coll)
-{
-    uint8_t pos = bitpos >> 3;
-    uint8_t shift = bitpos & 0x7;
-    uint8_t sample = (edata[pos] << shift) | (edata[pos + 1] >> (8 - shift));
-
-    // stop bit: received high (non-asserted) bus for last 8 samples
-    if (sample == 0xFF)
-        *stop_coll = 1;
-
-    // collision: received low (asserted) bus for last 8 samples
-    if (sample == 0x00)
-        *stop_coll = 2;
-
-    return sample;
-}
-
-// decode 8 times oversampled encoded data
-// returns bitlen of decoded data, or 0 on collision
-uint8_t Dali::_man_decode(volatile uint8_t* edata, uint8_t ebitlen, uint8_t* ddata)
-{
-    uint8_t dbitlen = 0;
-    uint16_t ebitpos = 1;
-    while (ebitpos + 1 < ebitlen) {
-        uint8_t stop_coll = 0;
-        // weight at nominal oversample rate
-        uint8_t sample = _man_sample(edata, ebitpos, &stop_coll);
-        uint8_t weightmax = _man_weight(sample); // weight of maximum
-        uint8_t pmax = 8; // position of maximum
-
-        // weight at nominal oversample rate - 1
-        sample = _man_sample(edata, ebitpos - 1, &stop_coll);
-        uint8_t w = _man_weight(sample);
-        if (weightmax < w) { // when equal keep pmax=8, the nominal oversample baud rate
-            weightmax = w;
-            pmax = 7;
-        }
-
-        // weight at nominal oversample rate + 1
-        sample = _man_sample(edata, ebitpos + 1, &stop_coll);
-        w = _man_weight(sample);
-        if (weightmax < w) { // when equal keep previous value
-            weightmax = w;
-            pmax = 9;
-        }
-
-        // handle stop/collision
-        if (stop_coll == 1)
-            break; // stop
-        if (stop_coll == 2)
-            return 0; // collison
-
-        // store mancheter bit
-        if (dbitlen > 0) { // ignore start bit
-            uint8_t bytepos = (dbitlen - 1) >> 3;
-            uint8_t bitpos = (dbitlen - 1) & 0x7;
-            if (bitpos == 0)
-                ddata[bytepos] = 0; // empty data before storing first bit
-            ddata[bytepos] = (ddata[bytepos] << 1) | (weightmax & 1); // get databit from bit0 of weight
-        }
-        dbitlen++;
-        ebitpos += pmax; // jump to next mancheter bit, skipping over number of samples with max weight
-    }
-    if (dbitlen > 1)
-        dbitlen--;
-    return dbitlen;
-}
-
-// non-blocking receive,
-// returns 0 empty, 1 if busy receiving, 2 decode error, >2 number of bits received
-uint8_t Dali::rx(uint8_t* ddata)
-{
-    switch (rxstate) {
-    case EMPTY:
-        return 0;
-    case RECEIVING:
-        return 1;
-    case COMPLETED:
-        rxstate = EMPTY;
-        uint8_t dlen = _man_decode(rxdata, rxpos * 8, ddata);
-
-#ifdef DALI_DEBUG
-        if (dlen != 8) {
-            ESP_LOGI(TAG, "RX: len=%d", rxpos * 8);
-            char buffer[80];
-            for (uint8_t i = 0; i < rxpos; i++) {
-                for (uint8_t m = 0x80, j = 0; m != 0x00; m >>= 1, j++) {
-                    buffer[j] = (rxdata[i] & m) ? '1' : '0';
-                }
-                buffer[8] = '\0';
-                ESP_LOGI(TAG, "%s", buffer);
+            xQueueSend(m_event_queue, &msg, 0);
+        } else if (error) {
+            std::lock_guard<std::mutex> lock(m_state_mutex);
+            if (m_tx_state.active) {
+                DaliMessage msg{ .type = DaliEventType::CollisionDetected, .timestamp = esp_timer_get_time() };
+                xQueueSend(m_event_queue, &msg, 0);
+                m_tx_state.active = false;
+                ESP_LOGD(TAG, "Collision (Decoding Error)");
             }
-
-            ESP_LOGI(TAG, "decoded: len=%d", dlen);
-            for (uint8_t i = 0; i < dlen; i++) {
-                buffer[i] = (ddata[i >> 3] & (1 << (7 - (i & 0x7)))) ? '1' : '0';
-            }
-            buffer[dlen] = '\0';
-            ESP_LOGI(TAG, "%s", buffer);
-        }
-#endif
-
-        if (dlen < 3)
-            return 2;
-        return dlen;
-    }
-    return 0;
-}
-
-//=================================================================
-// HIGH LEVEL FUNCTIONS
-//=================================================================
-
-// blocking send - wait until successful send or timeout
-uint8_t Dali::tx_wait(uint8_t* data, uint8_t bitlen, uint32_t timeout_ms)
-{
-    if (bitlen > 32)
-        return DALI_RESULT_DATA_TOO_LONG;
-    uint32_t start_ms = milli();
-    while (1) {
-        while (idlecnt < BEFORE_CMD_IDLE_TICKS) {
-            if (milli() - start_ms > timeout_ms)
-                return DALI_RESULT_TIMEOUT;
-            vTaskDelay(1);
-        }
-        while (tx(data, bitlen) != DALI_OK) {
-            if (milli() - start_ms > timeout_ms)
-                return DALI_RESULT_TIMEOUT;
-            vTaskDelay(1);
-        }
-        // wait for completion
-        uint8_t rv;
-        while (1) {
-            rv = tx_state();
-            if (rv != DALI_RESULT_TRANSMITTING)
-                break;
-            if (milli() - start_ms > timeout_ms)
-                return DALI_RESULT_TIMEOUT;
-            vTaskDelay(1);
-        }
-        // exit if transmit was ok
-        if (rv == DALI_OK) {
-            return DALI_OK;
-        }
-        // not ok (for example collision) - retry until timeout
-        vTaskDelay(pdMS_TO_TICKS(5));
-    }
-    return DALI_RESULT_TIMEOUT;
-}
-
-// blocking transmit 2 byte command, receive 1 byte reply (if a reply was sent)
-// returns >=0 with reply byte
-// returns <0 with negative result code
-
-// 16 bit args
-int16_t Dali::tx_wait_rx(const uint8_t cmd0, const uint8_t cmd1, const uint32_t timeout_ms)
-{
-    uint8_t data[4];
-    data[0] = cmd0;
-    data[1] = cmd1;
-    int16_t rv = tx_wait(data, 16, timeout_ms);
-    if (rv)
-        return -rv;
-
-    // wait up to 10 ms for start of reply, additional 15ms for receive to complete
-    uint32_t rx_start_ms = milli();
-    uint32_t rx_timeout_ms = 10;
-    while (1) {
-        rv = rx(data);
-        switch (rv) {
-        case 0:
-            break; // nothing received yet, wait
-        case 1:
-            rx_timeout_ms = 25;
-            break; // extend timeout, wait for RX completion
-        case 2:
-            return -DALI_RESULT_COLLISION; // report collision
-        default:
-            if (rv == 8)
-                return data[0];
-            else
-                return -DALI_RESULT_INVALID_REPLY;
-        }
-
-        if (milli() - rx_start_ms > rx_timeout_ms)
-            return -DALI_RESULT_NO_REPLY;
-
-        vTaskDelay(1);
-    }
-    return -DALI_RESULT_NO_REPLY; // should not get here
-}
-
-int16_t Dali::tx_wait_rx(const uint8_t byte0, const uint8_t byte1, const uint8_t byte2, const uint32_t timeout_ms) {
-    uint8_t data[4];
-    data[0] = byte0;
-    data[1] = byte1;
-    data[2] = byte2;
-    int16_t rv = tx_wait(data, 24, timeout_ms);
-    if (rv) return -rv;
-
-    // wait up to 10 ms for start of reply, additional 15ms for receive to complete
-    uint32_t rx_start_ms = milli();
-    uint32_t rx_timeout_ms = 10;
-    while (1) {
-        rv = rx(data);
-        switch (rv) {
-            case 0:
-                break; // nothing received yet, wait
-            case 1:
-                rx_timeout_ms = 25;
-                break; // extend timeout, wait for RX completion
-            case 2:
-                return -DALI_RESULT_COLLISION; // report collision
-            default:
-                if (rv == 8)
-                    return data[0];
-                else
-                    return -DALI_RESULT_INVALID_REPLY;
-        }
-
-        if (milli() - rx_start_ms > rx_timeout_ms)
-            return -DALI_RESULT_NO_REPLY;
-
-        vTaskDelay(1);
-    }
-    return -DALI_RESULT_NO_REPLY;
-}
-
-// check YAAAAAA: 0000 0000 to 0011 1111 adr, 0100 0000 to 0100 1111 group, x111 1111 broadcast
-uint8_t Dali::_check_yaaaaaa(uint8_t yaaaaaa)
-{
-    return (yaaaaaa <= 0b01001111 || yaaaaaa == 0b01111111 || yaaaaaa == 0b11111111);
-}
-
-void Dali::set_level(uint8_t level, uint8_t adr)
-{
-    if (_check_yaaaaaa(adr))
-        tx_wait_rx(adr << 1, level);
-}
-
-int16_t Dali::cmd(const uint16_t cmd, const uint8_t arg, bool wait_reply)
-{
-    uint8_t cmd0, cmd1;
-    if (cmd & 0x0100) {
-        // special commands: MUST NOT have YAAAAAAX pattern for cmd
-        if (!_check_yaaaaaa(cmd >> 1)) {
-            cmd0 = cmd;
-            cmd1 = arg;
-        } else {
-            return DALI_RESULT_INVALID_CMD;
-        }
-    } else {
-        // regular commands: MUST have YAAAAAA pattern for arg
-
-        if (_check_yaaaaaa(arg)) {
-            cmd0 = arg << 1 | 1;
-            cmd1 = cmd;
-        } else {
-            return DALI_RESULT_INVALID_CMD;
         }
     }
-    uint8_t data[2] = {cmd0, cmd1};
-    if (cmd & 0x0200) {
-        if (wait_reply) {
-            tx_wait_rx(cmd0, cmd1);
-        } else {
-            tx_wait(data, 16);
-        }
-    }
-    if (wait_reply) {
-        return tx_wait_rx(cmd0, cmd1);
-    }
-    const uint8_t res = tx_wait(data, 16);
-    return (res == DALI_OK) ? DALI_OK : (-res);
-}
 
-uint8_t Dali::set_operating_mode(uint8_t v, uint8_t adr)
-{
-    return _set_value(DALI_SET_OPERATING_MODE, DALI_QUERY_OPERATING_MODE, v, adr);
-}
-
-uint8_t Dali::set_max_level(uint8_t v, uint8_t adr)
-{
-    return _set_value(DALI_SET_MAX_LEVEL, DALI_QUERY_MAX_LEVEL, v, adr);
-}
-
-uint8_t Dali::set_min_level(uint8_t v, uint8_t adr)
-{
-    return _set_value(DALI_SET_MIN_LEVEL, DALI_QUERY_MIN_LEVEL, v, adr);
-}
-
-uint8_t Dali::set_system_failure_level(uint8_t v, uint8_t adr)
-{
-    return _set_value(DALI_SET_SYSTEM_FAILURE_LEVEL, DALI_QUERY_SYSTEM_FAILURE_LEVEL, v, adr);
-}
-
-uint8_t Dali::set_power_on_level(uint8_t v, uint8_t adr)
-{
-    return _set_value(DALI_SET_POWER_ON_LEVEL, DALI_QUERY_POWER_ON_LEVEL, v, adr);
-}
-
-// set a parameter value, returns 0 on success
-uint8_t Dali::_set_value(uint16_t setcmd, uint16_t getcmd, uint8_t v, uint8_t adr)
-{
-    int16_t current_v = cmd(getcmd, adr); // get current parameter value
-    if (current_v == v)
-        return 0;
-    cmd(DALI_DATA_TRANSFER_REGISTER0, v); // store value in DTR
-    int16_t dtr = cmd(DALI_QUERY_CONTENT_DTR0, adr); // get DTR value
-    if (dtr != v)
-        return 1;
-    cmd(setcmd, adr); // set parameter value = DTR
-    current_v = cmd(getcmd, adr); // get current parameter value
-    if (current_v != v)
-        return 2;
-    return 0;
-}
-
-//======================================================================
-// Commissioning short addresses
-//======================================================================
-
-// Sets the slave Note 1 to the INITIALISE status for15 minutes.
-// Commands 259 to 270 are enabled only for a slave in this
-// status.
-
-// set search address
-void Dali::set_searchaddr(uint32_t adr)
-{
-    cmd(DALI_SEARCHADDRH, adr >> 16);
-    cmd(DALI_SEARCHADDRM, adr >> 8);
-    cmd(DALI_SEARCHADDRL, adr);
-}
-
-// set search address, but set only changed bytes (takes less time)
-void Dali::set_searchaddr_diff(uint32_t adr_new, uint32_t adr_current)
-{
-    if ((uint8_t)(adr_new >> 16) != (uint8_t)(adr_current >> 16))
-        cmd(DALI_SEARCHADDRH, adr_new >> 16);
-    if ((uint8_t)(adr_new >> 8) != (uint8_t)(adr_current >> 8))
-        cmd(DALI_SEARCHADDRM, adr_new >> 8);
-    if ((uint8_t)(adr_new) != (uint8_t)(adr_current))
-        cmd(DALI_SEARCHADDRL, adr_new);
-}
-
-// Is the random address smaller or equal to the search address?
-// as more than one device can reply, the reply gets garbled
-uint8_t Dali::compare()
-{
-    uint8_t retry = 2;
-    while (retry > 0) {
-        // compare is true if we received any activity on the bus as reply.
-        // sometimes the reply is not registered... so only accept retry times 'no reply' as a real false compare
-        int16_t rv = cmd(DALI_COMPARE, 0x00);
-        if (rv == -DALI_RESULT_COLLISION)
-            return 1;
-        if (rv == -DALI_RESULT_INVALID_REPLY)
-            return 1;
-        if (rv == 0xFF)
-            return 1;
-
-        retry--;
-    }
-    return 0;
-}
-
-// The slave shall store the received 6-bit address (AAAAAA) as a short address if it is selected.
-void Dali::program_short_address(uint8_t shortadr)
-{
-    cmd(DALI_PROGRAM_SHORT_ADDRESS, (shortadr << 1) | 0x01);
-}
-
-// What is the short address of the slave being selected?
-uint8_t Dali::query_short_address()
-{
-    return cmd(DALI_QUERY_SHORT_ADDRESS, 0x00) >> 1;
-}
-
-// find addr with binary search
-uint32_t Dali::find_addr()
-{
-    uint32_t adr = 0x800000;
-    uint32_t addsub = 0x400000;
-    uint32_t adr_last = adr;
-    set_searchaddr(adr);
-
-    while (addsub) {
-        set_searchaddr_diff(adr, adr_last);
-        adr_last = adr;
-        uint8_t cmp = compare(); // returns 1 if searchadr > adr
-        if (cmp)
-            adr -= addsub;
-        else
-            adr += addsub;
-        addsub >>= 1;
-    }
-    set_searchaddr_diff(adr, adr_last);
-    adr_last = adr;
-    if (!compare()) {
-        adr++;
-        set_searchaddr_diff(adr, adr_last);
-    }
-    return adr;
-}
-
-// init_arg=11111111 : all without short address
-// init_arg=00000000 : all
-// init_arg=0AAAAAA1 : only for this shortadr
-// returns number of new short addresses assigned
-uint8_t Dali::commission(uint8_t init_arg)
-{
-    uint8_t cnt = 0;
-    uint8_t arr[64];
-    uint8_t sa;
-    for (sa = 0; sa < 64; sa++)
-        arr[sa] = 0;
-
-    // start commissioning
-    cmd(DALI_INITIALISE, init_arg);
-    cmd(DALI_RANDOMISE, 0x00);
-    // need 100ms pause after RANDOMISE, scan takes care of this...
-
-    // find used short addresses (run always, seems to work better than without...)
-    for (sa = 0; sa < 64; sa++) {
-        int16_t rv = cmd(DALI_QUERY_STATUS, sa);
-        if (rv >= 0) {
-            if (init_arg != 0b00000000)
-                arr[sa] = 1; // remove address from list if not in "all" mode
-        }
-        vTaskDelay(1);
-    }
-
-    // find random addresses and assign unused short addresses
-    while (1) {
-        uint32_t adr = find_addr();
-        if (adr > 0xffffff)
-            break; // no more random addresses found -> exit
-
-        // find first unused short address
-        for (sa = 0; sa < 64; sa++) {
-            if (arr[sa] == 0)
-                break;
-        }
-        if (sa >= 64)
-            break; // all 64 short addresses assigned -> exit
-
-        // mark short address as used
-        arr[sa] = 1;
-        cnt++;
-
-        // assign short address
-        program_short_address(sa);
-
-        //TODO check read adr, handle if not the same...
-
-        // remove the device from the search
-        cmd(DALI_WITHDRAW, 0x00);
-        vTaskDelay(1);
-    }
-
-    // terminate the DALI_INITIALISE command
-    cmd(DALI_TERMINATE, 0x00);
-    return cnt;
-}
-
-//======================================================================
-// Memory
-//======================================================================
-uint8_t Dali::set_dtr0(uint8_t value, uint8_t adr)
-{
-    uint8_t retry = 3;
-    while (retry) {
-        cmd(DALI_DATA_TRANSFER_REGISTER0, value); // store value in DTR
-        int16_t dtr = cmd(DALI_QUERY_CONTENT_DTR0, adr); // get DTR value
-        if (dtr == value)
-            return 0;
-        retry--;
-    }
-    return 1;
-}
-
-uint8_t Dali::set_dtr1(uint8_t value, uint8_t adr)
-{
-    uint8_t retry = 3;
-    while (retry) {
-        cmd(DALI_DATA_TRANSFER_REGISTER1, value); // store value in DTR
-        int16_t dtr = cmd(DALI_QUERY_CONTENT_DTR1, adr); // get DTR value
-        if (dtr == value)
-            return 0;
-        retry--;
-    }
-    return 1;
-}
-
-uint8_t Dali::set_dtr2(uint8_t value, uint8_t adr)
-{
-    uint8_t retry = 3;
-    while (retry) {
-        cmd(DALI_DATA_TRANSFER_REGISTER2, value); // store value in DTR
-        int16_t dtr = cmd(DALI_QUERY_CONTENT_DTR2, adr); // get DTR value
-        if (dtr == value)
-            return 0;
-        retry--;
-    }
-    return 1;
-}
-
-uint8_t Dali::read_memory_bank(uint8_t bank, uint8_t adr)
-{
-    uint16_t rv;
-
-    if (set_dtr0(0, adr))
-        return 1;
-    if (set_dtr1(bank, adr))
-        return 2;
-
-    uint16_t len = cmd(DALI_READ_MEMORY_LOCATION, adr);
-#ifdef DALI_DEBUG
-    ESP_LOGI(TAG, "memlen=%d", len);
-    for (uint8_t i = 0; i < len; i++) {
-        int16_t mem = cmd(DALI_READ_MEMORY_LOCATION, adr);
-        if (mem >= 0) {
-            ESP_LOGI(TAG, "%02X:%d 0x%02X %c", i, mem, mem, (mem >= 32 && mem < 127) ? (char)mem : ' ');
-        } else if (mem != -DALI_RESULT_NO_REPLY) {
-            ESP_LOGE(TAG, "%02X:err=%d", i, mem);
-        }
-        vTaskDelay(pdMS_TO_TICKS(10));
-    }
-#endif
-
-    uint16_t dtr0 = cmd(DALI_QUERY_CONTENT_DTR0, adr); //get DTR value
-    if (dtr0 != 255)
-        return 4;
-
-    return 0;
-}
-
-void Dali::set_searchaddr_id(const uint32_t adr)
-{
-    tx_wait_rx(0xFF, DALI_COMMAND_INPUT_SEARCHADDRH, (adr >> 16) & 0xFF, 100);
-    tx_wait_rx(0xFF, DALI_COMMAND_INPUT_SEARCHADDRM, (adr >> 8) & 0xFF, 100);
-    tx_wait_rx(0xFF, DALI_COMMAND_INPUT_SEARCHADDRL, adr & 0xFF, 100);
-}
-void Dali::set_searchaddr_id_diff(const uint32_t adr_new, const uint32_t adr_current)
-{
-    if ((uint8_t)(adr_new >> 16) != (uint8_t)(adr_current >> 16))
-        tx_wait_rx(0xFF, DALI_COMMAND_INPUT_SEARCHADDRH, (adr_new >> 16) & 0xFF, 100);
-    if ((uint8_t)(adr_new >> 8) != (uint8_t)(adr_current >> 8))
-        tx_wait_rx(0xFF, DALI_COMMAND_INPUT_SEARCHADDRM, (adr_new >> 8) & 0xFF, 100);
-    if ((uint8_t)(adr_new) != (uint8_t)(adr_current))
-        tx_wait_rx(0xFF, DALI_COMMAND_INPUT_SEARCHADDRL, adr_new & 0xFF, 100);
-}
-uint8_t Dali::compare_id() {
-    uint8_t retry = 2;
-    while (retry > 0) {
-        const int16_t rv = tx_wait_rx(0xFF, DALI_COMMAND_INPUT_COMPARE, 0x00, 100);
-        if (rv == -DALI_RESULT_COLLISION) return 1;
-        if (rv == -DALI_RESULT_INVALID_REPLY) return 1;
-        if (rv >= 0) return 1; // Valid byte received (0xFF)
-        retry--;
-    }
-    return 0;
-}
-void Dali::program_short_address_id(uint8_t shortadr)
-{
-    tx_wait_rx(0xFF, DALI_COMMAND_INPUT_PROGRAM_SHORT_ADDR, (shortadr << 1) | 0x01, 100);
-}
-uint32_t Dali::find_addr_id() {
-    uint32_t adr = 0x800000;
-    uint32_t addsub = 0x400000;
-    uint32_t adr_last = adr;
-    set_searchaddr_id(adr);
-    while (addsub) {
-        set_searchaddr_id_diff(adr, adr_last);
-        adr_last = adr;
-        const uint8_t cmp = compare_id(); // returns 1 if searchadr > adr (active reply)
-        if (cmp)
-            adr -= addsub;
-        else
-            adr += addsub;
-        addsub >>= 1;
-    }
-    set_searchaddr_id_diff(adr, adr_last);
-    adr_last = adr;
-    if (!compare_id()) {
-        adr++;
-        set_searchaddr_id_diff(adr, adr_last);
-    }
-    return adr;
-}
-uint8_t Dali::commission_id(const uint8_t init_arg) {
-    uint8_t cnt = 0;
-    uint8_t arr[64];
-    uint8_t sa;
-    for (sa = 0; sa < 64; sa++)
-        arr[sa] = 0;
-    tx_wait_rx(0xFF, DALI_COMMAND_INPUT_TERMINATE, 0x00, 100);
-
-    tx_wait_rx(0xFF, DALI_COMMAND_INPUT_INITIALISE, init_arg, 100);
-    tx_wait_rx(0xFF, DALI_COMMAND_INPUT_INITIALISE, init_arg, 100);
-
-    tx_wait_rx(0xFF, DALI_COMMAND_INPUT_RANDOMISE, 0x00, 100);
-    tx_wait_rx(0xFF, DALI_COMMAND_INPUT_RANDOMISE, 0x00, 100);
-
-    vTaskDelay(pdMS_TO_TICKS(100));
-
-    for (sa = 0; sa < 64; sa++) {
-        const int16_t rv = tx_wait_rx((sa << 1) | 1, DALI_QUERY_STATUS, 0x00, 50);
-        if (rv >= 0) {
-            arr[sa] = 1;
-        }
-        vTaskDelay(1);
-    }
-
-    while (1) {
-        const uint32_t adr = find_addr_id();
-        if (adr > 0xffffff)
-            break; // No more random addresses found
-
-        for (sa = 0; sa < 64; sa++) {
-            if (arr[sa] == 0)
-                break;
-        }
-        if (sa >= 64)
-            break;
-
-        arr[sa] = 1;
-        cnt++;
-
-        program_short_address_id(sa);
-        tx_wait_rx(0xFF, DALI_COMMAND_INPUT_WITHDRAW, 0x00, 100);
-        vTaskDelay(1);
-    }
-    tx_wait_rx(0xFF, DALI_COMMAND_INPUT_TERMINATE, 0x00, 100);
-    return cnt;
-}
-
-//======================================================================
+} // namespace daliMQTT::Driver

@@ -13,7 +13,7 @@ namespace daliMQTT {
 
     static std::atomic<bool> g_mqtt_bus_busy{false};
 
-    void MQTTCommandHandler::publishLightState(dali_addressType_t addr_type, uint8_t target_id,
+    void MQTTCommandHandler::publishLightState(DaliAddressType addr_type, const uint8_t target_id,
                                                const std::string &state_str, const DaliPublishState& state_data) {
         auto &device_controller = DaliDeviceController::Instance();
 
@@ -30,7 +30,7 @@ namespace daliMQTT {
             device_controller.updateDeviceState(long_addr, devState);
         };
 
-        if (addr_type == DALI_ADDRESS_TYPE_GROUP) {
+        if (addr_type == DaliAddressType::Group) {
             DaliPublishState groupState = state_data;
             if (state_str == "ON" && !groupState.level.has_value()) {
                 auto grp = DaliGroupManagement::Instance().getGroupState(target_id);
@@ -42,13 +42,13 @@ namespace daliMQTT {
         }
 
         switch (addr_type) {
-            case DALI_ADDRESS_TYPE_SHORT: {
+            case DaliAddressType::Short: {
                 if (const auto long_addr_opt = device_controller.getLongAddress(target_id)) {
                     update_device(*long_addr_opt);
                 }
                 break;
             }
-            case DALI_ADDRESS_TYPE_GROUP: {
+            case DaliAddressType::Group: {
                 const auto &group_manager = DaliGroupManagement::Instance();
                 auto all_assignments = group_manager.getAllAssignments();
                 for (const auto &[long_addr, groups]: all_assignments) {
@@ -58,7 +58,7 @@ namespace daliMQTT {
                 }
                 break;
             }
-            case DALI_ADDRESS_TYPE_BROADCAST: {
+            case DaliAddressType::Broadcast: {
                 auto devices = device_controller.getDevices();
                 for (const auto &[long_addr, device]: devices) {
                     const auto& id = getIdentity(device);
@@ -78,12 +78,12 @@ namespace daliMQTT {
         // topic format: light/{long_addr_hex}/set OR light/group/{id}/set
         if (parts.size() < 3 || parts[0] != "light" || parts.back() != "set") return;
 
-        dali_addressType_t addr_type = DALI_ADDRESS_TYPE_SHORT;
+        DaliAddressType addr_type = DaliAddressType::Short;
         uint8_t target_id = 0;
 
         if (parts[1] == "group") {
             if (parts.size() < 4) return;
-            addr_type = DALI_ADDRESS_TYPE_GROUP;
+            addr_type = DaliAddressType::Group;
             int parsed_id = -1;
             auto [ptr, ec] = std::from_chars(parts[2].data(), parts[2].data() + parts[2].size(), parsed_id);
             if (ec != std::errc() || parsed_id < 0 || parsed_id > 15) {
@@ -92,10 +92,10 @@ namespace daliMQTT {
             }
             target_id = static_cast<uint8_t>(parsed_id);
         } else if (parts[1] == "broadcast") {
-            addr_type = DALI_ADDRESS_TYPE_BROADCAST;
+            addr_type = DaliAddressType::Broadcast;
             target_id = 0;
         } else {
-            addr_type = DALI_ADDRESS_TYPE_SHORT;
+            addr_type = DaliAddressType::Short;
             const auto long_addr_opt = utils::stringToLongAddress(parts[1]);
             if (!long_addr_opt) return;
             const auto short_addr_opt = DaliDeviceController::Instance().getShortAddress(*long_addr_opt);
@@ -160,12 +160,12 @@ namespace daliMQTT {
             if (stateUpdateForMode.active_mode.has_value()) {
                 auto& controller = DaliDeviceController::Instance();
 
-                if (addr_type == DALI_ADDRESS_TYPE_SHORT) {
+                if (addr_type == DaliAddressType::Short) {
                     if (auto long_addr = controller.getLongAddress(target_id)) {
                         controller.updateDeviceState(*long_addr, stateUpdateForMode);
                     }
                 }
-                else if (addr_type == DALI_ADDRESS_TYPE_GROUP) {
+                else if (addr_type == DaliAddressType::Group) {
                     auto all_assignments = DaliGroupManagement::Instance().getAllAssignments();
                     for (const auto& [long_addr, groups] : all_assignments) {
                         if (groups.test(target_id)) {
@@ -173,7 +173,7 @@ namespace daliMQTT {
                         }
                     }
                 }
-                else if (addr_type == DALI_ADDRESS_TYPE_BROADCAST) {
+                else if (addr_type == DaliAddressType::Broadcast) {
                     auto devices = controller.getDevices();
                     for (const auto& [long_addr, dev] : devices) {
                         if (getIdentity(dev).available) {
@@ -199,7 +199,7 @@ namespace daliMQTT {
             } else {
                 // ON (Restore)
                 std::optional<uint8_t> restore_level;
-                if (addr_type == DALI_ADDRESS_TYPE_SHORT) {
+                if (addr_type == DaliAddressType::Short) {
                     auto &controller = DaliDeviceController::Instance();
                     if (auto long_addr = controller.getLongAddress(target_id)) {
                         auto saved = controller.getLastLevel(*long_addr);
@@ -332,7 +332,7 @@ namespace daliMQTT {
             const bool repeat = cJSON_IsTrue(repeat_item);
             bool check_reply = (tag_item != nullptr);
             std::optional<uint8_t> result;
-
+            //  TODO! REWRITE
             result = DaliAdapter::Instance().sendRaw(raw_data, bits, check_reply);
             if (repeat) {
                 if (auto res2 = DaliAdapter::Instance().sendRaw(raw_data, bits, check_reply); res2.has_value())

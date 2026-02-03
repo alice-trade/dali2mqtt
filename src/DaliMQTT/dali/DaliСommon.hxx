@@ -6,12 +6,12 @@
 namespace daliMQTT
 {
     // Dali address Type
-    typedef enum {
-        DALI_ADDRESS_TYPE_SHORT,
-        DALI_ADDRESS_TYPE_GROUP,
-        DALI_ADDRESS_TYPE_BROADCAST,
-        DALI_ADDRESS_TYPE_SPECIAL_CMD
-    } dali_addressType_t;
+    enum class DaliAddressType : uint8_t {
+        Short,
+        Group,
+        Broadcast,
+        Special
+    };
 
     // Dali frame structure
     struct dali_frame_t {
