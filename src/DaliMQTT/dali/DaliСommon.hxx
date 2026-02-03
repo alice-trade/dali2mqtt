@@ -1,5 +1,5 @@
-#ifndef DALIMQTT_DALITYPES_HXX
-#define DALIMQTT_DALITYPES_HXX
+#ifndef DALIMQTT_DALICOMMON_HXX
+#define DALIMQTT_DALICOMMON_HXX
 #include "dali/DaliControlGear.hxx"
 #include "dali/DaliInputDevice.hxx"
 
@@ -45,7 +45,7 @@ namespace daliMQTT
     }
 
     struct DaliGroup {
-        uint8_t id{};                    // Group ID
+        uint8_t id{};                  // Group ID
         uint8_t current_level{0};      // Current Level
         uint8_t last_level{254};       // Last level
         std::optional<uint16_t> color_temp;
@@ -56,11 +56,6 @@ namespace daliMQTT
         uint8_t short_address;
         int64_t execute_at_ts; // Timestamp (ms)
     };
-
-    struct ColorPollResult {
-        std::optional<uint16_t> tc;
-        std::optional<DaliRGB> rgb;
-    };
 } // daliMQTT
 
-#endif //DALIMQTT_DALITYPES_HXX
+#endif //DALIMQTT_DALICOMMON_HXX

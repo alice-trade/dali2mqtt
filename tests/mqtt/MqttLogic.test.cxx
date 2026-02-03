@@ -10,7 +10,7 @@ static void test_mqtt_client_init_state() {
 
     TEST_ASSERT_EQUAL(MqttStatus::DISCONNECTED, client.getStatus());
 
-    client.init("mqtt://127.0.0.1", "test_id", "/status", "", "");
+    client.init("mqtt://127.0.0.1", "test_id", "/status", "", "", "");
 
     TEST_ASSERT_EQUAL(MqttStatus::DISCONNECTED, client.getStatus());
 }

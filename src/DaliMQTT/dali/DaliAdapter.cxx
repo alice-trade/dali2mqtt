@@ -2,7 +2,7 @@
 
 namespace daliMQTT
 {
-    static constexpr char TAG[] = "DaliAPI";
+    static constexpr char TAG[] = "DaliAdapter";
     constexpr int DALI_EVENT_QUEUE_SIZE = 32;
     constexpr uint32_t DALI_TIMER_RESOLUTION_HZ = 24000000; // 24MHz
     constexpr uint32_t DALI_TIMER_ALARM_PERIOD_US = 2500; // 24'000'000 / 9600 = 2500

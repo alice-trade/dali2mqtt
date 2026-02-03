@@ -594,7 +594,7 @@ namespace daliMQTT
         }
     }
 
-    ColorPollResult DaliDeviceController::pollColorDataCyclic(const uint8_t shortAddr, const DaliLongAddress_t longAddr, const uint8_t current_level) {
+    DaliDeviceController::ColorPollResult DaliDeviceController::pollColorDataCyclic(const uint8_t shortAddr, const DaliLongAddress_t longAddr, const uint8_t current_level) {
         ColorPollResult result;
         if (current_level == 0) return result;
 
