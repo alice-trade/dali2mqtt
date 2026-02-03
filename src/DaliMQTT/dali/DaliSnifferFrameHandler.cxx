@@ -131,7 +131,7 @@ namespace daliMQTT {
                     for (const auto& [addr, lvl] : optimistic_updates) {
                         ESP_LOGD(TAG, "Sniffer: Optimistic ON_AND_STEP_UP for %s to level %d",
                                  utils::longAddressToString(addr).data(), lvl);
-                        updateDeviceState(addr, {.level = *known_level});
+                        updateDeviceState(addr, {.level = lvl});
                     }
 
                     if (any_requires_query) {
