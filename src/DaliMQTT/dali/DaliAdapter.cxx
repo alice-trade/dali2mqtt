@@ -47,18 +47,62 @@ namespace daliMQTT {
         return ESP_OK;
     }
     esp_err_t DaliAdapter::sendRaw(const uint32_t data, const uint8_t bits) {
-        std::lock_guard<std::mutex> lock(m_transaction_mutex);
-        return m_driver.sendAsync(data, bits);
+        m_tx_caller_task = xTaskGetCurrentTaskHandle();
+        m_waiting_for_tx_result = true;
+
+        std::lock_guard<std::recursive_mutex> lock(m_transaction_mutex);
+        int retries = 0;
+        constexpr int MAX_RETRIES = 3;
+        constexpr int PRIORITY = 2;
+
+        while (retries <= MAX_RETRIES) {
+            const esp_err_t res = m_driver.sendAsync(data, bits);
+            if (res != ESP_OK) return res;
+            m_last_tx_status = Driver::DaliEventType::FrameReceived;
+            m_waiting_for_tx_result = true;
+            uint32_t wait_ticks = pdMS_TO_TICKS(50);
+            uint32_t ulNotificationValue;
+
+            if (xTaskNotifyWait(0, 0xFFFFFFFF, &ulNotificationValue, wait_ticks) == pdTRUE) {
+                if (m_last_tx_status == Driver::DaliEventType::TxCompleted) {
+                    m_waiting_for_tx_result = false;
+                    return ESP_OK;
+                } else if (m_last_tx_status == Driver::DaliEventType::CollisionDetected) {
+                    ESP_LOGD(TAG, "Collision detected! Retry %d/%d", retries + 1, MAX_RETRIES);
+                    m_driver.sendSystemFailureSignal();
+
+                    // Back-off (IEC 62386-101)
+                    // T_backoff = T_settle + (Priority * T_slot) + Random
+                    uint32_t backoff_ms = (PRIORITY * 2) + (esp_random() % 4);
+                    vTaskDelay(pdMS_TO_TICKS(backoff_ms));
+
+                    retries++;
+                } else {
+                    m_waiting_for_tx_result = false;
+                    m_tx_caller_task = nullptr;
+                    return ESP_FAIL;
+                }
+            } else {
+                m_waiting_for_tx_result = false;
+                m_tx_caller_task = nullptr;
+                ESP_LOGE(TAG, "TX Timeout waiting for confirm");
+                return ESP_ERR_TIMEOUT;
+            }
+        }
+
+        m_waiting_for_tx_result = false;
+        m_tx_caller_task = nullptr;
+        return ESP_FAIL; // Too many retries
     }
 
     std::optional<uint8_t> DaliAdapter::sendRawQuery(const uint32_t data, const uint8_t bits) {
-        std::lock_guard<std::mutex> lock(m_transaction_mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_transaction_mutex);
 
         xQueueReset(m_response_queue);
         m_expecting_response = true;
         m_driver.flushRxQueue();
 
-        const esp_err_t sent_res = m_driver.sendAsync(data, bits);
+        const esp_err_t sent_res = sendRaw(data, bits);
         if (sent_res != ESP_OK) {
             m_expecting_response = false;
             return std::nullopt;
@@ -73,30 +117,52 @@ namespace daliMQTT {
         m_expecting_response = false;
         return std::nullopt;
     }
-
-    esp_err_t DaliAdapter::sendCommand(const DaliAddressType addr_type, const uint8_t addr, const uint8_t command, const bool send_twice) {
-        if (addr_type == DaliAddressType::Special) {
-            auto [data, bits] = Factory::Special(static_cast<SpecialOpCode>(command), addr);
-            sendRaw(data, 16);
-            if (send_twice) {
-                vTaskDelay(pdMS_TO_TICKS(10));
-                sendRaw(data, 16);
-            }
-            return ESP_OK;
-        }
-
+ esp_err_t DaliAdapter::sendCommand(const DaliAddressType addr_type, const uint8_t addr, const OpCode command, const bool send_twice) {
         Frame frame;
 
-        if (addr_type == DaliAddressType::Broadcast) frame = Factory::CommandBroadcast(static_cast<OpCode>(command));
-        else if (addr_type == DaliAddressType::Group) frame = Factory::CommandGroup(addr, static_cast<OpCode>(command));
-        else frame = Factory::Command(addr, static_cast<OpCode>(command));
+        if (addr_type == DaliAddressType::Broadcast) frame = Factory::CommandBroadcast(command);
+        else if (addr_type == DaliAddressType::Group) frame = Factory::CommandGroup(addr, command);
+        else frame = Factory::Command(addr, command);
 
-        sendRaw(frame.data, 16);
+        esp_err_t res = sendRaw(frame.data, 16);
         if (send_twice) {
             vTaskDelay(pdMS_TO_TICKS(10));
-            sendRaw(frame.data, 16);
+            res = sendRaw(frame.data, 16);
         }
-        return ESP_OK;
+        return res;
+    }
+
+    esp_err_t DaliAdapter::sendCommand(const SpecialOpCode command, const uint8_t data, const bool send_twice) {
+        auto [payload, bits] = Factory::Special(command, data);
+        esp_err_t res = sendRaw(payload, 16);
+        if (send_twice) {
+            vTaskDelay(pdMS_TO_TICKS(10));
+            res = sendRaw(payload, 16);
+        }
+        return res;
+    }
+
+    esp_err_t inline DaliAdapter::sendCommand(const DaliAddressType addr_type, const uint8_t addr, const DT8OpCode command, const bool send_twice) {
+        return sendCommand(addr_type, addr, static_cast<OpCode>(command), send_twice);
+    }
+
+    std::optional<uint8_t> DaliAdapter::sendQuery(const DaliAddressType addr_type, const uint8_t addr, const OpCode command) {
+        Frame frame;
+
+        if (addr_type == DaliAddressType::Broadcast) frame = Factory::CommandBroadcast(command);
+        else if (addr_type == DaliAddressType::Group) frame = Factory::CommandGroup(addr, command);
+        else frame = Factory::Command(addr, command);
+
+        return sendRawQuery(frame.data, 16);
+    }
+
+    std::optional<uint8_t> inline DaliAdapter::sendQuery(const DaliAddressType addr_type, const uint8_t addr, const DT8OpCode command) {
+        return sendQuery(addr_type, addr, static_cast<OpCode>(command));
+    }
+
+    std::optional<uint8_t> DaliAdapter::sendQuery( const SpecialOpCode command, const uint8_t data) {
+        auto [payload, bits] = Factory::Special(command, data);
+        return sendRawQuery(payload, 16);
     }
 
     esp_err_t DaliAdapter::sendDACP(const DaliAddressType addr_type, const uint8_t addr, const uint8_t level) {
@@ -108,22 +174,6 @@ namespace daliMQTT {
 
         return sendRaw(frame.data, 16);
     }
-
-    std::optional<uint8_t> DaliAdapter::sendQuery(const DaliAddressType addr_type, const uint8_t addr, const uint8_t command) {
-        if (addr_type == DaliAddressType::Special) {
-            auto [data, bits] = Factory::Special(static_cast<SpecialOpCode>(command), addr);
-            return sendRawQuery(data, 16);
-        }
-
-        Frame frame;
-
-        if (addr_type == DaliAddressType::Broadcast) frame = Factory::CommandBroadcast(static_cast<OpCode>(command));
-        else if (addr_type == DaliAddressType::Group) frame = Factory::CommandGroup(addr, static_cast<OpCode>(command));
-        else frame = Factory::Command(addr, static_cast<OpCode>(command));
-
-        return sendRawQuery(frame.data, 16);
-    }
-
 
     std::optional<uint8_t> DaliAdapter::sendInputDeviceCommand(const uint8_t shortAddress, const uint8_t opcode, const std::optional<uint8_t> param) {
         // DALI-2 24-bit frame: AAAAAA1 (Short Addr) + INST + OPCODE
@@ -141,8 +191,18 @@ namespace daliMQTT {
 
         while (true) {
             if (xQueueReceive(queue, &msg, portMAX_DELAY) == pdTRUE) {
+                if (self->m_waiting_for_tx_result) {
+                    if (msg.type == Driver::DaliEventType::TxCompleted ||
+                        msg.type == Driver::DaliEventType::CollisionDetected ||
+                        msg.type == Driver::DaliEventType::BusFailure) {
+                            self->m_last_tx_status = msg.type;
+                            if (self->m_tx_caller_task) {
+                                xTaskNotify(self->m_tx_caller_task, 1, eSetBits);
+                            }
+                        }
+                }
                 if (msg.type == Driver::DaliEventType::FrameReceived && msg.is_backward && self->m_expecting_response) {
-                    uint8_t data = static_cast<uint8_t>(msg.data & 0xFF);
+                    auto data = static_cast<uint8_t>(msg.data & 0xFF);
                     xQueueSend(self->m_response_queue, &data, 0);
                 }
 
@@ -305,27 +365,27 @@ namespace daliMQTT {
     }
 
     std::optional<DaliLongAddress_t> DaliAdapter::getLongAddress(const uint8_t shortAddress) {
-        const auto h = sendQuery(DaliAddressType::Short, shortAddress, static_cast<uint8_t>(OpCode::QueryRandomAddrH));
+        const auto h = sendQuery(DaliAddressType::Short, shortAddress, OpCode::QueryRandomAddrH);
         if (!h) return std::nullopt;
-        const auto m = sendQuery(DaliAddressType::Short, shortAddress, static_cast<uint8_t>(OpCode::QueryRandomAddrM));
+        const auto m = sendQuery(DaliAddressType::Short, shortAddress, OpCode::QueryRandomAddrM);
         if (!m) return std::nullopt;
-        const auto l = sendQuery(DaliAddressType::Short, shortAddress, static_cast<uint8_t>(OpCode::QueryRandomAddrL));
+        const auto l = sendQuery(DaliAddressType::Short, shortAddress, OpCode::QueryRandomAddrL);
         if (!l) return std::nullopt;
 
         return (static_cast<uint32_t>(*h) << 16) | (static_cast<uint32_t>(*m) << 8) | (*l);
     }
 
     std::optional<uint8_t> DaliAdapter::getDeviceStatus(const uint8_t shortAddress) {
-        return sendQuery(DaliAddressType::Short, shortAddress, static_cast<uint8_t>(OpCode::QueryStatus));
+        return sendQuery(DaliAddressType::Short, shortAddress, OpCode::QueryStatus);
     }
 
     std::optional<uint8_t> DaliAdapter::getDeviceType(const uint8_t shortAddress) {
-        return sendQuery(DaliAddressType::Short, shortAddress, static_cast<uint8_t>(OpCode::QueryDeviceType));
+        return sendQuery(DaliAddressType::Short, shortAddress, OpCode::QueryDeviceType);
     }
 
     std::optional<std::bitset<16>> DaliAdapter::getDeviceGroups(const uint8_t shortAddress) {
-        const auto g0_7 = sendQuery(DaliAddressType::Short, shortAddress, static_cast<uint8_t>(OpCode::QueryGroups0_7));
-        const auto g8_15 = sendQuery(DaliAddressType::Short, shortAddress, static_cast<uint8_t>(OpCode::QueryGroups8_15));
+        const auto g0_7 = sendQuery(DaliAddressType::Short, shortAddress, OpCode::QueryGroups0_7);
+        const auto g8_15 = sendQuery(DaliAddressType::Short, shortAddress, OpCode::QueryGroups8_15);
 
         if (g0_7 && g8_15) {
             uint16_t mask = (*g8_15 << 8) | *g0_7;
@@ -352,26 +412,26 @@ namespace daliMQTT {
     std::optional<uint8_t> DaliAdapter::readMemoryLocation(const uint8_t shortAddress, const uint8_t bank, const uint8_t offset) {
         setDtr1(bank);
         setDtr0(offset);
-        return sendQuery(DaliAddressType::Short, shortAddress, static_cast<uint8_t>(OpCode::ReadMemoryLocation));
+        return sendQuery(DaliAddressType::Short, shortAddress, OpCode::ReadMemoryLocation);
     }
 
     esp_err_t DaliAdapter::assignToGroup(const uint8_t shortAddress, const uint8_t group) {
-        return sendCommand(DaliAddressType::Short, shortAddress, 0x60 + group, true);
+        return sendCommand(DaliAddressType::Short, shortAddress, static_cast<OpCode>(0x60 + group), true);
     }
 
     esp_err_t DaliAdapter::removeFromGroup(const uint8_t shortAddress, const uint8_t group) {
-        return sendCommand(DaliAddressType::Short, shortAddress, 0x70 + group, true);
+        return sendCommand(DaliAddressType::Short, shortAddress, static_cast<OpCode>(0x70 + group), true);
     }
 
     std::optional<uint8_t> DaliAdapter::getDT8Features(const uint8_t shortAddress) {
-        sendSpecialCmdDT8(shortAddress, static_cast<uint8_t>(SpecialOpCode::EnableDeviceTypeX));
-        return sendQuery(DaliAddressType::Short, shortAddress, static_cast<uint8_t>(DT8OpCode::QueryColourType));
+        sendRaw(Factory::Special(SpecialOpCode::EnableDeviceTypeX, 8).data, 16);
+        return sendQuery(DaliAddressType::Short, shortAddress, DT8OpCode::QueryColourType);
     }
 
     std::optional<uint8_t> DaliAdapter::queryDT8Value(const uint8_t shortAddress, const uint8_t dtr0_selector) {
         setDtr0(dtr0_selector);
-        sendSpecialCmdDT8(shortAddress, static_cast<uint8_t>(SpecialOpCode::EnableDeviceTypeX));
-        return sendQuery(DaliAddressType::Short, shortAddress, static_cast<uint8_t>(DT8OpCode::QueryColourValue));
+        sendRaw(Factory::Special(SpecialOpCode::EnableDeviceTypeX, 8).data, 16);
+        return sendQuery(DaliAddressType::Short, shortAddress, DT8OpCode::QueryColourValue);
     }
 
     std::optional<uint16_t> DaliAdapter::getDT8ColorTemp(const uint8_t shortAddress) {
@@ -390,7 +450,7 @@ namespace daliMQTT {
         return std::nullopt;
     }
 
-    esp_err_t DaliAdapter::sendSpecialCmdDT8(const uint8_t shortAddr, const uint8_t cmd) {
+    esp_err_t DaliAdapter::sendDT8Cmd(const uint8_t shortAddr, const DT8OpCode cmd) {
         // Frame: 0xC1 <Type> (Special command).
         sendRaw(Factory::Special(SpecialOpCode::EnableDeviceTypeX, 8).data, 16);
         return sendCommand(DaliAddressType::Short, shortAddr, cmd, false);
@@ -406,23 +466,22 @@ namespace daliMQTT {
         sendRaw(Factory::Special(SpecialOpCode::EnableDeviceTypeX, 8).data, 16);
 
         // Send SET COLOUR TEMPERATURE TC (0xE7)
-        sendCommand(addr_type, addr, static_cast<uint8_t>(DT8OpCode::SetTempTc), false);
+        sendCommand(addr_type, addr, DT8OpCode::SetTempTc, false);
 
         // Activate
         sendRaw(Factory::Special(SpecialOpCode::EnableDeviceTypeX, 8).data, 16);
-        sendCommand(addr_type, addr, static_cast<uint8_t>(DT8OpCode::Activate), false);
+        sendCommand(addr_type, addr, DT8OpCode::Activate, false);
 
         return ESP_OK;
     }
 
     esp_err_t DaliAdapter::setDT8RGB(const DaliAddressType addr_type, const uint8_t addr, const uint8_t r, const uint8_t g, const uint8_t b) {
         // Sequence: DTR1=Mask, DTR0=Val -> Set Temporary RGB Dimlevel (0xEB)
-
         auto sendColorComp = [&](const uint8_t mask, const uint8_t val) {
             setDtr1(mask);
             setDtr0(val);
             sendRaw(Factory::Special(SpecialOpCode::EnableDeviceTypeX, 8).data, 16);
-            sendCommand(addr_type, addr, static_cast<uint8_t>(DT8OpCode::SetTempRGB), false);
+            sendCommand(addr_type, addr, DT8OpCode::SetTempRGB, false);
         };
 
         sendColorComp(1, r);
@@ -431,7 +490,7 @@ namespace daliMQTT {
 
         // Activate
         sendRaw(Factory::Special(SpecialOpCode::EnableDeviceTypeX, 8).data, 16);
-        sendCommand(addr_type, addr, static_cast<uint8_t>(DT8OpCode::Activate), false);
+        sendCommand(addr_type, addr, DT8OpCode::Activate, false);
 
         return ESP_OK;
     }

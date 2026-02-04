@@ -13,7 +13,8 @@ namespace daliMQTT::Driver {
         FrameReceived,      // Frame successfully received and decoded
         FrameError,         // Decoding or timing error detected
         TxCompleted,        // Transmission successful
-        CollisionDetected   // Collision found
+        CollisionDetected,  // Collision found
+        BusFailure          // System Failure
     };
 
     /**
@@ -58,13 +59,19 @@ namespace daliMQTT::Driver {
              * @param bits Bit length
              * @return ESP_OK if queued, ESP_FAIL if the queue is full.
              */
-            esp_err_t sendAsync(uint32_t data, uint8_t bits) const;
+            [[nodiscard]] esp_err_t sendAsync(uint32_t data, uint8_t bits) const;
 
             /**
              * @brief Returns the handle to the event queue.
              * The DaliAdapter should monitor this queue for incoming frames and errors.
              */
             [[nodiscard]] QueueHandle_t getEventQueue() const { return m_event_queue; }
+
+            /**
+             * @brief Generates a "Corrupted Frame" / "System Failure" signal (Low for 1.5ms)
+             * Used after collision detection.
+             */
+            esp_err_t sendSystemFailureSignal();
 
             /**
              * @brief Clears the RX event queue.
@@ -82,14 +89,18 @@ namespace daliMQTT::Driver {
                 static constexpr uint32_t T_TE_MAX = 525;
                 static constexpr uint32_t T_2TE_MIN = 700;
                 static constexpr uint32_t T_2TE_MAX = 960;
+                static constexpr uint32_t T_SYSTEM_FAILURE_MIN = 1300;
 
                 static constexpr uint8_t RMT_LEVEL_IDLE = 0;
                 static constexpr uint8_t RMT_LEVEL_ACTIVE = 1;
 
+                static constexpr uint32_t RX_MIN_NOISE_FILTER_NS = 30000;
                 static constexpr uint32_t RX_IDLE_THRESH_NS = 1800000;
                 static constexpr uint32_t TX_WATCHDOG_TIMEOUT_US = 50'000;
-            };
 
+                static constexpr int64_t DELAY_FORWARD_TO_FORWARD = 9200;
+                static constexpr int64_t DELAY_BACKWARD_TO_FORWARD = 11500;
+            };
 
             bool m_initialized{false};
             DaliDriverConfig m_config{};
@@ -111,9 +122,10 @@ namespace daliMQTT::Driver {
             } m_tx_state;
 
             std::mutex m_state_mutex;
-
+            int64_t m_last_bus_activity_us{0};
             static constexpr size_t RX_BUFFER_SIZE = 128;
             rmt_symbol_word_t* m_rx_buffer{nullptr};
+            rmt_symbol_word_t m_tx_static_buffer[64]{};
 
             static bool rmt_rx_done_callback(rmt_channel_handle_t rx_chan, const rmt_rx_done_event_data_t *edata, void *user_ctx);
             static bool rmt_tx_done_callback(rmt_channel_handle_t tx_chan, const rmt_tx_done_event_data_t *edata, void *user_ctx);
@@ -122,7 +134,7 @@ namespace daliMQTT::Driver {
              * @brief ISR callback triggered when RMT RX completes reception.
              * Decodes RMT symbols into DALI bits and pushes results to m_event_queue.
              */
-            void processRxSymbols(const rmt_symbol_word_t* symbols, size_t count);
+            size_t processRxSymbols(const rmt_symbol_word_t* symbols, size_t count);
 
             /**
              * @brief Configure RMT TX channel and Manchester encoder parameters.
@@ -137,7 +149,6 @@ namespace daliMQTT::Driver {
             static void driverTaskWrapper(void* arg);
             [[noreturn]] void driverTaskLoop();
             static rmt_symbol_word_t make_symbol(uint32_t duration, uint8_t level);
-            rmt_symbol_word_t m_tx_static_buffer[64]{};
 
             /**
              * @brief Helper to encode DALI frame to RMT symbols

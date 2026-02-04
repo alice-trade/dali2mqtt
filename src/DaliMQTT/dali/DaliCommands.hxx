@@ -82,6 +82,35 @@ namespace daliMQTT::Commands {
         ReadMemoryLocation      = 0xC5
     };
 
+    // IEC 62386-207 (LED Modules) Failure Status Bits
+    enum class LedFailureStatus : uint8_t {
+        ShortCircuit     = 0x01, // Bit 0
+        OpenCircuit      = 0x02, // Bit 1
+        LoadDecrease     = 0x04, // Bit 2
+        LoadIncrease     = 0x08, // Bit 3
+        CurrentProtector = 0x10, // Bit 4
+        ThermalShutDown  = 0x20, // Bit 5
+        ThermalOverload  = 0x40, // Bit 6
+        ReferenceError   = 0x80  // Bit 7
+    };
+
+    // Memory Bank 205 (Colour Control Status) Offsets
+    namespace MemBank205 {
+        constexpr uint8_t LockByte         = 0x02;
+        constexpr uint8_t ColourStatus     = 0x08;
+        constexpr uint8_t ColourType       = 0x09;
+        constexpr uint8_t ColourValueTcH = 0x0A;
+        constexpr uint8_t ColourValueTcL = 0x0B;
+        constexpr uint8_t ColourValueXH  = 0x0C;
+        constexpr uint8_t ColourValueXL  = 0x0D;
+        constexpr uint8_t ColourValueYH  = 0x0E;
+        constexpr uint8_t ColourValueYL  = 0x0F;
+        constexpr uint8_t RgbR             = 0x10;
+        constexpr uint8_t RgbG             = 0x11;
+        constexpr uint8_t RgbB             = 0x12;
+        constexpr uint8_t RgbW             = 0x13;
+    }
+
     // Special Commands (IEC 62386-102)
     enum class SpecialOpCode : uint8_t {
         Terminate             = 0xA1,
@@ -113,6 +142,14 @@ namespace daliMQTT::Commands {
         QueryColourStatus     = 0xF7,
         QueryColourType       = 0xF8,
         QueryColourValue      = 0xF9
+    };
+
+    // Input Devices (IEC 62386-103)
+    enum class InputDeviceOp : uint8_t {
+        QueryStatus = 0x00,
+        WriteDtr0   = 0x30,
+        WriteDtr1   = 0x31,
+        ReadMemory  = 0xC5
     };
 
     // Helper to construct 16-bit frame

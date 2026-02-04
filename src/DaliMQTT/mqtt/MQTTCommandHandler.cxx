@@ -190,7 +190,7 @@ namespace daliMQTT {
         if (target_on_state.has_value() && !(*target_on_state)) {
             // OFF
             ESP_LOGD(TAG, "MQTT Command: OFF for target %u (type %d)", target_id, addr_type);
-            dali.sendCommand(addr_type, target_id, DALI_COMMAND_OFF);
+            dali.sendCommand(addr_type, target_id, Commands::OpCode::Off);
             publishLightState(addr_type, target_id, "OFF", targetState);
         } else if (target_on_state.has_value() && *target_on_state) {
              if (targetState.level.has_value() && *targetState.level > 0) {
@@ -221,7 +221,7 @@ namespace daliMQTT {
                     targetState.level = 254;
                     ESP_LOGD(TAG, "MQTT Command: ON (Default) -> RECALL_MAX_LEVEL for target %u (type %d)", target_id,
                              addr_type);
-                    dali.sendCommand(addr_type, target_id, DALI_COMMAND_RECALL_MAX_LEVEL);
+                    dali.sendCommand(addr_type, target_id, Commands::OpCode::RecallMaxLevel);
                     publishLightState(addr_type, target_id, "ON", targetState);
                 }
             }
@@ -235,7 +235,7 @@ namespace daliMQTT {
             } else {
                 targetState.level = 0;
                 ESP_LOGD(TAG, "MQTT Command: Set brightness to 0 (OFF) for target %u (type %d)", target_id, addr_type);
-                dali.sendCommand(addr_type, target_id, DALI_COMMAND_OFF);
+                dali.sendCommand(addr_type, target_id, Commands::OpCode::Off);
                 publishLightState(addr_type, target_id, "OFF", targetState);
             }
         } else if (targetState.color_temp.has_value() || targetState.rgb.has_value()) {
@@ -325,54 +325,30 @@ namespace daliMQTT {
                 }
             }
 
-            uint32_t raw_data = 0;
-            if (bits == 24) {
-                raw_data = ((addr_val & 0xFFFF) << 8) | (cmd_val & 0xFF);
-            } else {
-                raw_data = ((addr_val & 0xFF) << 8) | (cmd_val & 0xFF);
-            }
+            const uint32_t raw_data = (bits == 24) ? ((addr_val << 8) | cmd_val) : ((addr_val << 8) | cmd_val);
+            auto& dali = DaliAdapter::Instance();
 
-            const bool repeat = cJSON_IsTrue(repeat_item);
-            bool check_reply = (tag_item != nullptr);
-            std::optional<uint8_t> result;
-            //  TODO! REWRITE
-            result = DaliAdapter::Instance().sendRaw(raw_data, bits, check_reply);
-            if (repeat) {
-                if (auto res2 = DaliAdapter::Instance().sendRaw(raw_data, bits, check_reply); res2.has_value())
-                    result = res2;
-            }
 
-            if (check_reply) {
+            if (tag_item != nullptr) {
+                const auto result = dali.sendRawQuery(raw_data, bits);
                 auto const &mqtt = MQTTClient::Instance();
-                auto config_base = ConfigManager::Instance().getMqttBaseTopic();
-                std::string reply_topic = utils::stringFormat("%s/cmd/res", config_base.c_str());
 
-                cJSON* response_root = cJSON_CreateObject();
-                cJSON_AddItemToObject(response_root, "tag", cJSON_Duplicate(tag_item, 1));
-                cJSON_AddNumberToObject(response_root, "addr", addr_val);
-                cJSON_AddNumberToObject(response_root, "cmd", cmd_val);
-
-                if (result.has_value()) {
-                    cJSON_AddStringToObject(response_root, "status", "ok");
-                    cJSON_AddNumberToObject(response_root, "response", *result);
-
-                    char hex_buf[10];
-                    if (bits == 24) snprintf(hex_buf, sizeof(hex_buf), "%06lX", raw_data);
-                    else snprintf(hex_buf, sizeof(hex_buf), "%04lX", raw_data);
-                    cJSON_AddStringToObject(response_root, "hex", hex_buf);
-
-                    ESP_LOGD(TAG, "Command reply: 0x%02X", *result);
+                cJSON* resp = cJSON_CreateObject();
+                cJSON_AddItemToObject(resp, "tag", cJSON_Duplicate(tag_item, 1));
+                if (result) {
+                    cJSON_AddStringToObject(resp, "status", "ok");
+                    cJSON_AddNumberToObject(resp, "response", *result);
                 } else {
-                    cJSON_AddStringToObject(response_root, "status", "no_reply");
-                    ESP_LOGD(TAG, "Command: No reply (timed out)");
+                    cJSON_AddStringToObject(resp, "status", "no_reply");
                 }
-
-                char* payload = cJSON_PrintUnformatted(response_root);
-                if (payload) {
-                    mqtt.publish(reply_topic, payload, 0, false);
-                    free(payload);
+                mqtt.publish(ConfigManager::Instance().getMqttBaseTopic() + "/cmd/res", cJSON_PrintUnformatted(resp));
+                cJSON_Delete(resp);
+            } else {
+                dali.sendRaw(raw_data, bits);
+                if (cJSON_IsTrue(repeat_item)) {
+                    vTaskDelay(pdMS_TO_TICKS(10));
+                    dali.sendRaw(raw_data, bits);
                 }
-                cJSON_Delete(response_root);
             }
         }
         cJSON_Delete(root);

@@ -36,9 +36,21 @@ namespace daliMQTT
         esp_err_t sendRaw(uint32_t data, uint8_t bits = 16);
 
         /**
-         * @brief Send a command. If send_twice is true, it repeats the frame after 10ms.
+         * @brief Send a standard 16-bit command (IEC 62386-102).
          */
-        esp_err_t sendCommand(DaliAddressType addr_type, uint8_t addr, uint8_t command, bool send_twice = false);
+        esp_err_t sendCommand(DaliAddressType addr_type, uint8_t addr, Commands::OpCode command, bool send_twice = false);
+
+        /**
+         * @brief Send a special command (IEC 62386-102).
+         * Special commands (like INITIALISE) often require specific handling.
+         */
+        esp_err_t sendCommand(Commands::SpecialOpCode command, uint8_t data, bool send_twice = false);
+
+        /**
+         * @brief Send a DT8 command (IEC 62386-209).
+         * Note: Usually requires sequence (Enable -> Cmd -> Activate), handled by helpers setDT8.
+         */
+        esp_err_t inline sendCommand(DaliAddressType addr_type, uint8_t addr, Commands::DT8OpCode command, bool send_twice = false);
 
         /**
          * @brief Send DACP (Direct Arc Power Control) level.
@@ -46,10 +58,22 @@ namespace daliMQTT
         esp_err_t sendDACP(DaliAddressType addr_type, uint8_t addr, uint8_t level);
 
         /**
-         * @brief Send a query and wait for an 8-bit backward frame response.
+         * @brief Send a standard query (IEC 62386-102) and wait for an 8-bit backward frame response.
          * @return uint8_t response or std::nullopt on timeout/collision.
          */
-        [[nodiscard]] std::optional<uint8_t> sendQuery(DaliAddressType addr_type, uint8_t addr, uint8_t command);
+        [[nodiscard]] std::optional<uint8_t> sendQuery(DaliAddressType addr_type, uint8_t addr, Commands::OpCode command);
+
+        /**
+         * @brief Send a query of SPECIAL command and wait for an 8-bit backward frame response.
+         * @return uint8_t response or std::nullopt on timeout/collision.
+         */
+        std::optional<uint8_t> sendQuery(Commands::SpecialOpCode command, uint8_t data);
+
+        /**
+         * @brief Send a DT8 query (IEC 62386-209) and wait for an 8-bit backward frame response.
+         *  @return uint8_t response or std::nullopt on timeout/collision.
+         */
+        [[nodiscard]] inline std::optional<uint8_t> sendQuery(DaliAddressType addr_type, uint8_t addr, Commands::DT8OpCode command);
 
         /**
          * @brief Send query raw.
@@ -134,7 +158,7 @@ namespace daliMQTT
         uint32_t findAddressBinarySearch(bool input_devices);
         void setDtr0(uint8_t val);
         void setDtr1(uint8_t val);
-        esp_err_t sendSpecialCmdDT8(uint8_t shortAddr, uint8_t cmd);
+        esp_err_t sendDT8Cmd(uint8_t shortAddr, Commands::DT8OpCode cmd);
         std::optional<uint8_t> queryDT8Value(uint8_t shortAddress, uint8_t dtr0_selector);
 
         Driver::DaliDriver m_driver{}; // Driver Instance
@@ -143,11 +167,15 @@ namespace daliMQTT
 
         QueueHandle_t m_response_queue{nullptr}; // Queue to pass BackwardFrame to waiting thread
         std::atomic<bool> m_expecting_response{false};
-        std::mutex m_transaction_mutex{};
+        std::recursive_mutex m_transaction_mutex{};
 
         TaskHandle_t m_worker_task_handle{nullptr};
         std::atomic<bool> m_initialized{false};
         std::atomic<bool> m_sniffer_enabled{false};
+
+        TaskHandle_t m_tx_caller_task{nullptr};
+        std::atomic<bool> m_waiting_for_tx_result{false};
+        std::atomic<Driver::DaliEventType> m_last_tx_status;
     };
 } // daliMQTT
 

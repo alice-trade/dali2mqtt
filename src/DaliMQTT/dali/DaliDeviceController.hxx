@@ -53,7 +53,10 @@ namespace daliMQTT
         /**
          * @brief Updates the state of a device in the cache and publishes to MQTT.
          */
-        void updateDeviceState(DaliLongAddress_t longAddr, const DaliPublishState& state);
+         void updateDeviceState(const DaliLongAddress_t longAddr, const DaliPublishState& state) {
+            std::lock_guard<std::mutex> lock(m_devices_mutex);
+            procUpdateDeviceState(longAddr, state);
+        }
 
         /**
          * @brief Publishes device attributes (extended info) to MQTT.
@@ -93,6 +96,7 @@ namespace daliMQTT
         ColorPollResult pollColorDataCyclic(uint8_t shortAddr, DaliLongAddress_t longAddr, uint8_t current_level);
         void performInitialGroupSync(DaliLongAddress_t longAddr, uint8_t level, const ColorPollResult& colorData);
         void initialStaticDataFetch(uint8_t shortAddr, DaliLongAddress_t longAddr);
+        void procUpdateDeviceState(DaliLongAddress_t longAddr, const DaliPublishState& state);
 
         [[noreturn]] static void daliEventHandlerTask(void* pvParameters);
         [[noreturn]] static void daliSyncTask(void* pvParameters);

@@ -10,211 +10,107 @@ namespace daliMQTT {
     static constexpr char TAG[] = "DaliSnifferFrameHandler";
     void DaliDeviceController::SnifferProcessFrame(const dali_frame_t& frame) {
         if (frame.is_backward_frame) {
-            ESP_LOGD(TAG, "Process sniffed backward frame 0x%02X", frame.data & 0xFF);
+            ESP_LOGV(TAG, "Sniffed backward frame 0x%02X", (uint8_t)(frame.data & 0xFF));
             return;
         }
-        ESP_LOGD(TAG, "Sniffed forward frame 0x%04X", frame.data);
+        const uint8_t addr_byte = (frame.data >> 8) & 0xFF;
+        const uint8_t data_byte = frame.data & 0xFF;
+        const bool is_command = (addr_byte & 0x01);
+        const auto cmd = static_cast<Commands::OpCode>(data_byte);
+        using enum daliMQTT::Commands::OpCode;
 
-        uint8_t addr_byte = (frame.data >> 8) & 0xFF;
-        uint8_t cmd_byte = frame.data & 0xFF;
-
-        std::vector<DaliLongAddress_t> affected_devices;
+        bool is_broadcast = (addr_byte == 0xFE || addr_byte == 0xFF);
         std::optional<uint8_t> target_group_id = std::nullopt;
+        std::optional<uint8_t> target_short_addr = std::nullopt;
 
-        if ((addr_byte & 0x01) == 0) {               // DACP (Direct Arc Power Control)
-            if ((addr_byte & 0x80) == 0) {           // Short Address
-                uint8_t short_addr = (addr_byte >> 1) & 0x3F;
-                if (auto long_addr_opt = getLongAddress(short_addr)) {
-                    affected_devices.push_back(*long_addr_opt);
-                }
-            } else if ((addr_byte & 0xE0) == 0x80) { // Group Address
+        if (!is_broadcast) {
+            if ((addr_byte & 0x80) == 0x80) {
                 target_group_id = (addr_byte >> 1) & 0x0F;
-            } else if (addr_byte == 0xFE) {          // Broadcast
-                auto all_devices = getDevices();
-                for (const auto& long_addr : all_devices | std::views::keys) {
-                    affected_devices.push_back(long_addr);
-                }
+            } else {
+                target_short_addr = (addr_byte >> 1) & 0x3F;
             }
         }
-        else {                                       // Command
-            if ((addr_byte & 0x80) == 0) {           // Short Address
-                uint8_t short_addr = (addr_byte >> 1) & 0x3F;
-                if (auto long_addr_opt = getLongAddress(short_addr)) {
-                    affected_devices.push_back(*long_addr_opt);
-                }
-            } else if ((addr_byte & 0xE0) == 0x80) { // Group Address
-                target_group_id = (addr_byte >> 1) & 0x0F;
-            } else if ((addr_byte & 0xFF) == 0xFF) { // Broadcast
-                auto all_devices = getDevices();
-                for (const auto& long_addr : all_devices | std::views::keys) {
-                    affected_devices.push_back(long_addr);
-                }
-            }
-        }
-
-        if (target_group_id.has_value()) {
-            auto all_assignments = DaliGroupManagement::Instance().getAllAssignments();
-            for (const auto& [long_addr, groups] : all_assignments) {
-                if (groups.test(target_group_id.value())) {
-                    affected_devices.push_back(long_addr);
-                }
-            }
-        }
+        std::lock_guard<std::mutex> lock(m_devices_mutex);
 
         if (target_group_id.has_value()) {
             auto& group_mgr = DaliGroupManagement::Instance();
-            const uint8_t gid = target_group_id.value();
-            if ((addr_byte & 0x01) == 0) { // DACP
-                group_mgr.updateGroupState(gid, {.level = cmd_byte});
-            } else {                       // Command
-                switch (cmd_byte) {
-                case DALI_COMMAND_OFF:
-                case DALI_COMMAND_STEP_DOWN_AND_OFF:
-                    group_mgr.updateGroupState(gid, {.level = 0});
-                    break;
-                case DALI_COMMAND_RECALL_MAX_LEVEL:
-                    group_mgr.updateGroupState(gid, {.level = 254});
-                    break;
-                case DALI_COMMAND_RECALL_MIN_LEVEL:
-                    group_mgr.updateGroupState(gid, {.level = 1});
-                    break;
-                case DALI_COMMAND_ON_AND_STEP_UP:
-                    group_mgr.restoreGroupLevel(gid);
-                    break;
-                case DALI_COMMAND_UP:
-                case DALI_COMMAND_STEP_UP:
-                    group_mgr.stepGroupLevel(gid, true);
-                    break;
-                case DALI_COMMAND_DOWN:
-                case DALI_COMMAND_STEP_DOWN:
-                    group_mgr.stepGroupLevel(gid, false);
-                    break;
-                default: break; // TODO: Other cmd
+            const uint8_t gid = *target_group_id;
+
+            if (!is_command) {
+                group_mgr.updateGroupState(gid, {.level = data_byte});
+            } else {
+                switch (cmd) {
+                    case Off:
+                    case StepDownAndOff: group_mgr.updateGroupState(gid, {.level = 0}); break;
+                    case RecallMaxLevel: group_mgr.updateGroupState(gid, {.level = 254}); break;
+                    case RecallMinLevel: group_mgr.updateGroupState(gid, {.level = 1}); break;
+                    case OnAndStepUp:    group_mgr.restoreGroupLevel(gid); break;
+                    case Up:
+                    case StepUp:         group_mgr.stepGroupLevel(gid, true); break;
+                    case Down:
+                    case StepDown:       group_mgr.stepGroupLevel(gid, false); break;
+                    default: break;
                 }
             }
         }
 
-        if (affected_devices.empty()) {
-            return;
-        }
+        bool needs_sync = false;
+        std::vector<uint8_t> sync_candidates;
 
-        std::optional<uint8_t> known_level;
-        bool needs_query = false;
+        for (auto& [la, dev_var] : m_devices) {
+            auto* gear = std::get_if<ControlGear>(&dev_var);
+            if (!gear) continue;
 
-        if ((addr_byte & 0x01) == 0) { // DACP
-            known_level = cmd_byte;
-        } else { // Command
-            switch (cmd_byte)
-            {
-            case DALI_COMMAND_OFF:
-            case DALI_COMMAND_STEP_DOWN_AND_OFF:
-                known_level = 0;
-                break;
-            case DALI_COMMAND_ON_AND_STEP_UP:
-                {
-                    std::vector<std::pair<DaliLongAddress_t, uint8_t>> optimistic_updates;
-                    bool any_requires_query = false;
+            bool is_affected = is_broadcast;
+            if (!is_affected && target_group_id.has_value()) {
+                auto grps = DaliGroupManagement::Instance().getGroupsForDevice(la);
+                if (grps && grps->test(*target_group_id)) is_affected = true;
+            }
+            if (!is_affected && target_short_addr.has_value()) {
+                if (gear->short_address == *target_short_addr) is_affected = true;
+            }
+            if (!is_affected) continue;
+            std::optional<uint8_t> next_level = std::nullopt;
 
-                    {
-                        std::lock_guard<std::mutex> lock(m_devices_mutex);
-                        for (const auto& long_addr : affected_devices) {
-                            if (auto it = m_devices.find(long_addr); it != m_devices.end()) {
-                                if (auto* gear = std::get_if<ControlGear>(&it->second)) {
-                                    if (gear->current_level == 0) {
-                                        uint8_t target = (gear->last_level > 0) ? gear->last_level : 254;
-                                        optimistic_updates.emplace_back(long_addr, target);
-                                    } else {
-                                        any_requires_query = true;
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    for (const auto& [addr, lvl] : optimistic_updates) {
-                        ESP_LOGD(TAG, "Sniffer: Optimistic ON_AND_STEP_UP for %s to level %d",
-                                 utils::longAddressToString(addr).data(), lvl);
-                        updateDeviceState(addr, {.level = lvl});
-                    }
-
-                    if (any_requires_query) {
-                        needs_query = true;
-                    }
-                    break;
+            if (!is_command) {
+                next_level = data_byte; // DACP
+            } else {
+                switch (cmd) {
+                    case Off:
+                    case StepDownAndOff: next_level = 0; break;
+                    case RecallMaxLevel: next_level = 254; break;
+                    case RecallMinLevel: next_level = 1; break;
+                    case OnAndStepUp:
+                        next_level = (gear->current_level == 0) ? gear->last_level : gear->current_level;
+                        break;
+                    case static_cast<Commands::OpCode>(Commands::DT8OpCode::Activate):
+                    case static_cast<Commands::OpCode>(Commands::DT8OpCode::SetTempTc):
+                    case static_cast<Commands::OpCode>(Commands::DT8OpCode::SetTempRGB):
+                        needs_sync = true;
+                        break;
+                    default:
+                        if (data_byte >= 0x10 || data_byte <= 0x09) needs_sync = true;
+                        break;
                 }
-                case DALI_COMMAND_RECALL_MAX_LEVEL:
-                    {
-                        std::lock_guard<std::mutex> lock(m_devices_mutex);
-                        if (affected_devices.size() == 1) {
-                            if (auto* gear = std::get_if<ControlGear>(&m_devices[affected_devices[0]])) {
-                                known_level = gear->max_level;
-                            }
-                        } else {
-                            known_level = 254; // FIXME
-                        }
-                    }
-                    break;
-                case DALI_COMMAND_RECALL_MIN_LEVEL:
-                {
-                    std::lock_guard<std::mutex> lock(m_devices_mutex);
-                    if (affected_devices.size() == 1) {
-                        if (auto* gear = std::get_if<ControlGear>(&m_devices[affected_devices[0]])) {
-                            known_level = gear->min_level;
-                        }
-                    } else {
-                        known_level = 1; // FIXME
-                    }
-                }
-                    break;
-                // Should be recalled
-                case DALI_COMMAND_UP:
-                case DALI_COMMAND_DOWN:
-                case DALI_COMMAND_STEP_UP:
-                case DALI_COMMAND_STEP_DOWN:
-                case DALI_COMMAND_GO_TO_SCENE_0:
-                case DALI_COMMAND_GO_TO_SCENE_1:
-                case DALI_COMMAND_GO_TO_SCENE_2:
-                case DALI_COMMAND_GO_TO_SCENE_3:
-                case DALI_COMMAND_GO_TO_SCENE_4:
-                case DALI_COMMAND_GO_TO_SCENE_5:
-                case DALI_COMMAND_GO_TO_SCENE_6:
-                case DALI_COMMAND_GO_TO_SCENE_7:
-                case DALI_COMMAND_GO_TO_SCENE_8:
-                case DALI_COMMAND_GO_TO_SCENE_9:
-                case DALI_COMMAND_GO_TO_SCENE_10:
-                case DALI_COMMAND_GO_TO_SCENE_11:
-                case DALI_COMMAND_GO_TO_SCENE_12:
-                case DALI_COMMAND_GO_TO_SCENE_13:
-                case DALI_COMMAND_GO_TO_SCENE_14:
-                case DALI_COMMAND_GO_TO_SCENE_15:
-                    needs_query = true;
-                    break;
-                default:
-                    return;
+            }
+
+            if (next_level.has_value()) {
+                procUpdateDeviceState(la, {.level = *next_level});
+            }
+
+            if (needs_sync) {
+                sync_candidates.push_back(gear->short_address);
             }
         }
 
-        if (known_level.has_value()) {
-            ESP_LOGD(TAG, "Sniffer: Applying known level %d to %zu devices.", *known_level, affected_devices.size());
-            for (const auto& long_addr : affected_devices) {
-                updateDeviceState(long_addr, {.level = *known_level});
-            }
-        } else if (needs_query) {
-            uint32_t current_delay_ms = 400;
-            constexpr uint32_t stagger_step_ms = 150;
-
-            // if (is_group_or_broadcast) {
-            //     current_delay_ms = 600;
-            // }
-
-            ESP_LOGD(TAG, "Sniffer: Scheduling sync for %zu devices (Base delay: %u ms)", affected_devices.size(), current_delay_ms);
-
-            for (const auto& long_addr : affected_devices) {
-                auto short_addr_opt = getShortAddress(long_addr);
-
-                if (short_addr_opt.has_value()) {
-                    requestDeviceSync(short_addr_opt.value(), current_delay_ms);
-                    current_delay_ms += stagger_step_ms;
+        if (needs_sync && !sync_candidates.empty()) {
+            if (is_broadcast) {
+                requestBroadcastSync(400, 150);
+            } else {
+                uint32_t delay = 400;
+                for (uint8_t sa : sync_candidates) {
+                    requestDeviceSync(sa, delay);
+                    delay += 150;
                 }
             }
         }

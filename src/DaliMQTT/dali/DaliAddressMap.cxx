@@ -3,7 +3,6 @@
 
 #include "dali/DaliAddressMap.hxx"
 #include "utils/NvsHandle.hxx"
-#include <esp_log.h>
 
 namespace daliMQTT
 {

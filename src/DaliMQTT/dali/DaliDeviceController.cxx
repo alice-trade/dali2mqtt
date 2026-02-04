@@ -3,13 +3,13 @@
 
 #include "dali/DaliDeviceController.hxx"
 #include <dali/DaliGroupManagement.hxx>
+#include <utility>
 #include <utils/StringUtils.hxx>
 #include "system/ConfigManager.hxx"
 #include "dali/DaliAddressMap.hxx"
 #include "dali/DaliAdapter.hxx"
 #include "mqtt/MQTTClient.hxx"
 #include "utils/DaliLongAddrConversions.hxx"
-#include <esp_timer.h>
 
 namespace daliMQTT
 {
@@ -95,8 +95,7 @@ namespace daliMQTT
         mqtt.publish(status_topic, payload, 1, true);
     }
 
-    void DaliDeviceController::updateDeviceState(const DaliLongAddress_t longAddr, const DaliPublishState& state) {
-        std::lock_guard<std::mutex> lock(m_devices_mutex);
+    void DaliDeviceController::procUpdateDeviceState(const DaliLongAddress_t longAddr, const DaliPublishState& state) {
         const auto it = m_devices.find(longAddr);
         if (it != m_devices.end()) {
             if (auto* gear = std::get_if<ControlGear>(&it->second)) {
@@ -226,7 +225,7 @@ namespace daliMQTT
         }
 
         for (const auto& [long_addr, short_addr] : devices_to_validate) {
-            if (auto status_opt = dali.sendQuery(DaliAddressType::Short, short_addr, DALI_COMMAND_QUERY_STATUS); status_opt.has_value()) {
+            if (auto status_opt = dali.sendQuery(DaliAddressType::Short, short_addr, Commands::OpCode::QueryStatus); status_opt.has_value()) {
                 if (auto long_addr_from_bus_opt = dali.getLongAddress(short_addr)) {
                     if (*long_addr_from_bus_opt != long_addr) {
                         ESP_LOGW(TAG, "Validation CONFLICT: Short Addr %d has Long Addr %lX, expected %lX. Full scan required.",
@@ -525,18 +524,14 @@ namespace daliMQTT
 
     std::optional<uint8_t> DaliDeviceController::pollAvailabilityAndLevel(const uint8_t shortAddr, const DaliLongAddress_t longAddr) {
         auto& dali = DaliAdapter::Instance();
-        const auto level_opt = dali.sendQuery(DaliAddressType::Short, shortAddr, DALI_COMMAND_QUERY_ACTUAL_LEVEL);
+        const auto level_opt = dali.sendQuery(DaliAddressType::Short, shortAddr, Commands::OpCode::QueryActualLevel);
         const bool is_responding = level_opt.has_value();
-
-        bool previously_available = false;
-        uint8_t cached_level = 0;
 
         {
             std::lock_guard<std::mutex> lock(m_devices_mutex);
             if (m_devices.contains(longAddr)) {
                 auto& dev_var = m_devices[longAddr];
                 auto& id = getIdentity(dev_var);
-                previously_available = id.available;
 
                 if (id.available != is_responding) {
                     id.available = is_responding;
@@ -544,17 +539,12 @@ namespace daliMQTT
                         publishAvailability(longAddr, is_responding);
                     }
                 }
-
-                if (const auto* gear = std::get_if<ControlGear>(&dev_var)) {
-                    cached_level = gear->current_level;
-                }
-            } else {
-                return std::nullopt; // dev removed from map during query
             }
+            else return std::nullopt;
         }
 
         if (!is_responding) return std::nullopt;
-        return (level_opt.value() == 255) ? cached_level : level_opt.value();
+        return level_opt.value();
     }
 
     void DaliDeviceController::checkDT8Features(const uint8_t shortAddr, const DaliLongAddress_t longAddr) {
@@ -563,10 +553,8 @@ namespace daliMQTT
             std::lock_guard<std::mutex> lock(m_devices_mutex);
             if (m_devices.contains(longAddr)) {
                 if (const auto* gear = std::get_if<ControlGear>(&m_devices[longAddr])) {
-                    if (gear->device_type.value_or(0xFF) == 8) {
-                        if (!gear->static_data_loaded && (!gear->color.has_value() || (!gear->color->supports_tc && !gear->color->supports_rgb))) {
-                            needs_check = true;
-                        }
+                    if (gear->device_type.value_or(0xFF) == 8 && !gear->static_data_loaded) {
+                        needs_check = true;
                     }
                 }
             }
@@ -575,24 +563,19 @@ namespace daliMQTT
         if (!needs_check) return;
 
         auto& dali = DaliAdapter::Instance();
-        const auto features_opt = dali.getDT8Features(shortAddr);
+        const auto colour_type = dali.readMemoryLocation(shortAddr, 205, Commands::MemBank205::ColourType);
 
-        if (features_opt.has_value()) {
-            const uint8_t feat = *features_opt;
-            const bool supports_tc = (feat & 0x02) != 0;
-            const bool supports_rgb = (feat & 0x08) != 0;
-
-            ESP_LOGD(TAG, "DT8 Device %d features: Tc=%d, RGB=%d (Raw: 0x%02X)", shortAddr, supports_tc, supports_rgb, feat);
+        if (colour_type.has_value()) {
+            const bool tc = (*colour_type & 0x02);
+            const bool rgb = (*colour_type & 0x08);
 
             std::lock_guard<std::mutex> lock(m_devices_mutex);
-            if (m_devices.contains(longAddr)) {
-                if (auto* g = std::get_if<ControlGear>(&m_devices[longAddr])) {
-                    if (!g->color.has_value()) g->color = ColorFeatures();
-                    g->color->supports_tc = supports_tc;
-                    g->color->supports_rgb = supports_rgb;
-                    m_nvs_dirty = true;
-                    m_last_nvs_change_ts = esp_timer_get_time() / 1000;
-                }
+            if (auto* g = std::get_if<ControlGear>(&m_devices[longAddr])) {
+                if (!g->color.has_value()) g->color = ColorFeatures();
+                g->color->supports_tc = tc;
+                g->color->supports_rgb = rgb;
+                m_nvs_dirty = true;
+                ESP_LOGI(TAG, "DT8 Device %d identified: Tc=%d, RGB=%d", shortAddr, tc, rgb);
             }
         }
     }
@@ -601,43 +584,26 @@ namespace daliMQTT
         ColorPollResult result;
         if (current_level == 0) return result;
 
-        bool should_poll = false;
-        bool supports_tc = false;
-        bool supports_rgb = false;
-        const int64_t now_sec = esp_timer_get_time() / 1000000;
-        constexpr int64_t COLOR_POLL_INTERVAL_SEC = 60;
-
+        bool tc_supp = false, rgb_supp = false;
         {
             std::lock_guard<std::mutex> lock(m_devices_mutex);
-            if (m_devices.contains(longAddr)) {
-                if (auto* g = std::get_if<ControlGear>(&m_devices[longAddr])) {
-                    if (g->color.has_value()) {
-                        if ((g->color->supports_tc || g->color->supports_rgb) &&
-                            (now_sec - g->color->last_poll_ts) > COLOR_POLL_INTERVAL_SEC) {
-                            should_poll = true;
-                            supports_tc = g->color->supports_tc;
-                            supports_rgb = g->color->supports_rgb;
-                        }
-                    }
-                }
-            }
+            auto* g = std::get_if<ControlGear>(&m_devices[longAddr]);
+            if (!g || !g->color.has_value()) return result;
+            tc_supp = g->color->supports_tc;
+            rgb_supp = g->color->supports_rgb;
         }
 
-        if (should_poll) {
-            auto& dali = DaliAdapter::Instance();
-            if (supports_tc) {
-                result.tc = dali.getDT8ColorTemp(shortAddr);
-            }
-            if (supports_rgb) {
-                result.rgb = dali.getDT8RGB(shortAddr);
-            }
-
-            std::lock_guard<std::mutex> lock(m_devices_mutex);
-            if (m_devices.contains(longAddr)) {
-                if (auto* g = std::get_if<ControlGear>(&m_devices[longAddr])) {
-                    if (g->color) g->color->last_poll_ts = now_sec;
-                }
-            }
+        auto& dali = DaliAdapter::Instance();
+        if (tc_supp) {
+            auto h = dali.readMemoryLocation(shortAddr, 205, Commands::MemBank205::ColourValueTcH);
+            auto l = dali.readMemoryLocation(shortAddr, 205, Commands::MemBank205::ColourValueTcL);
+            if (h && l) result.tc = (*h << 8) | *l;
+        }
+        if (rgb_supp) {
+            auto r = dali.readMemoryLocation(shortAddr, 205, Commands::MemBank205::RgbR);
+            auto g = dali.readMemoryLocation(shortAddr, 205, Commands::MemBank205::RgbG);
+            auto b = dali.readMemoryLocation(shortAddr, 205, Commands::MemBank205::RgbB);
+            if (r && g && b) result.rgb = DaliRGB{*r, *g, *b};
         }
         return result;
     }
@@ -695,10 +661,10 @@ namespace daliMQTT
         if (!needs_load) return;
 
         auto& dali = DaliAdapter::Instance();
-        const auto min_opt = dali.sendQuery(DaliAddressType::Short, shortAddr, DALI_COMMAND_QUERY_MIN_LEVEL);
-        const auto max_opt = dali.sendQuery(DaliAddressType::Short, shortAddr, DALI_COMMAND_QUERY_MAX_LEVEL);
-        const auto power_on_opt = dali.sendQuery(DaliAddressType::Short, shortAddr, DALI_COMMAND_QUERY_POWER_ON_LEVEL);
-        const auto fail_opt = dali.sendQuery(DaliAddressType::Short, shortAddr, DALI_COMMAND_QUERY_SYSTEM_FAILURE_LEVEL);
+        const auto min_opt = dali.sendQuery(DaliAddressType::Short, shortAddr, Commands::OpCode::QueryMinLevel);
+        const auto max_opt = dali.sendQuery(DaliAddressType::Short, shortAddr, Commands::OpCode::QueryMaxLevel);
+        const auto power_on_opt = dali.sendQuery(DaliAddressType::Short, shortAddr, Commands::OpCode::QueryPowerOnLevel);
+        const auto fail_opt = dali.sendQuery(DaliAddressType::Short, shortAddr, Commands::OpCode::QuerySystemFailureLevel);
         const auto gtin_opt = dali.getGTIN(shortAddr);
         const auto dt_opt = dali.getDeviceType(shortAddr);
 
@@ -726,16 +692,8 @@ namespace daliMQTT
     }
     void DaliDeviceController::pollSingleDevice(const uint8_t shortAddr) {
         DaliLongAddress_t longAddr = 0;
-        bool known_device = false;
-
-        {
-            std::lock_guard<std::mutex> lock(m_devices_mutex);
-            if (const auto it = m_short_to_long_map.find(shortAddr); it != m_short_to_long_map.end()) {
-                longAddr = it->second;
-                known_device = true;
-            }
-        }
-        if (!known_device) return;
+        if (auto la_opt = getLongAddress(shortAddr)) longAddr = *la_opt;
+        else return;
 
         const auto levelOpt = pollAvailabilityAndLevel(shortAddr, longAddr);
         if (!levelOpt) return; // Offline
@@ -751,6 +709,12 @@ namespace daliMQTT
         if (!isControlGear) return;
         auto& dali = DaliAdapter::Instance();
         const auto statusOpt = dali.getDeviceStatus(shortAddr);
+
+        // Part 207 (?)
+        if (statusOpt.has_value() && (*statusOpt & 0x02)) {
+            auto led_faults = dali.readMemoryLocation(shortAddr, 1, 0x02); // TODO: Pass LED Fault
+            if (led_faults) ESP_LOGW(TAG, "Device %d LED Fault Bits: 0x%02X", shortAddr, *led_faults);
+        }
 
         checkDT8Features(shortAddr, longAddr);
         const auto colorData = pollColorDataCyclic(shortAddr, longAddr, actualLevel);
@@ -800,9 +764,8 @@ namespace daliMQTT
         std::bitset<64> found_devices;
 
         for (uint8_t sa = 0; sa < 64; ++sa) {
-            if (auto status_opt = dali.sendQuery(DaliAddressType::Short, sa, DALI_COMMAND_QUERY_STATUS); status_opt.has_value()) {
+            if (auto status_opt = dali.sendQuery(DaliAddressType::Short, sa, Commands::OpCode::QueryStatus); status_opt.has_value()) {
                 found_devices.set(sa);
-                ESP_LOGI(TAG, "Gear found at SA %d", sa);
                 if (auto long_addr_opt = dali.getLongAddress(sa)) {
                     DaliLongAddress_t long_addr = *long_addr_opt;
                     ControlGear dev;
@@ -811,18 +774,14 @@ namespace daliMQTT
                     dev.available = true;
                     new_devices.emplace(long_addr, dev);
                     new_short_to_long_map[sa] = long_addr;
+                    ESP_LOGI(TAG, "Gear found at SA %d (LA: 0x%06lX)", sa, long_addr);
                 }
             }
 
-            if (auto status_input_opt = dali.sendInputDeviceCommand(sa, DALI_COMMAND_INPUT_QUERY_STATUS); status_input_opt.has_value()) {
-                ESP_LOGI(TAG, "Input Device found at SA %d", sa);
+            if (dali.sendInputDeviceCommand(sa, std::to_underlying(
+                                                Commands::InputDeviceOp::QueryStatus), 0x00)) {
                 auto long_addr_opt = getInputDeviceLongAddress(sa);
-                DaliLongAddress_t long_addr;
-                if (long_addr_opt.has_value()) {
-                    long_addr = *long_addr_opt;
-                } else {
-                    long_addr = 0xFE0000 | sa; // Pseudo addr fallback
-                }
+                DaliLongAddress_t long_addr = long_addr_opt.value_or(0xFE0000 | sa);
 
                 InputDevice dev;
                 dev.long_address = long_addr;
@@ -831,6 +790,8 @@ namespace daliMQTT
 
                 new_devices.emplace(long_addr, dev);
                 new_short_to_long_map[sa | 0x80] = long_addr;
+
+                ESP_LOGI(TAG, "Input Device found at SA (CD) %d (LA: 0x%06lX)", sa, long_addr);
             }
             vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_POLL_DELAY_MS));
         }
@@ -839,26 +800,29 @@ namespace daliMQTT
             std::lock_guard<std::mutex> lock(m_devices_mutex);
             m_devices = std::move(new_devices);
             m_short_to_long_map = std::move(new_short_to_long_map);
-            ESP_LOGI(TAG, "Discovery finished. Mapped %zu DALI devices.", m_devices.size());
-            DaliAddressMap::save(m_devices);
-            m_nvs_dirty = false;
+            m_nvs_dirty = true;
         }
+
+        ESP_LOGI(TAG, "Discovery finished. Mapped %zu DALI devices.", m_devices.size());
+        DaliAddressMap::save(getDevices());
         return found_devices;
     }
 
     std::optional<DaliLongAddress_t> DaliDeviceController::getInputDeviceLongAddress(const uint8_t shortAddress) const {
         auto& dali = DaliAdapter::Instance();
-        auto readByte = [&](uint8_t offset) -> std::optional<uint8_t> {
-            dali.sendInputDeviceCommand(shortAddress, 0x31, 0x00); // Bank 0
-            dali.sendInputDeviceCommand(shortAddress, 0x30, offset); // Offset
-            return dali.sendInputDeviceCommand(shortAddress, DALI_COMMAND_INPUT_READ_MEMORY_LOCATION);
+
+        auto readBank0Byte = [&](uint8_t offset) -> std::optional<uint8_t> {
+            // 103: WRITE DTR1 (0x31), WRITE DTR0 (0x30), READ MEMORY (0xC5)
+            dali.sendInputDeviceCommand(shortAddress, static_cast<uint8_t>(Commands::InputDeviceOp::WriteDtr1), 0x00);
+            dali.sendInputDeviceCommand(shortAddress, static_cast<uint8_t>(Commands::InputDeviceOp::WriteDtr0), offset);
+            return dali.sendInputDeviceCommand(shortAddress, static_cast<uint8_t>(Commands::InputDeviceOp::ReadMemory), std::nullopt);
         };
 
-        const auto h_opt = readByte(0x09);
+        const auto h_opt = readBank0Byte(0x09);
         if (!h_opt) return std::nullopt;
-        const auto m_opt = readByte(0x0A);
+        const auto m_opt = readBank0Byte(0x0A);
         if (!m_opt) return std::nullopt;
-        const auto l_opt = readByte(0x0B);
+        const auto l_opt = readBank0Byte(0x0B);
         if (!l_opt) return std::nullopt;
 
         return (static_cast<DaliLongAddress_t>(*h_opt) << 16) |

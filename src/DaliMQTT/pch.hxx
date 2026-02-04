@@ -32,6 +32,9 @@ extern "C" {
 #include <driver/rmt_tx.h>
 #include <driver/rmt_rx.h>
 #include <nvs.h>
+#include <esp_check.h>
+#include <esp_timer.h>
+#include <esp_random.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <freertos/ringbuf.h>
