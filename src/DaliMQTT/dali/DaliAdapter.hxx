@@ -50,7 +50,9 @@ namespace daliMQTT
          * @brief Send a DT8 command (IEC 62386-209).
          * Note: Usually requires sequence (Enable -> Cmd -> Activate), handled by helpers setDT8.
          */
-        esp_err_t inline sendCommand(DaliAddressType addr_type, uint8_t addr, Commands::DT8OpCode command, bool send_twice = false);
+        esp_err_t sendCommand (const DaliAddressType addr_type, const uint8_t addr, const Commands::DT8OpCode command, const bool send_twice) {
+            return sendCommand(addr_type, addr, static_cast<Commands::OpCode>(command), send_twice);
+        }
 
         /**
          * @brief Send DACP (Direct Arc Power Control) level.
@@ -73,7 +75,9 @@ namespace daliMQTT
          * @brief Send a DT8 query (IEC 62386-209) and wait for an 8-bit backward frame response.
          *  @return uint8_t response or std::nullopt on timeout/collision.
          */
-        [[nodiscard]] inline std::optional<uint8_t> sendQuery(DaliAddressType addr_type, uint8_t addr, Commands::DT8OpCode command);
+        [[nodiscard]] std::optional<uint8_t> sendQuery(DaliAddressType addr_type, uint8_t addr, Commands::DT8OpCode command) {
+            return sendQuery(addr_type, addr, static_cast<Commands::OpCode>(command));
+        }
 
         /**
          * @brief Send query raw.
@@ -91,12 +95,16 @@ namespace daliMQTT
         /**
          * @brief Adds a device to a group.
          */
-        esp_err_t assignToGroup(uint8_t shortAddress, uint8_t group);
+        esp_err_t assignToGroup(const uint8_t shortAddress, const uint8_t group) {
+            return sendCommand(DaliAddressType::Short, shortAddress, static_cast<Commands::OpCode>(0x60 + group), true);
+        }
 
         /**
          * @brief Removes a device from a group.
          */
-        esp_err_t removeFromGroup(uint8_t shortAddress, uint8_t group);
+        esp_err_t removeFromGroup(const uint8_t shortAddress, const uint8_t group) {
+            return sendCommand(DaliAddressType::Short, shortAddress, static_cast<Commands::OpCode>(0x70 + group), true);
+        }
 
         /**
          * @brief Gets the group mask for a device.

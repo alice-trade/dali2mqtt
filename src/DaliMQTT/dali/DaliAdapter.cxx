@@ -142,10 +142,6 @@ namespace daliMQTT {
         return res;
     }
 
-    esp_err_t inline DaliAdapter::sendCommand(const DaliAddressType addr_type, const uint8_t addr, const DT8OpCode command, const bool send_twice) {
-        return sendCommand(addr_type, addr, static_cast<OpCode>(command), send_twice);
-    }
-
     std::optional<uint8_t> DaliAdapter::sendQuery(const DaliAddressType addr_type, const uint8_t addr, const OpCode command) {
         Frame frame;
 
@@ -156,9 +152,6 @@ namespace daliMQTT {
         return sendRawQuery(frame.data, 16);
     }
 
-    std::optional<uint8_t> inline DaliAdapter::sendQuery(const DaliAddressType addr_type, const uint8_t addr, const DT8OpCode command) {
-        return sendQuery(addr_type, addr, static_cast<OpCode>(command));
-    }
 
     std::optional<uint8_t> DaliAdapter::sendQuery( const SpecialOpCode command, const uint8_t data) {
         auto [payload, bits] = Factory::Special(command, data);
@@ -191,17 +184,18 @@ namespace daliMQTT {
 
         while (true) {
             if (xQueueReceive(queue, &msg, portMAX_DELAY) == pdTRUE) {
+                using enum daliMQTT::Driver::DaliEventType;
                 if (self->m_waiting_for_tx_result) {
-                    if (msg.type == Driver::DaliEventType::TxCompleted ||
-                        msg.type == Driver::DaliEventType::CollisionDetected ||
-                        msg.type == Driver::DaliEventType::BusFailure) {
+                    if (msg.type == TxCompleted ||
+                        msg.type == CollisionDetected ||
+                        msg.type == BusFailure) {
                             self->m_last_tx_status = msg.type;
                             if (self->m_tx_caller_task) {
                                 xTaskNotify(self->m_tx_caller_task, 1, eSetBits);
                             }
                         }
                 }
-                if (msg.type == Driver::DaliEventType::FrameReceived && msg.is_backward && self->m_expecting_response) {
+                if (msg.type == FrameReceived && msg.is_backward && self->m_expecting_response) {
                     auto data = static_cast<uint8_t>(msg.data & 0xFF);
                     xQueueSend(self->m_response_queue, &data, 0);
                 }
@@ -212,12 +206,12 @@ namespace daliMQTT {
                     frame.length = msg.length;
                     frame.is_backward_frame = msg.is_backward;
 
-                    if (msg.type == Driver::DaliEventType::TxCompleted) {
+                    if (msg.type == TxCompleted) {
                         frame.is_backward_frame = false;
-                    } else if (msg.type == Driver::DaliEventType::CollisionDetected) {
+                    } else if (msg.type == CollisionDetected) {
                         ESP_LOGD(TAG, "Bus Collision Detected");
                         continue;
-                    } else if (msg.type == Driver::DaliEventType::FrameError) {
+                    } else if (msg.type == FrameError) {
                         continue;
                     }
 
@@ -235,19 +229,20 @@ namespace daliMQTT {
     }
 
     uint8_t DaliAdapter::initializeBus(const bool provision_all) {
+        using enum daliMQTT::Commands::SpecialOpCode;
         ESP_LOGI(TAG, "Starting Commissioning (Control Gear)...");
 
-        sendRaw(Factory::Special(SpecialOpCode::Terminate, 0).data, 16);
-        sendRaw(Factory::Special(SpecialOpCode::Terminate, 0).data, 16);
+        sendRaw(Factory::Special(Terminate, 0).data, 16);
+        sendRaw(Factory::Special(Terminate, 0).data, 16);
 
         // Initialise
         const uint8_t init_arg = provision_all ? 0xFF : 0x00; // 0xFF = Unaddressed, 0x00 = All
-        sendRaw(Factory::Special(SpecialOpCode::Initialise, init_arg).data, 16);
-        sendRaw(Factory::Special(SpecialOpCode::Initialise, init_arg).data, 16); // Send twice
+        sendRaw(Factory::Special(Initialise, init_arg).data, 16);
+        sendRaw(Factory::Special(Initialise, init_arg).data, 16); // Send twice
 
         // Randomise
-        sendRaw(Factory::Special(SpecialOpCode::Randomise, 0).data, 16);
-        sendRaw(Factory::Special(SpecialOpCode::Randomise, 0).data, 16); // Send twice
+        sendRaw(Factory::Special(Randomise, 0).data, 16);
+        sendRaw(Factory::Special(Randomise, 0).data, 16); // Send twice
         vTaskDelay(pdMS_TO_TICKS(100));
 
         // Binary Search loop
@@ -258,18 +253,18 @@ namespace daliMQTT {
             uint8_t prog_byte = (devices_found << 1) | 1;
             if (devices_found >= 64) {
                 ESP_LOGW(TAG, "More than 64 devices found. Skipping assignment.");
-                sendRaw(Factory::Special(SpecialOpCode::Withdraw, 0).data, 16);
+                sendRaw(Factory::Special(Withdraw, 0).data, 16);
                 continue;
             }
 
-            sendRaw(Factory::Special(SpecialOpCode::ProgramShortAddr, prog_byte).data, 16);
+            sendRaw(Factory::Special(ProgramShortAddr, prog_byte).data, 16);
             ESP_LOGI(TAG, "Assigned Short Addr %d to Long Addr 0x%06lX", devices_found, longAddr);
 
             devices_found++;
-            sendRaw(Factory::Special(SpecialOpCode::Withdraw, 0).data, 16);
+            sendRaw(Factory::Special(Withdraw, 0).data, 16);
         }
 
-        sendRaw(Factory::Special(SpecialOpCode::Terminate, 0).data, 16);
+        sendRaw(Factory::Special(Terminate, 0).data, 16);
         return devices_found;
     }
 
@@ -413,14 +408,6 @@ namespace daliMQTT {
         setDtr1(bank);
         setDtr0(offset);
         return sendQuery(DaliAddressType::Short, shortAddress, OpCode::ReadMemoryLocation);
-    }
-
-    esp_err_t DaliAdapter::assignToGroup(const uint8_t shortAddress, const uint8_t group) {
-        return sendCommand(DaliAddressType::Short, shortAddress, static_cast<OpCode>(0x60 + group), true);
-    }
-
-    esp_err_t DaliAdapter::removeFromGroup(const uint8_t shortAddress, const uint8_t group) {
-        return sendCommand(DaliAddressType::Short, shortAddress, static_cast<OpCode>(0x70 + group), true);
     }
 
     std::optional<uint8_t> DaliAdapter::getDT8Features(const uint8_t shortAddress) {

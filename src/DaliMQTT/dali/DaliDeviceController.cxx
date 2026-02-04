@@ -256,7 +256,7 @@ namespace daliMQTT
         auto* self = static_cast<DaliDeviceController*>(pvParameters);
         const auto& dali_api = DaliAdapter::Instance();
         const QueueHandle_t queue = dali_api.getEventQueue();
-        dali_frame_t frame;
+        dali_frame_t frame{};
 
         while (true) {
             if (xQueueReceive(queue, &frame, portMAX_DELAY) == pdPASS) {
