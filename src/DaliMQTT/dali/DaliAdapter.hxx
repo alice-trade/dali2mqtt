@@ -28,7 +28,9 @@ namespace daliMQTT
         /**
          * @brief Checks if the DALI bus driver is initialized.
          */
-        bool isInitialized() const;
+        [[nodiscard]] bool isInitialized() const {
+            return m_initialized;
+        }
 
         /**
          * @brief Send a raw DALI frame asynchronously.
@@ -112,8 +114,14 @@ namespace daliMQTT
         [[nodiscard]] std::optional<std::bitset<16>> getDeviceGroups(uint8_t shortAddress);
 
         [[nodiscard]] std::optional<uint8_t> getDT8Features(uint8_t shortAddress);
-        [[nodiscard]] std::optional<uint8_t> getDeviceType(uint8_t shortAddress);
-        [[nodiscard]] std::optional<uint8_t> getDeviceStatus(uint8_t shortAddress);
+        [[nodiscard]] std::optional<uint8_t> getDeviceType(const uint8_t shortAddress) {
+            return sendQuery(DaliAddressType::Short, shortAddress, Commands::OpCode::QueryDeviceType);
+        }
+
+        [[nodiscard]] std::optional<uint8_t> getDeviceStatus(const uint8_t shortAddress) {
+            return sendQuery(DaliAddressType::Short, shortAddress, Commands::OpCode::QueryStatus);
+        }
+
         [[nodiscard]] std::optional<std::string> getGTIN(uint8_t shortAddress);
 
         /**
@@ -146,7 +154,9 @@ namespace daliMQTT
         */
         esp_err_t setDT8RGB(DaliAddressType addr_type, uint8_t addr, uint8_t r, uint8_t g, uint8_t b);
 
-        [[nodiscard]] QueueHandle_t getEventQueue() const;
+        [[nodiscard]] QueueHandle_t getEventQueue() const {
+            return m_dali_event_queue;
+        }
 
         /**
         * @brief Starts the DALI bus sniffer.
@@ -164,9 +174,17 @@ namespace daliMQTT
         [[noreturn]] static void busWorkerTask(void* arg);
 
         uint32_t findAddressBinarySearch(bool input_devices);
-        void setDtr0(uint8_t val);
-        void setDtr1(uint8_t val);
+
+        void setDtr0(const uint8_t val) {
+            sendRaw(Commands::Factory::Special(Commands::SpecialOpCode::Dtr0, val).data, 16);
+        }
+
+        void setDtr1(const uint8_t val) {
+            sendRaw(Commands::Factory::Special(Commands::SpecialOpCode::Dtr1, val).data, 16);
+        }
+
         esp_err_t sendDT8Cmd(uint8_t shortAddr, Commands::DT8OpCode cmd);
+
         std::optional<uint8_t> queryDT8Value(uint8_t shortAddress, uint8_t dtr0_selector);
 
         Driver::DaliDriver m_driver{}; // Driver Instance

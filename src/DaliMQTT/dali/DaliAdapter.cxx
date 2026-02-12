@@ -30,13 +30,6 @@ namespace daliMQTT {
         return ESP_OK;
     }
 
-    bool DaliAdapter::isInitialized() const {
-        return m_initialized;
-    }
-
-    QueueHandle_t DaliAdapter::getEventQueue() const {
-        return m_dali_event_queue;
-    }
     esp_err_t DaliAdapter::startSniffer() {
         m_sniffer_enabled = true;
         return ESP_OK;
@@ -46,6 +39,7 @@ namespace daliMQTT {
         m_sniffer_enabled = false;
         return ESP_OK;
     }
+
     esp_err_t DaliAdapter::sendRaw(const uint32_t data, const uint8_t bits) {
         m_tx_caller_task = xTaskGetCurrentTaskHandle();
         m_waiting_for_tx_result = true;
@@ -221,13 +215,6 @@ namespace daliMQTT {
         }
     }
 
-    void DaliAdapter::setDtr0(const uint8_t val) {
-        sendRaw(Factory::Special(SpecialOpCode::Dtr0, val).data, 16);
-    }
-    void DaliAdapter::setDtr1(const uint8_t val) {
-        sendRaw(Factory::Special(SpecialOpCode::Dtr1, val).data, 16);
-    }
-
     uint8_t DaliAdapter::initializeBus(const bool provision_all) {
         using enum daliMQTT::Commands::SpecialOpCode;
         ESP_LOGI(TAG, "Starting Commissioning (Control Gear)...");
@@ -368,14 +355,6 @@ namespace daliMQTT {
         if (!l) return std::nullopt;
 
         return (static_cast<uint32_t>(*h) << 16) | (static_cast<uint32_t>(*m) << 8) | (*l);
-    }
-
-    std::optional<uint8_t> DaliAdapter::getDeviceStatus(const uint8_t shortAddress) {
-        return sendQuery(DaliAddressType::Short, shortAddress, OpCode::QueryStatus);
-    }
-
-    std::optional<uint8_t> DaliAdapter::getDeviceType(const uint8_t shortAddress) {
-        return sendQuery(DaliAddressType::Short, shortAddress, OpCode::QueryDeviceType);
     }
 
     std::optional<std::bitset<16>> DaliAdapter::getDeviceGroups(const uint8_t shortAddress) {
