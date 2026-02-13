@@ -81,9 +81,6 @@ namespace daliMQTT::Driver {
 
         private:
             struct Constants {
-                static constexpr uint32_t DALI_BIT_TIME_US = 834;
-                static constexpr uint32_t DALI_HALF_BIT_TIME_US = 417;
-
                 static constexpr uint32_t T_TE = 417;        // Half bit time (1/2400 s)
                 static constexpr uint32_t T_TE_MIN = 300;
                 static constexpr uint32_t T_TE_MAX = 525;

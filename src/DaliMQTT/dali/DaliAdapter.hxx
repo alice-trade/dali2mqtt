@@ -201,7 +201,7 @@ namespace daliMQTT
 
         TaskHandle_t m_tx_caller_task{nullptr};
         std::atomic<bool> m_waiting_for_tx_result{false};
-        std::atomic<Driver::DaliEventType> m_last_tx_status;
+        std::atomic<Driver::DaliEventType> m_last_tx_status{};
     };
 } // daliMQTT
 

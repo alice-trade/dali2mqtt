@@ -111,7 +111,8 @@ namespace daliMQTT {
         m_expecting_response = false;
         return std::nullopt;
     }
- esp_err_t DaliAdapter::sendCommand(const DaliAddressType addr_type, const uint8_t addr, const OpCode command, const bool send_twice) {
+
+    esp_err_t DaliAdapter::sendCommand(const DaliAddressType addr_type, const uint8_t addr, const OpCode command, const bool send_twice) {
         Frame frame;
 
         if (addr_type == DaliAddressType::Broadcast) frame = Factory::CommandBroadcast(command);

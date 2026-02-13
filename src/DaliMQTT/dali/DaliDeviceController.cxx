@@ -252,10 +252,12 @@ namespace daliMQTT
         }
         return true;
     }
+
     [[noreturn]] void DaliDeviceController::daliEventHandlerTask(void* pvParameters) {
         auto* self = static_cast<DaliDeviceController*>(pvParameters);
         const auto& dali_api = DaliAdapter::Instance();
-        const QueueHandle_t queue = dali_api.getEventQueue();
+        // ReSharper disable once CppLocalVariableMayBeConst
+        QueueHandle_t queue = dali_api.getEventQueue();
         dali_frame_t frame{};
 
         while (true) {
@@ -301,6 +303,7 @@ namespace daliMQTT
             }
         }
     }
+
     [[noreturn]] void DaliDeviceController::daliSyncTask(void* pvParameters) {
         auto* self = static_cast<DaliDeviceController*>(pvParameters);
         constexpr int64_t NVS_SAVE_DEBOUNCE_MS = 60000;
@@ -433,6 +436,7 @@ namespace daliMQTT
             ESP_LOGD(TAG, "Scheduled DELAYED poll for SA: %d in %u ms", shortAddress, delay_ms);
         }
     }
+
     void DaliDeviceController::ProcessInputDeviceFrame(const dali_frame_t& frame) const {
         const uint32_t data = frame.data;
         const uint8_t addr_byte = (data >> 16) & 0xFF;
@@ -690,6 +694,7 @@ namespace daliMQTT
         }
         publishAttributes(longAddr);
     }
+
     void DaliDeviceController::pollSingleDevice(const uint8_t shortAddr) {
         DaliLongAddress_t longAddr = 0;
         if (auto la_opt = getLongAddress(shortAddr)) longAddr = *la_opt;
