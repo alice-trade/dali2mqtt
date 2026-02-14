@@ -257,7 +257,7 @@ namespace daliMQTT
         auto* self = static_cast<DaliDeviceController*>(pvParameters);
         const auto& dali_api = DaliAdapter::Instance();
         // ReSharper disable once CppLocalVariableMayBeConst
-        QueueHandle_t queue = dali_api.getEventQueue();
+        QueueHandle_t queue = dali_api.getEventQueue(); // Queue handle
         dali_frame_t frame{};
 
         while (true) {

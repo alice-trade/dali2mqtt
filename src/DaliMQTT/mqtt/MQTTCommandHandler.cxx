@@ -13,7 +13,6 @@
 
 namespace daliMQTT {
     static constexpr char TAG[] = "MQTTCommandHandler";
-
     static std::atomic<bool> g_mqtt_bus_busy{false};
 
     void MQTTCommandHandler::publishLightState(DaliAddressType addr_type, const uint8_t target_id,
@@ -75,7 +74,6 @@ namespace daliMQTT {
                 break;
         }
     }
-
 
     void MQTTCommandHandler::handleLightCommand(const std::vector<std::string_view> &parts, const std::string &data) {
         // topic format: light/{long_addr_hex}/set OR light/group/{id}/set
@@ -488,6 +486,7 @@ namespace daliMQTT {
         g_mqtt_bus_busy = false;
         vTaskDelete(nullptr);
     }
+
     void MQTTCommandHandler::backgroundInputInitTask(void* arg) {
         ESP_LOGI(TAG, "Starting MQTT-initiated DALI Input Device initialization...");
         auto const& mqtt = MQTTClient::Instance();
@@ -504,6 +503,7 @@ namespace daliMQTT {
         g_mqtt_bus_busy = false;
         vTaskDelete(nullptr);
     }
+
     void MQTTCommandHandler::handleScanCommand() {
         if (g_mqtt_bus_busy.exchange(true)) {
             ESP_LOGW(TAG, "Bus operation already in progress. Ignoring scan request.");
@@ -514,6 +514,7 @@ namespace daliMQTT {
             g_mqtt_bus_busy = false;
         }
     }
+
     void MQTTCommandHandler::handleInitializeCommand() {
         if (g_mqtt_bus_busy.exchange(true)) {
             ESP_LOGW(TAG, "Bus operation already in progress. Ignoring init request.");
@@ -524,6 +525,7 @@ namespace daliMQTT {
             g_mqtt_bus_busy = false;
         }
     }
+
     void MQTTCommandHandler::handle(const std::string &topic, const std::string &data) {
         ESP_LOGD(TAG, "MQTT Rx: %s -> %s", topic.c_str(), data.c_str());
 
