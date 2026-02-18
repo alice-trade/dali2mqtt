@@ -74,7 +74,7 @@ namespace daliMQTT::Driver {
             .resolution_hz = m_config.resolution_hz,
             .mem_block_symbols = 64,
             .flags = {
-                .invert_in = true,
+                .invert_in = false,
                 .with_dma = false
             }
         };
