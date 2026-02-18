@@ -45,6 +45,14 @@ namespace daliMQTT::Driver {
     }
 
     esp_err_t DaliDriver::setupTx() {
+        gpio_config_t io_conf = {};
+        io_conf.pin_bit_mask = (1ULL << m_config.tx_pin);
+        io_conf.mode = GPIO_MODE_OUTPUT;
+        io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
+        io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
+        io_conf.intr_type = GPIO_INTR_DISABLE;
+        gpio_config(&io_conf);
+        gpio_set_level(m_config.tx_pin, Constants::RMT_LEVEL_IDLE);
         rmt_tx_channel_config_t tx_cfg = {
             .gpio_num = m_config.tx_pin,
             .clk_src = RMT_CLK_SRC_DEFAULT,
@@ -53,7 +61,6 @@ namespace daliMQTT::Driver {
             .trans_queue_depth = 4,
             .flags = { .invert_out = false, .with_dma = false },
         };
-        gpio_set_level(m_config.tx_pin, Constants::RMT_LEVEL_IDLE); // ?
 
         ESP_RETURN_ON_ERROR(rmt_new_tx_channel(&tx_cfg, &m_tx_channel), TAG, "New TX failed");
 
@@ -68,13 +75,19 @@ namespace daliMQTT::Driver {
     }
 
     esp_err_t DaliDriver::setupRx() {
+        gpio_config_t io_conf = {};
+        io_conf.pin_bit_mask = (1ULL << m_config.rx_pin);
+        io_conf.mode = GPIO_MODE_INPUT;
+        io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
+        io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
+        gpio_config(&io_conf);
         rmt_rx_channel_config_t rx_cfg = {
             .gpio_num = m_config.rx_pin,
             .clk_src = RMT_CLK_SRC_DEFAULT,
             .resolution_hz = m_config.resolution_hz,
             .mem_block_symbols = 64,
             .flags = {
-                .invert_in = false,
+                .invert_in = true,
                 .with_dma = false
             }
         };
@@ -154,7 +167,6 @@ namespace daliMQTT::Driver {
                         last_rx_was_backward = (decoded_bits == 8);
                     } else {
                         m_last_bus_activity_us = esp_timer_get_time();
-                        vTaskDelay(pdMS_TO_TICKS(1));
 
                     }
                     rmt_receive_config_t rx_config = {
@@ -164,6 +176,7 @@ namespace daliMQTT::Driver {
                     ESP_ERROR_CHECK(rmt_receive(m_rx_channel, m_rx_buffer, RX_BUFFER_SIZE * sizeof(rmt_symbol_word_t), &rx_config));
                 }
             }
+            vTaskDelay(pdMS_TO_TICKS(1));
 
             bool is_tx_active;
             {

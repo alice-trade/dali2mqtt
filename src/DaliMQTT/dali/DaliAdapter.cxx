@@ -23,7 +23,7 @@ namespace daliMQTT {
 
         m_dali_event_queue = xQueueCreate(32, sizeof(dali_frame_t));
         m_response_queue = xQueueCreate(1, sizeof(uint8_t));
-        xTaskCreate(busWorkerTask, "dali_bus_worker", 4096, this, configMAX_PRIORITIES - 2, &m_worker_task_handle);
+        xTaskCreate(busWorkerTask, "dali_bus_worker", 4096, this, 10, &m_worker_task_handle);
         m_initialized = true;
 
         ESP_LOGI(TAG, "Adapter initialized with DALI Driver (RMT).");
