@@ -73,7 +73,10 @@ namespace daliMQTT::Driver {
             .clk_src = RMT_CLK_SRC_DEFAULT,
             .resolution_hz = m_config.resolution_hz,
             .mem_block_symbols = 64,
-            .flags = { .with_dma = false },
+            .flags = {
+                .invert_in = true,
+                .with_dma = false
+            }
         };
         ESP_RETURN_ON_ERROR(rmt_new_rx_channel(&rx_cfg, &m_rx_channel), TAG, "New RX failed");
 
@@ -151,6 +154,8 @@ namespace daliMQTT::Driver {
                         last_rx_was_backward = (decoded_bits == 8);
                     } else {
                         m_last_bus_activity_us = esp_timer_get_time();
+                        vTaskDelay(1);
+
                     }
                     rmt_receive_config_t rx_config = {
                         .signal_range_min_ns = Constants::RX_MIN_NOISE_FILTER_NS,
@@ -190,7 +195,16 @@ namespace daliMQTT::Driver {
 
                 if (time_since_last_activity < required_delay_us) {
                     int64_t wait_us = required_delay_us - time_since_last_activity;
-                    if (wait_us > 0) {
+                    if (wait_us > 2000) {
+                        uint32_t ticks = (wait_us / 1000);
+                        if (ticks > 1) vTaskDelay(ticks - 1);
+
+                        now_us = esp_timer_get_time();
+                        int64_t remaining_us = required_delay_us - (now_us - m_last_bus_activity_us);
+                        if (remaining_us > 0) {
+                            esp_rom_delay_us(static_cast<uint32_t>(remaining_us));
+                        }
+                    } else if (wait_us > 0) {
                         esp_rom_delay_us(static_cast<uint32_t>(wait_us));
                     }
                 }
