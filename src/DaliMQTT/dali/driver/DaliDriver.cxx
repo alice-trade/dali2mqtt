@@ -32,10 +32,10 @@ namespace daliMQTT::Driver {
         ESP_RETURN_ON_ERROR(setupTx(), TAG, "TX Setup failed");
         ESP_RETURN_ON_ERROR(setupRx(), TAG, "RX Setup failed");
 
-        xTaskCreate(driverTaskWrapper, "dali_rmt_task", 4096, this, configMAX_PRIORITIES - 1, &m_driver_task);
+        xTaskCreate(driverTaskWrapper, "dali_rmt_task", 4096, this, 10, &m_driver_task);
 
         rmt_receive_config_t rx_config = {
-            .signal_range_min_ns = 50000,   // 50us noise filter
+            .signal_range_min_ns = Constants::RX_MIN_NOISE_FILTER_NS,   // 50us noise filter
             .signal_range_max_ns = Constants::RX_IDLE_THRESH_NS, // 1.8ms Idle = Stop Condition
         };
         ESP_ERROR_CHECK(rmt_receive(m_rx_channel, m_rx_buffer, RX_BUFFER_SIZE * sizeof(rmt_symbol_word_t), &rx_config));
@@ -154,7 +154,7 @@ namespace daliMQTT::Driver {
                         last_rx_was_backward = (decoded_bits == 8);
                     } else {
                         m_last_bus_activity_us = esp_timer_get_time();
-                        vTaskDelay(1);
+                        vTaskDelay(pdMS_TO_TICKS(1));
 
                     }
                     rmt_receive_config_t rx_config = {
