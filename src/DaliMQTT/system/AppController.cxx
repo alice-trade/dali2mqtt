@@ -23,6 +23,7 @@ namespace daliMQTT
     void AppController::startProvisioningMode() {
         ESP_LOGI(TAG, "Starting in provisioning mode...");
         SystemHardwareControls::checkOtaValidation();
+
         auto& wifi = Wifi::Instance();
         wifi.init();
 
@@ -37,10 +38,12 @@ namespace daliMQTT
 
         SystemHardwareControls::checkOtaValidation();
         SystemHardwareControls::startResetConfigurationButtonMonitor();
+
+        initNetworkSubsystem();
         initDaliSubsystem();
+
         MQTTCommandProcess::Instance().init();
         WebUI::Instance().start();
-        initNetworkSubsystem();
     }
 
     void AppController::initDaliSubsystem() {
