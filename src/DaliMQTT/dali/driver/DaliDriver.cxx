@@ -49,7 +49,7 @@ namespace daliMQTT::Driver {
             .gpio_num = m_config.tx_pin,
             .clk_src = RMT_CLK_SRC_DEFAULT,
             .resolution_hz = m_config.resolution_hz,
-            .mem_block_symbols = 128,
+            .mem_block_symbols = 64,
             .trans_queue_depth = 4,
             .flags = { .invert_out = false, .with_dma = false },
         };
@@ -72,7 +72,7 @@ namespace daliMQTT::Driver {
             .gpio_num = m_config.rx_pin,
             .clk_src = RMT_CLK_SRC_DEFAULT,
             .resolution_hz = m_config.resolution_hz,
-            .mem_block_symbols = 128,
+            .mem_block_symbols = 64,
             .flags = { .with_dma = false },
         };
         ESP_RETURN_ON_ERROR(rmt_new_rx_channel(&rx_cfg, &m_rx_channel), TAG, "New RX failed");
