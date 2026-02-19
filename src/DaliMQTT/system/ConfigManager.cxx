@@ -278,35 +278,39 @@ namespace daliMQTT
         return config_cache.mqtt_base_topic;
     }
 
-    cJSON* ConfigManager::getSerializedConfig(const bool mask_passwords) const {
+    std::string ConfigManager::getSerializedConfig(const bool mask_passwords) const {
         const AppConfig cfg = getConfig();
-        cJSON* root = cJSON_CreateObject();
+        JsonDocument doc;
 
-        cJSON_AddStringToObject(root, "wifi_ssid", cfg.wifi_ssid.c_str());
-        cJSON_AddStringToObject(root, "mqtt_uri", cfg.mqtt_uri.c_str());
-        cJSON_AddStringToObject(root, "mqtt_user", cfg.mqtt_user.c_str());
-        cJSON_AddStringToObject(root, "client_id", cfg.client_id.c_str());
-        cJSON_AddStringToObject(root, "mqtt_base_topic", cfg.mqtt_base_topic.c_str());
-        cJSON_AddStringToObject(root, "http_domain", cfg.http_domain.c_str());
-        cJSON_AddStringToObject(root, "http_user", cfg.http_user.c_str());
-        cJSON_AddStringToObject(root, "syslog_server", cfg.syslog_server.c_str());
-        cJSON_AddBoolToObject(root, "syslog_enabled", cfg.syslog_enabled);
-        cJSON_AddNumberToObject(root, "dali_poll_interval_ms", cfg.dali_poll_interval_ms);
-        cJSON_AddStringToObject(root, "ota_url", cfg.app_ota_url.c_str());
-        cJSON_AddBoolToObject(root, "hass_discovery_enabled", cfg.hass_discovery_enabled);
+        doc["wifi_ssid"] = cfg.wifi_ssid;
+        doc["mqtt_uri"] = cfg.mqtt_uri;
+        doc["mqtt_user"] = cfg.mqtt_user;
+        doc["client_id"] = cfg.client_id;
+        doc["mqtt_base_topic"] = cfg.mqtt_base_topic;
+        doc["http_domain"] = cfg.http_domain;
+        doc["http_user"] = cfg.http_user;
+        doc["syslog_server"] = cfg.syslog_server;
+        doc["syslog_enabled"] = cfg.syslog_enabled;
+        doc["dali_poll_interval_ms"] = cfg.dali_poll_interval_ms;
+        doc["ota_url"] = cfg.app_ota_url;
+        doc["hass_discovery_enabled"] = cfg.hass_discovery_enabled;
 
         const char* pass_placeholder = mask_passwords ? "***" : "";
-        cJSON_AddStringToObject(root, "wifi_password", mask_passwords ? pass_placeholder : cfg.wifi_password.c_str());
-        cJSON_AddStringToObject(root, "mqtt_pass", mask_passwords ? pass_placeholder : cfg.mqtt_pass.c_str());
-        cJSON_AddStringToObject(root, "http_pass", mask_passwords ? pass_placeholder : cfg.http_pass.c_str());
+        doc["wifi_password"] = mask_passwords ? pass_placeholder : cfg.wifi_password;
+        doc["mqtt_pass"] = mask_passwords ? pass_placeholder : cfg.mqtt_pass;
+        doc["http_pass"] = mask_passwords ? pass_placeholder : cfg.http_pass;
 
-        return root;
+        std::string json_string;
+        serializeJson(doc, json_string);
+        return json_string;
     }
 
     ConfigUpdateResult ConfigManager::updateConfigFromJson(const char* json_str) {
-        cJSON *root = cJSON_Parse(json_str);
-        if (root == nullptr) {
-            ESP_LOGE(TAG, "Failed to parse configuration JSON");
+        JsonDocument doc;
+        DeserializationError error = deserializeJson(doc, json_str);
+
+        if (error) {
+            ESP_LOGE(TAG, "Failed to parse configuration JSON: %s", error.c_str());
             return ConfigUpdateResult::NoUpdate;
         }
 
@@ -315,87 +319,66 @@ namespace daliMQTT
         bool changed = false;
 
         #define JsonSetStrConfig(NAME, KEY) \
-            if (cJSON* item = cJSON_GetObjectItem(root, KEY); cJSON_IsString(item) && (item->valuestring != nullptr)) { \
-                std::string val = item->valuestring; \
-                if (!val.empty() && val != "***") { \
-                    if (current_cfg.NAME != val) { \
-                        current_cfg.NAME = val; \
-                        changed = true; \
-                    } \
+            if (doc.containsKey(KEY) && doc[KEY].is<const char*>()) { \
+                std::string val = doc[KEY].as<std::string>(); \
+                if (!val.empty() && val != "***" && current_cfg.NAME != val) { \
+                    current_cfg.NAME = val; \
+                    changed = true; \
                 } \
             }
 
         JsonSetStrConfig(wifi_ssid, "wifi_ssid");
         JsonSetStrConfig(wifi_password, "wifi_pass");
-        if (cJSON_GetObjectItem(root, "wifi_password")) JsonSetStrConfig(wifi_password, "wifi_password");
+        JsonSetStrConfig(wifi_password, "wifi_password");
 
         JsonSetStrConfig(mqtt_uri, "mqtt_uri");
         JsonSetStrConfig(mqtt_user, "mqtt_user");
         JsonSetStrConfig(mqtt_pass, "mqtt_pass");
 
-        if (cJSON* item = cJSON_GetObjectItem(root, "mqtt_ca_cert"); cJSON_IsString(item) && (item->valuestring != nullptr)) {
-            std::string val = item->valuestring;
-            if (val != "***") {
-                if (current_cfg.mqtt_ca_cert != val) {
-                    current_cfg.mqtt_ca_cert = val;
-                    changed = true;
-                }
+        if (doc.containsKey("mqtt_ca_cert") && doc["mqtt_ca_cert"].is<const char*>()) {
+            std::string val = doc["mqtt_ca_cert"].as<std::string>();
+            if (val != "***" && current_cfg.mqtt_ca_cert != val) {
+                current_cfg.mqtt_ca_cert = val;
+                changed = true;
             }
         }
 
         JsonSetStrConfig(client_id, "client_id");
-        if (cJSON_GetObjectItem(root, "cid")) JsonSetStrConfig(client_id, "cid");
+        JsonSetStrConfig(client_id, "cid");
 
         JsonSetStrConfig(mqtt_base_topic, "mqtt_base_topic");
-        if (cJSON_GetObjectItem(root, "mqtt_base")) JsonSetStrConfig(mqtt_base_topic, "mqtt_base");
+        JsonSetStrConfig(mqtt_base_topic, "mqtt_base");
 
         JsonSetStrConfig(http_domain, "http_domain");
         JsonSetStrConfig(http_user, "http_user");
         JsonSetStrConfig(http_pass, "http_pass");
         JsonSetStrConfig(syslog_server, "syslog_server");
-        if (cJSON_GetObjectItem(root, "syslog_srv")) JsonSetStrConfig(syslog_server, "syslog_srv");
+        JsonSetStrConfig(syslog_server, "syslog_srv");
 
         JsonSetStrConfig(app_ota_url, "ota_url");
 
         #undef JsonSetStrConfig
 
-        if (cJSON* item = cJSON_GetObjectItem(root, "syslog_enabled"); cJSON_IsBool(item)) {
-            bool val = cJSON_IsTrue(item);
-            if (current_cfg.syslog_enabled != val) {
-                current_cfg.syslog_enabled = val;
-                changed = true;
+        auto checkBool = [&](const char* key, bool& target) {
+            if (doc.containsKey(key)) {
+                bool val = doc[key].is<bool>() ? doc[key].as<bool>() : (doc[key].as<int>() != 0);
+                if (target != val) { target = val; changed = true; }
             }
-        }
-        if (cJSON* item = cJSON_GetObjectItem(root, "syslog_en"); cJSON_IsNumber(item)) { // WebUI might send 0/1
-             bool val = (item->valueint != 0);
-             if (current_cfg.syslog_enabled != val) {
-                current_cfg.syslog_enabled = val;
-                changed = true;
-            }
-        }
-        if (cJSON* item = cJSON_GetObjectItem(root, "hass_discovery_enabled"); cJSON_IsBool(item)) {
-            bool val = cJSON_IsTrue(item);
-            if (current_cfg.hass_discovery_enabled != val) {
-                current_cfg.hass_discovery_enabled = val;
-                changed = true;
-            }
-        }
-        if (cJSON* item = cJSON_GetObjectItem(root, "dali_poll_interval_ms"); cJSON_IsNumber(item)) {
-            uint32_t val = static_cast<uint32_t>(item->valueint);
-            if (current_cfg.dali_poll_interval_ms != val) {
-                current_cfg.dali_poll_interval_ms = val;
-                changed = true;
-            }
-        }
-        if (cJSON* item = cJSON_GetObjectItem(root, "dali_poll"); cJSON_IsNumber(item)) {
-            uint32_t val = static_cast<uint32_t>(item->valueint);
-            if (current_cfg.dali_poll_interval_ms != val) {
-                current_cfg.dali_poll_interval_ms = val;
-                changed = true;
-            }
-        }
+        };
 
-        cJSON_Delete(root);
+        checkBool("syslog_enabled", current_cfg.syslog_enabled);
+        checkBool("syslog_en", current_cfg.syslog_enabled);
+        checkBool("hass_discovery_enabled", current_cfg.hass_discovery_enabled);
+
+        auto checkNum = [&](const char* key, uint32_t& target) {
+            if (doc.containsKey(key) && doc[key].is<uint32_t>()) {
+                uint32_t val = doc[key].as<uint32_t>();
+                if (target != val) { target = val; changed = true; }
+            }
+        };
+
+        checkNum("dali_poll_interval_ms", current_cfg.dali_poll_interval_ms);
+        checkNum("dali_poll", current_cfg.dali_poll_interval_ms);
 
         if (!changed) {
             return ConfigUpdateResult::NoUpdate;
@@ -410,19 +393,15 @@ namespace daliMQTT
             return ConfigUpdateResult::NoUpdate;
         }
 
-        if (old_cfg.wifi_ssid != current_cfg.wifi_ssid ||
-            old_cfg.wifi_password != current_cfg.wifi_password) {
+        if (old_cfg.wifi_ssid != current_cfg.wifi_ssid || old_cfg.wifi_password != current_cfg.wifi_password) {
             return ConfigUpdateResult::WIFIUpdate;
-            }
+        }
 
-        if (old_cfg.mqtt_uri != current_cfg.mqtt_uri ||
-            old_cfg.mqtt_user != current_cfg.mqtt_user ||
-            old_cfg.mqtt_pass != current_cfg.mqtt_pass ||
-            old_cfg.mqtt_ca_cert != current_cfg.mqtt_ca_cert ||
-            old_cfg.mqtt_base_topic != current_cfg.mqtt_base_topic ||
-            old_cfg.client_id != current_cfg.client_id) {
+        if (old_cfg.mqtt_uri != current_cfg.mqtt_uri || old_cfg.mqtt_user != current_cfg.mqtt_user ||
+            old_cfg.mqtt_pass != current_cfg.mqtt_pass || old_cfg.mqtt_ca_cert != current_cfg.mqtt_ca_cert ||
+            old_cfg.mqtt_base_topic != current_cfg.mqtt_base_topic || old_cfg.client_id != current_cfg.client_id) {
             return ConfigUpdateResult::MQTTUpdate;
-            }
+        }
 
         return ConfigUpdateResult::SystemUpdate;
     }

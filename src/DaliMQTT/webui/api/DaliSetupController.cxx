@@ -25,55 +25,53 @@ namespace daliMQTT {
         vTaskDelete(nullptr);
     }
 
-    esp_err_t WebUI::api::DaliGetDevicesHandler(httpd_req_t *req) {
+     esp_err_t WebUI::api::DaliGetDevicesHandler(httpd_req_t *req) {
         if (checkAuth(req) != ESP_OK) return ESP_FAIL;
 
         auto devices = DaliDeviceController::Instance().getDevices();
-        cJSON *root = cJSON_CreateArray();
+        JsonDocument doc;
+        JsonArray root = doc.to<JsonArray>();
 
         for (const auto& [long_addr, dev] : devices) {
-            cJSON* device_obj = cJSON_CreateObject();
+            JsonObject device_obj = root.add<JsonObject>();
             const auto addr_str = utils::longAddressToString(long_addr);
-            cJSON_AddStringToObject(device_obj, "long_address", addr_str.data());
+            device_obj["long_address"] = addr_str.data();
+
             const auto& identity = getIdentity(dev);
             if (!identity.gtin.empty()) {
-                cJSON_AddStringToObject(device_obj, "gtin", identity.gtin.c_str());
+                device_obj["gtin"] = identity.gtin;
             }
-            if (auto* gear = std::get_if<ControlGear>(&dev)) {
-                cJSON_AddStringToObject(device_obj, "type", "gear");
-                cJSON_AddNumberToObject(device_obj, "short_address", gear->short_address);
 
-                cJSON_AddNumberToObject(device_obj, "level", gear->current_level);
-                cJSON_AddBoolToObject(device_obj, "available", gear->available);
-                const bool is_failure = (gear->status_byte >> 1) & 0x01;
-                cJSON_AddBoolToObject(device_obj, "lamp_failure", is_failure);
+            if (auto* gear = std::get_if<ControlGear>(&dev)) {
+                device_obj["type"] = "gear";
+                device_obj["short_address"] = gear->short_address;
+                device_obj["level"] = gear->current_level;
+                device_obj["available"] = gear->available;
+                device_obj["lamp_failure"] = (gear->status_byte >> 1) & 0x01;
 
                 if (gear->device_type.has_value()) {
-                    cJSON_AddNumberToObject(device_obj, "dt", gear->device_type.value());
+                    device_obj["dt"] = gear->device_type.value();
                 } else {
-                    cJSON_AddNullToObject(device_obj, "dt");
+                    device_obj["dt"] = nullptr;
                 }
                 if (gear->static_data_loaded) {
-                    cJSON_AddNumberToObject(device_obj, "min", gear->min_level);
-                    cJSON_AddNumberToObject(device_obj, "max", gear->max_level);
-                    cJSON_AddNumberToObject(device_obj, "on_level", gear->power_on_level);
-                    cJSON_AddNumberToObject(device_obj, "fail_level", gear->system_failure_level);
+                    device_obj["min"] = gear->min_level;
+                    device_obj["max"] = gear->max_level;
+                    device_obj["on_level"] = gear->power_on_level;
+                    device_obj["fail_level"] = gear->system_failure_level;
                 }
             }
             else if (auto* id = std::get_if<InputDevice>(&dev)) {
-                cJSON_AddStringToObject(device_obj, "type", "input");
-                cJSON_AddNumberToObject(device_obj, "short_address", id->short_address);
-                cJSON_AddBoolToObject(device_obj, "available", id->available);
+                device_obj["type"] = "input";
+                device_obj["short_address"] = id->short_address;
+                device_obj["available"] = id->available;
             }
-
-            cJSON_AddItemToArray(root, device_obj);
         }
 
-        char *json_string = cJSON_PrintUnformatted(root);
+        std::string json_string;
+        serializeJson(doc, json_string);
         httpd_resp_set_type(req, "application/json");
-        httpd_resp_send(req, json_string, HTTPD_RESP_USE_STRLEN);
-        cJSON_Delete(root);
-        free(json_string);
+        httpd_resp_send(req, json_string.c_str(), json_string.length());
 
         return ESP_OK;
     }
@@ -171,64 +169,52 @@ namespace daliMQTT {
         if (ret <= 0) return ESP_FAIL;
         buf[ret] = '\0';
 
-        cJSON *root = cJSON_Parse(buf.data());
-        if (!cJSON_IsObject(root)) {
-            cJSON_Delete(root);
+        JsonDocument doc;
+        if (deserializeJson(doc, buf.data()) || !doc.is<JsonObject>()) {
             httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON: root must be an object");
             return ESP_FAIL;
         }
 
-        const cJSON* item = nullptr;
-        cJSON_ArrayForEach(item, root) {
-            if (!utils::stringToLongAddress(item->string)) {
-                 cJSON_Delete(root);
-                 httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON: all keys must be valid long addresses.");
-                 return ESP_FAIL;
+        for (JsonPair kv : doc.as<JsonObject>()) {
+            if (!utils::stringToLongAddress(kv.key().c_str())) {
+                httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON: all keys must be valid long addresses.");
+                return ESP_FAIL;
             }
-            if (!cJSON_IsString(item)) {
-                cJSON_Delete(root);
+            if (!kv.value().is<const char*>()) {
                 httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON: all device names must be strings.");
                 return ESP_FAIL;
             }
         }
 
-        char* clean_json_string = cJSON_PrintUnformatted(root);
-        cJSON_Delete(root);
-        if (!clean_json_string) {
-            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to serialize JSON.");
-            return ESP_FAIL;
-        }
-        ESP_LOGD(TAG, "Called set names with JSON: %s", clean_json_string);
-
+        std::string clean_json_string;
+        serializeJson(doc, clean_json_string);
         ConfigManager::Instance().saveDaliDeviceIdentificators(clean_json_string);
-        free(clean_json_string);
 
         httpd_resp_send(req, R"({"status":"ok", "message":"Device names saved."})", -1);
         return ESP_OK;
     }
 
+
     esp_err_t WebUI::api::DaliGetGroupsHandler(httpd_req_t *req) {
         if (checkAuth(req) != ESP_OK) return ESP_FAIL;
 
         const auto assignments = DaliGroupManagement::Instance().getAllAssignments();
-        cJSON *root = cJSON_CreateObject();
+        JsonDocument doc;
 
         for (const auto& [long_addr, groups] : assignments) {
             const auto addr_str = utils::longAddressToString(long_addr);
-            cJSON* group_array = cJSON_CreateArray();
+            JsonArray group_array = doc[addr_str.data()].to<JsonArray>();
             for (int i = 0; i < 16; ++i) {
                 if (groups.test(i)) {
-                    cJSON_AddItemToArray(group_array, cJSON_CreateNumber(i));
+                    group_array.add(i);
                 }
             }
-            cJSON_AddItemToObject(root, addr_str.data(), group_array);
         }
 
-        char *json_string = cJSON_PrintUnformatted(root);
+        std::string json_string;
+        serializeJson(doc, json_string);
         httpd_resp_set_type(req, "application/json");
-        httpd_resp_send(req, json_string, HTTPD_RESP_USE_STRLEN);
-        cJSON_Delete(root);
-        free(json_string);
+        httpd_resp_send(req, json_string.c_str(), json_string.length());
         return ESP_OK;
     }
 
@@ -241,34 +227,28 @@ namespace daliMQTT {
         std::vector<char> buf(req->content_len + 1, 0);
         if (httpd_req_recv(req, buf.data(), req->content_len) <= 0) return ESP_FAIL;
 
-        cJSON *root = cJSON_Parse(buf.data());
-        if (!cJSON_IsObject(root)) {
-                httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON: root must be an object");
-                cJSON_Delete(root);
-                return ESP_FAIL;
+        JsonDocument doc;
+        if (deserializeJson(doc, buf.data()) || !doc.is<JsonObject>()) {
+            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON: root must be an object");
+            return ESP_FAIL;
         }
 
         GroupAssignments new_assignments;
-        cJSON* device_item = nullptr;
-        cJSON_ArrayForEach(device_item, root) {
-            auto long_addr_opt = utils::stringToLongAddress(device_item->string);
-            if (!long_addr_opt) {
-                ESP_LOGW(TAG, "Skipping invalid long address key '%s' in set groups request.", device_item->string);
-                continue;
-            }
+        for (JsonPair kv : doc.as<JsonObject>()) {
+            auto long_addr_opt = utils::stringToLongAddress(kv.key().c_str());
+            if (!long_addr_opt) continue;
 
             std::bitset<16> groups;
-            if (cJSON_IsArray(device_item)) {
-                cJSON* group_item = nullptr;
-                cJSON_ArrayForEach(group_item, device_item) {
-                    if (cJSON_IsNumber(group_item) && group_item->valueint >= 0 && group_item->valueint < 16) {
-                        groups.set(group_item->valueint);
+            if (kv.value().is<JsonArray>()) {
+                for (JsonVariant v : kv.value().as<JsonArray>()) {
+                    if (v.is<int>()) {
+                        int g = v.as<int>();
+                        if (g >= 0 && g < 16) groups.set(g);
                     }
                 }
             }
             new_assignments[*long_addr_opt] = groups;
         }
-        cJSON_Delete(root);
 
         DaliGroupManagement::Instance().setAllAssignments(new_assignments);
 
@@ -285,39 +265,32 @@ namespace daliMQTT {
         std::vector<char> buf(req->content_len + 1, 0);
         if (httpd_req_recv(req, buf.data(), req->content_len) <= 0) return ESP_FAIL;
 
-        cJSON *root = cJSON_Parse(buf.data());
-        if (!cJSON_IsObject(root)) {
-                httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON: root must be an object");
-                cJSON_Delete(root);
-                return ESP_FAIL;
-        }
-
-        const cJSON* scene_id_item = cJSON_GetObjectItem(root, "scene_id");
-        const cJSON* levels_item = cJSON_GetObjectItem(root, "levels");
-
-        if (!cJSON_IsNumber(scene_id_item) || !cJSON_IsObject(levels_item)) {
-            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON: 'scene_id' or 'levels' are missing/invalid");
-            cJSON_Delete(root);
+        JsonDocument doc;
+        if (deserializeJson(doc, buf.data()) || !doc.is<JsonObject>()) {
+            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON: root must be an object");
             return ESP_FAIL;
         }
 
-        const uint8_t scene_id = scene_id_item->valueint;
-        SceneDeviceLevels levels; // This is map<short_addr, level>
+        if (!doc["scene_id"].is<int>() || !doc["levels"].is<JsonObject>()) {
+            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON: 'scene_id' or 'levels' are missing/invalid");
+            return ESP_FAIL;
+        }
+
+        const uint8_t scene_id = doc["scene_id"].as<int>();
+        SceneDeviceLevels levels;
         const auto& controller = DaliDeviceController::Instance();
 
-        const cJSON* level_item = nullptr;
-        cJSON_ArrayForEach(level_item, levels_item) {
-            auto long_addr_opt = utils::stringToLongAddress(level_item->string);
+        for (JsonPair kv : doc["levels"].as<JsonObject>()) {
+            auto long_addr_opt = utils::stringToLongAddress(kv.key().c_str());
             if (!long_addr_opt) continue;
 
             auto short_addr_opt = controller.getShortAddress(*long_addr_opt);
             if (!short_addr_opt) continue;
 
-            const uint8_t level = level_item->valueint;
-            levels[*short_addr_opt] = level;
+            if (kv.value().is<int>()) {
+                levels[*short_addr_opt] = kv.value().as<int>();
+            }
         }
-
-        cJSON_Delete(root);
 
         DaliSceneManagement::Instance().saveScene(scene_id, levels);
 
@@ -373,25 +346,23 @@ namespace daliMQTT {
 
         auto levels = DaliSceneManagement::Instance().getSceneLevels(static_cast<uint8_t>(scene_id));
 
-        cJSON *root = cJSON_CreateObject();
-        cJSON_AddNumberToObject(root, "scene_id", scene_id);
+        JsonDocument doc;
+        doc["scene_id"] = scene_id;
 
-        cJSON *levels_obj = cJSON_CreateObject();
+        JsonObject levels_obj = doc["levels"].to<JsonObject>();
         const auto& controller = DaliDeviceController::Instance();
 
         for (const auto& [short_addr, level] : levels) {
             auto long_addr_opt = controller.getLongAddress(short_addr);
             if (long_addr_opt) {
-                cJSON_AddNumberToObject(levels_obj, utils::longAddressToString(*long_addr_opt).data(), level);
+                levels_obj[utils::longAddressToString(*long_addr_opt).data()] = level;
             }
         }
-        cJSON_AddItemToObject(root, "levels", levels_obj);
 
-        char *json_string = cJSON_PrintUnformatted(root);
+        std::string json_string;
+        serializeJson(doc, json_string);
         httpd_resp_set_type(req, "application/json");
-        httpd_resp_send(req, json_string, HTTPD_RESP_USE_STRLEN);
-        cJSON_Delete(root);
-        free(json_string);
+        httpd_resp_send(req, json_string.c_str(), json_string.length());
 
         return ESP_OK;
     }

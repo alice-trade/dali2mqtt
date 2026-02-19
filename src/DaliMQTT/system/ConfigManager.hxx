@@ -78,7 +78,7 @@ namespace daliMQTT
 
             [[nodiscard]] bool isConfigured() const;
 
-            struct cJSON* getSerializedConfig(bool mask_passwords = true) const;
+            std::string getSerializedConfig(bool mask_passwords = true) const;
 
             ConfigUpdateResult updateConfigFromJson(const char* json_str);
 

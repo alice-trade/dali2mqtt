@@ -57,14 +57,10 @@ namespace daliMQTT {
     esp_err_t WebUI::api::GetConfigHandler(httpd_req_t *req) {
         if (checkAuth(req) != ESP_OK) return ESP_FAIL;
 
-        cJSON *root = ConfigManager::Instance().getSerializedConfig(true);
-
-        char *json_string = cJSON_Print(root);
+        std::string json_string = ConfigManager::Instance().getSerializedConfig(true);
         httpd_resp_set_type(req, "application/json");
-        httpd_resp_send(req, json_string, strlen(json_string));
+        httpd_resp_send(req, json_string.c_str(), json_string.length());
 
-        cJSON_Delete(root);
-        free(json_string);
         return ESP_OK;
     }
 }

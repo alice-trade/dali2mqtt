@@ -18,18 +18,16 @@ namespace daliMQTT
         availability_topic = utils::stringFormat("%s%s", base_topic.c_str(), CONFIG_DALI2MQTT_MQTT_AVAILABILITY_TOPIC);
         bridge_public_name = utils::stringFormat("DALI-MQTT Bridge (%s)", config.client_id.c_str());
 
-        cJSON* names_root = cJSON_Parse(config.dali_device_identificators.c_str());
-        if (cJSON_IsObject(names_root)) {
-            const cJSON* current_name = nullptr;
-            const auto addr_str = utils::longAddressToString(0);
-            cJSON_ArrayForEach(current_name, names_root) {
-                if (cJSON_IsString(current_name) && current_name->valuestring != nullptr) {
-                    std::string key(current_name->string, strnlen(current_name->string, addr_str.size()));
-                    device_identification[key] = current_name->valuestring;
+        JsonDocument names_root;
+        if (!deserializeJson(names_root, config.dali_device_identificators)) {
+            if (names_root.is<JsonObject>()) {
+                for (JsonPair kv : names_root.as<JsonObject>()) {
+                    if (kv.value().is<const char*>()) {
+                        device_identification[kv.key().c_str()] = kv.value().as<const char*>();
+                    }
                 }
             }
         }
-        cJSON_Delete(names_root);
     }
 
     void MQTTHomeAssistantDiscovery::publishAllDevices() {
@@ -66,8 +64,7 @@ namespace daliMQTT
             readable_name = utils::stringFormat("DALI Device %s", addr_str.c_str());
         }
 
-        cJSON* root = cJSON_CreateObject();
-        if (!root) return;
+        JsonDocument doc;
 
         ControlGear dev_copy;
         {
@@ -83,61 +80,50 @@ namespace daliMQTT
             }
         }
 
-        cJSON_AddStringToObject(root, "name", readable_name.c_str());
-        cJSON_AddStringToObject(root, "unique_id", object_id.c_str());
-        cJSON_AddStringToObject(root, "schema", "json");
-        cJSON_AddStringToObject(root, "command_topic", utils::stringFormat("%s/light/%s/set", base_topic.c_str(), addr_str.c_str()).c_str());
-        cJSON_AddStringToObject(root, "state_topic", utils::stringFormat("%s/light/%s/state", base_topic.c_str(), addr_str.c_str()).c_str());
-        cJSON_AddTrueToObject(root, "brightness");
+        doc["name"] = readable_name;
+        doc["unique_id"] = object_id;
+        doc["schema"] = "json";
+        doc["command_topic"] = utils::stringFormat("%s/light/%s/set", base_topic.c_str(), addr_str.c_str());
+        doc["state_topic"] = utils::stringFormat("%s/light/%s/state", base_topic.c_str(), addr_str.c_str());
+        doc["brightness"] = true;
 
         if (dev_copy.device_type.has_value() && dev_copy.device_type.value() == 8 && dev_copy.color.has_value()) {
             const auto& c = dev_copy.color.value();
-            cJSON* color_modes = cJSON_CreateArray();
+            JsonArray color_modes = doc["supported_color_modes"].to<JsonArray>();
             if (c.supports_tc) {
-                cJSON_AddItemToArray(color_modes, cJSON_CreateString("color_temp"));
-                cJSON_AddNumberToObject(root, "min_mireds", c.min_mireds.value_or(153)); // ~6500K
-                cJSON_AddNumberToObject(root, "max_mireds", c.max_mireds.value_or(500)); // ~2000K
+                color_modes.add("color_temp");
+                doc["min_mireds"] = c.min_mireds.value_or(153);
+                doc["max_mireds"] = c.max_mireds.value_or(500);
             }
-
             if (c.supports_rgb) {
-                cJSON_AddItemToArray(color_modes, cJSON_CreateString("rgb"));
+                color_modes.add("rgb");
             }
-
-            cJSON_AddItemToObject(root, "supported_color_modes", color_modes);
         }
 
-        cJSON* av_list = cJSON_CreateArray();
-        cJSON* av_bridge = cJSON_CreateObject();
-        cJSON_AddStringToObject(av_bridge, "topic", availability_topic.c_str());
-        cJSON_AddStringToObject(av_bridge, "payload_available", CONFIG_DALI2MQTT_MQTT_PAYLOAD_ONLINE);
-        cJSON_AddStringToObject(av_bridge, "payload_not_available", CONFIG_DALI2MQTT_MQTT_PAYLOAD_OFFLINE);
-        cJSON_AddItemToArray(av_list, av_bridge);
+        JsonArray av_list = doc["availability"].to<JsonArray>();
 
-        cJSON* av_device = cJSON_CreateObject();
-        cJSON_AddStringToObject(av_device, "topic", device_status_topic.c_str());
-        cJSON_AddStringToObject(av_device, "payload_available", CONFIG_DALI2MQTT_MQTT_PAYLOAD_ONLINE);
-        cJSON_AddStringToObject(av_device, "payload_not_available", CONFIG_DALI2MQTT_MQTT_PAYLOAD_OFFLINE);
-        cJSON_AddItemToArray(av_list, av_device);
+        JsonObject av_bridge = av_list.add<JsonObject>();
+        av_bridge["topic"] = availability_topic;
+        av_bridge["payload_available"] = CONFIG_DALI2MQTT_MQTT_PAYLOAD_ONLINE;
+        av_bridge["payload_not_available"] = CONFIG_DALI2MQTT_MQTT_PAYLOAD_OFFLINE;
 
-        cJSON_AddItemToObject(root, "availability", av_list);
-        cJSON_AddStringToObject(root, "availability_mode", "all");
+        JsonObject av_device = av_list.add<JsonObject>();
+        av_device["topic"] = device_status_topic;
+        av_device["payload_available"] = CONFIG_DALI2MQTT_MQTT_PAYLOAD_ONLINE;
+        av_device["payload_not_available"] = CONFIG_DALI2MQTT_MQTT_PAYLOAD_OFFLINE;
 
-        cJSON* device = cJSON_CreateObject();
-        if (device) {
-            cJSON_AddStringToObject(device, "identifiers", bridge_public_name.c_str());
-            cJSON_AddStringToObject(device, "name", bridge_public_name.c_str());
-            cJSON_AddStringToObject(device, "model", "ESP32 DALI Bridge");
-            cJSON_AddStringToObject(device, "manufacturer", "DALI-MQTT4ESP");
-            cJSON_AddStringToObject(device, "sw_version", DALIMQTT_VERSION);
-            cJSON_AddItemToObject(root, "device", device);
-        }
+        doc["availability_mode"] = "all";
 
-        if (char* json_payload = cJSON_PrintUnformatted(root)) {
-            mqtt.publish(discovery_topic, json_payload, 1, true);
-            free(json_payload);
-        }
+        JsonObject device = doc["device"].to<JsonObject>();
+        device["identifiers"] = bridge_public_name;
+        device["name"] = bridge_public_name;
+        device["model"] = "ESP32 DALI Bridge";
+        device["manufacturer"] = "DALI-MQTT4ESP";
+        device["sw_version"] = DALIMQTT_VERSION;
 
-        cJSON_Delete(root);
+        std::string json_payload;
+        serializeJson(doc, json_payload);
+        mqtt.publish(discovery_topic, json_payload, 1, true);
     }
 
     void MQTTHomeAssistantDiscovery::publishGroup(uint8_t group_id) {
@@ -147,18 +133,14 @@ namespace daliMQTT
         const std::string discovery_topic = utils::stringFormat("homeassistant/light/%s/config", object_id.c_str());
         const std::string readable_name = utils::stringFormat("DALI Group %d", group_id);
 
-        cJSON* root = cJSON_CreateObject();
-        if (!root) return;
+        JsonDocument doc;
 
-        cJSON_AddStringToObject(root, "name", readable_name.c_str());
-        cJSON_AddStringToObject(root, "unique_id", object_id.c_str());
-        cJSON_AddStringToObject(root, "schema", "json");
-        cJSON_AddStringToObject(root, "command_topic",
-                                utils::stringFormat("%s/light/group/%d/set", base_topic.c_str(), group_id).c_str());
-        cJSON_AddStringToObject(root, "state_topic",
-                                utils::stringFormat("%s/light/group/%d/state", base_topic.c_str(), group_id).c_str());
-
-        cJSON_AddTrueToObject(root, "brightness");
+        doc["name"] = readable_name;
+        doc["unique_id"] = object_id;
+        doc["schema"] = "json";
+        doc["command_topic"] = utils::stringFormat("%s/light/group/%d/set", base_topic.c_str(), group_id);
+        doc["state_topic"] = utils::stringFormat("%s/light/group/%d/state", base_topic.c_str(), group_id);
+        doc["brightness"] = true;
 
         bool group_supports_tc = false;
         bool group_supports_rgb = false;
@@ -183,38 +165,31 @@ namespace daliMQTT
         }
 
         if (group_supports_tc || group_supports_rgb) {
-            cJSON* color_modes = cJSON_CreateArray();
+            JsonArray color_modes = doc["supported_color_modes"].to<JsonArray>();
             if (group_supports_tc) {
-                cJSON_AddItemToArray(color_modes, cJSON_CreateString("color_temp"));
-                cJSON_AddNumberToObject(root, "min_mireds", 153);
-                cJSON_AddNumberToObject(root, "max_mireds", 500);
+                color_modes.add("color_temp");
+                doc["min_mireds"] = 153;
+                doc["max_mireds"] = 500;
             }
             if (group_supports_rgb) {
-                cJSON_AddItemToArray(color_modes, cJSON_CreateString("rgb"));
+                color_modes.add("rgb");
             }
-            cJSON_AddItemToObject(root, "supported_color_modes", color_modes);
         }
 
-        cJSON_AddStringToObject(root, "availability_topic", availability_topic.c_str());
-        cJSON_AddStringToObject(root, "payload_available", CONFIG_DALI2MQTT_MQTT_PAYLOAD_ONLINE);
-        cJSON_AddStringToObject(root, "payload_not_available", CONFIG_DALI2MQTT_MQTT_PAYLOAD_OFFLINE);
+        doc["availability_topic"] = availability_topic;
+        doc["payload_available"] = CONFIG_DALI2MQTT_MQTT_PAYLOAD_ONLINE;
+        doc["payload_not_available"] = CONFIG_DALI2MQTT_MQTT_PAYLOAD_OFFLINE;
 
-        cJSON* device = cJSON_CreateObject();
-        if (device) {
-            cJSON_AddStringToObject(device, "identifiers", bridge_public_name.c_str());
-            cJSON_AddStringToObject(device, "name", bridge_public_name.c_str());
-            cJSON_AddStringToObject(device, "model", "ESP32 DALI Bridge");
-            cJSON_AddStringToObject(device, "manufacturer", "DALI-MQTT4ESP");
-            cJSON_AddStringToObject(device, "sw_version", DALIMQTT_VERSION);
-            cJSON_AddItemToObject(root, "device", device);
-        }
+        JsonObject device = doc["device"].to<JsonObject>();
+        device["identifiers"] = bridge_public_name;
+        device["name"] = bridge_public_name;
+        device["model"] = "ESP32 DALI Bridge";
+        device["manufacturer"] = "DALI-MQTT4ESP";
+        device["sw_version"] = DALIMQTT_VERSION;
 
-        if (char* json_payload = cJSON_PrintUnformatted(root)) {
-            mqtt.publish(discovery_topic, json_payload, 1, true);
-            free(json_payload);
-        }
-
-        cJSON_Delete(root);
+        std::string json_payload;
+        serializeJson(doc, json_payload);
+        mqtt.publish(discovery_topic, json_payload, 1, true);
     }
 
     void MQTTHomeAssistantDiscovery::publishSceneSelector() {
@@ -223,38 +198,30 @@ namespace daliMQTT
         const std::string object_id = utils::stringFormat("dali_scenes_%s", config.client_id.c_str());
         const std::string discovery_topic = utils::stringFormat("homeassistant/select/%s/config", object_id.c_str());
 
-        cJSON* root = cJSON_CreateObject();
-        if (!root) return;
+        JsonDocument doc;
 
-        cJSON_AddStringToObject(root, "name", "DALI Scenes");
-        cJSON_AddStringToObject(root, "unique_id", object_id.c_str());
-        cJSON_AddStringToObject(root, "command_topic",
-                                utils::stringFormat("%s%s", base_topic.c_str(), CONFIG_DALI2MQTT_MQTT_SCENE_CMD_SUBTOPIC).c_str());
+        doc["name"] = "DALI Scenes";
+        doc["unique_id"] = object_id;
+        doc["command_topic"] = utils::stringFormat("%s%s", base_topic.c_str(), CONFIG_DALI2MQTT_MQTT_SCENE_CMD_SUBTOPIC);
 
-        cJSON* options = cJSON_CreateArray();
+        JsonArray options = doc["options"].to<JsonArray>();
         for (int i = 0; i < 16; ++i) {
-            cJSON_AddItemToArray(options, cJSON_CreateString(utils::stringFormat("Scene %d", i).c_str()));
-        }
-        cJSON_AddItemToObject(root, "options", options);
-
-        cJSON_AddStringToObject(root, "availability_topic", availability_topic.c_str());
-        cJSON_AddStringToObject(root, "payload_available", CONFIG_DALI2MQTT_MQTT_PAYLOAD_ONLINE);
-        cJSON_AddStringToObject(root, "payload_not_available", CONFIG_DALI2MQTT_MQTT_PAYLOAD_OFFLINE);
-
-        cJSON* device = cJSON_CreateObject();
-        if (device) {
-            cJSON_AddStringToObject(device, "identifiers", bridge_public_name.c_str());
-            cJSON_AddStringToObject(device, "name", bridge_public_name.c_str());
-            cJSON_AddStringToObject(device, "model", "ESP32 DALI Bridge");
-            cJSON_AddStringToObject(device, "manufacturer", "DALI-MQTT4ESP");
-            cJSON_AddStringToObject(device, "sw_version", DALIMQTT_VERSION);
-            cJSON_AddItemToObject(root, "device", device);
+            options.add(utils::stringFormat("Scene %d", i));
         }
 
-        if (char* json_payload = cJSON_PrintUnformatted(root)) {
-            mqtt.publish(discovery_topic, json_payload, 1, true);
-            free(json_payload);
-        }
-        cJSON_Delete(root);
+        doc["availability_topic"] = availability_topic;
+        doc["payload_available"] = CONFIG_DALI2MQTT_MQTT_PAYLOAD_ONLINE;
+        doc["payload_not_available"] = CONFIG_DALI2MQTT_MQTT_PAYLOAD_OFFLINE;
+
+        JsonObject device = doc["device"].to<JsonObject>();
+        device["identifiers"] = bridge_public_name;
+        device["name"] = bridge_public_name;
+        device["model"] = "ESP32 DALI Bridge";
+        device["manufacturer"] = "DALI-MQTT4ESP";
+        device["sw_version"] = DALIMQTT_VERSION;
+
+        std::string json_payload;
+        serializeJson(doc, json_payload);
+        mqtt.publish(discovery_topic, json_payload, 1, true);
     }
 } // daliMQTT

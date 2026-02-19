@@ -41,10 +41,12 @@ extern "C" {
 #include <freertos/queue.h>
 #include <freertos/timers.h>
 #include <driver/gpio.h>
-#include <cJSON.h>
 
 #ifdef __cplusplus
 }
 #endif
+
+// ArduinoJson
+#include <ArduinoJson.h>
 
 #endif //PCH_HXX

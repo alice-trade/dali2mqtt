@@ -9,7 +9,6 @@ message("Uses Sdkconfig: " ${CMAKE_CURRENT_SOURCE_DIR} "/" ${CMAKE_BUILD_TYPE} "
 set(PLATFORM_MODULES
         freertos
         esptool_py
-        json
         spiffs
         mqtt
         log

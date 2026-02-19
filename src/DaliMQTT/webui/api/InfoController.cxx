@@ -80,22 +80,22 @@ namespace daliMQTT {
         const auto& wifi = Wifi::Instance();
         const std::string wifi_status_str = utils::stringFormat("%s (%s)", get_wifi_status_string(wifi.getStatus()), wifi.getIpAddress().c_str());
 
-        cJSON *root = cJSON_CreateObject();
-        cJSON_AddStringToObject(root, "version",  firmware_version.c_str());
-        cJSON_AddStringToObject(root, "chip_model", get_chip_model_name(chip_info.model));
-        cJSON_AddNumberToObject(root, "chip_cores", chip_info.cores);
-        cJSON_AddNumberToObject(root, "free_heap", esp_get_free_heap_size());
-        cJSON_AddNumberToObject(root, "uptime_seconds", static_cast<double>(uptime_seconds));
-        cJSON_AddNumberToObject(root, "firmware_verbosity_level", CONFIG_LOG_MAXIMUM_LEVEL);
-        cJSON_AddStringToObject(root, "dali_status", dali_status.c_str());
-        cJSON_AddStringToObject(root, "mqtt_status", mqtt_status_str);
-        cJSON_AddStringToObject(root, "wifi_status", wifi_status_str.c_str());
+        JsonDocument doc;
+        doc["version"] = firmware_version;
+        doc["chip_model"] = get_chip_model_name(chip_info.model);
+        doc["chip_cores"] = chip_info.cores;
+        doc["free_heap"] = esp_get_free_heap_size();
+        doc["uptime_seconds"] = static_cast<double>(uptime_seconds);
+        doc["firmware_verbosity_level"] = CONFIG_LOG_MAXIMUM_LEVEL;
+        doc["dali_status"] = dali_status;
+        doc["mqtt_status"] = mqtt_status_str;
+        doc["wifi_status"] = wifi_status_str;
 
-        char *json_string = cJSON_Print(root);
+        std::string json_string;
+        serializeJson(doc, json_string);
         httpd_resp_set_type(req, "application/json");
-        httpd_resp_send(req, json_string, strlen(json_string));
-        cJSON_Delete(root);
-        free( json_string);
+        httpd_resp_send(req, json_string.c_str(), json_string.length());
+
         return ESP_OK;
     }
 

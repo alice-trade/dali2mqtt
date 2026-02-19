@@ -45,7 +45,7 @@ target_link_libraries(DaliMQTT-Core PUBLIC
         idf::mqtt
         idf::log
         idf::esp_event
-        idf::json
+        ArduinoJson
         idf::driver
         idf::esp_netif
         idf::freertos

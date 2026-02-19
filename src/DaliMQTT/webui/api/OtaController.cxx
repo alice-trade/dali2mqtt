@@ -3,7 +3,6 @@
 
 #include "system/AppUpdateManager.hxx"
 #include "system/ConfigManager.hxx"
-#include <cJSON.h>
 #include "webui/WebUI.hxx"
 
 namespace daliMQTT {
@@ -24,17 +23,14 @@ namespace daliMQTT {
             const int ret = httpd_req_recv(req, buf.data(), req->content_len);
             if (ret > 0) {
                 buf[ret] = '\0';
-                cJSON *root = cJSON_Parse(buf.data());
-                if (root) {
-                    cJSON *url_item = cJSON_GetObjectItem(root, "url");
-                    if (cJSON_IsString(url_item) && (url_item->valuestring != nullptr)) {
-                        target_url = url_item->valuestring;
+                JsonDocument doc;
+                if (!deserializeJson(doc, buf.data())) {
+                    if (doc["url"].is<const char*>()) {
+                        target_url = doc["url"].as<const char*>();
                     }
-                    const cJSON *type_item = cJSON_GetObjectItem(root, "type");
-                    if (cJSON_IsString(type_item) && strcmp(type_item->valuestring, "spiffs") == 0) {
+                    if (doc["type"].is<const char*>() && strcmp(doc["type"].as<const char*>(), "spiffs") == 0) {
                         update_type = 1;
                     }
-                    cJSON_Delete(root);
                 }
             }
         }

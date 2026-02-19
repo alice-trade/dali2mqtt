@@ -23,68 +23,57 @@ namespace daliMQTT
         const auto& config = ConfigManager::Instance().getConfig();
         m_assignments.clear();
 
-        cJSON* root = cJSON_Parse(config.dali_group_assignments.c_str());
-        if (!cJSON_IsObject(root)) {
+        JsonDocument doc;
+        DeserializationError err = deserializeJson(doc, config.dali_group_assignments);
+
+        if (err || !doc.is<JsonObject>()) {
             ESP_LOGW(TAG, "No valid group assignments found in NVS or JSON is invalid. Starting fresh.");
-            cJSON_Delete(root);
             return;
         }
 
-        cJSON* device_item = nullptr;
-        cJSON_ArrayForEach(device_item, root) {
-            auto long_addr_opt = utils::stringToLongAddress(device_item->string);
+        for (JsonPair kv : doc.as<JsonObject>()) {
+            auto long_addr_opt = utils::stringToLongAddress(kv.key().c_str());
             if (!long_addr_opt) {
-                ESP_LOGW(TAG, "Skipping invalid key '%s' in DALI group assignments JSON.", device_item->string);
+                ESP_LOGW(TAG, "Skipping invalid key '%s' in DALI group assignments JSON.", kv.key().c_str());
                 continue;
             }
             DaliLongAddress_t long_address = *long_addr_opt;
 
             std::bitset<16> groups;
-            if (cJSON_IsArray(device_item)) {
-                cJSON* group_item = nullptr;
-                cJSON_ArrayForEach(group_item, device_item) {
-                    if (cJSON_IsNumber(group_item) && group_item->valueint >= 0 && group_item->valueint < 16) {
-                        groups.set(group_item->valueint);
+            if (kv.value().is<JsonArray>()) {
+                for (JsonVariant v : kv.value().as<JsonArray>()) {
+                    if (v.is<int>()) {
+                        int group_id = v.as<int>();
+                        if (group_id >= 0 && group_id < 16) {
+                            groups.set(group_id);
+                        }
                     }
                 }
             }
             m_assignments[long_address] = groups;
         }
 
-        cJSON_Delete(root);
         ESP_LOGI(TAG, "Loaded %zu device group assignments from NVS.", m_assignments.size());
     }
 
     esp_err_t DaliGroupManagement::saveToConfig() {
-        cJSON* root = nullptr;
-        char* json_string = nullptr;
-
+        JsonDocument doc;
         {
             std::lock_guard<std::mutex> lock(m_mutex);
-            root = cJSON_CreateObject();
-            if (!root) return ESP_ERR_NO_MEM;
-
             for (const auto& [addr, groups] : m_assignments) {
                 const auto addr_str = utils::longAddressToString(addr);
-                cJSON* group_array = cJSON_CreateArray();
+                JsonArray group_array = doc[addr_str.data()].to<JsonArray>();
                 for (int i = 0; i < 16; ++i) {
                     if (groups.test(i)) {
-                        cJSON_AddItemToArray(group_array, cJSON_CreateNumber(i));
+                        group_array.add(i);
                     }
                 }
-                cJSON_AddItemToObject(root, addr_str.data(), group_array);
             }
         }
 
-        json_string = cJSON_PrintUnformatted(root);
-        cJSON_Delete(root);
-        if (!json_string) {
-            return ESP_ERR_NO_MEM;
-        }
-
-        const esp_err_t err = ConfigManager::Instance().saveDaliGroupAssignments(json_string);
-        free(json_string);
-        return err;
+        std::string json_string;
+        serializeJson(doc, json_string);
+        return ConfigManager::Instance().saveDaliGroupAssignments(json_string);
     }
 
     GroupAssignments DaliGroupManagement::getAllAssignments() const {
@@ -248,23 +237,19 @@ namespace daliMQTT
         const auto addr_str = utils::longAddressToString(longAddr);
         const std::string topic = utils::stringFormat("%s/light/%s/groups", config.mqtt_base_topic.c_str(), addr_str.data()); // base/light/{LONG_ADDRESS}/groups
 
-        cJSON* root = cJSON_CreateObject();
-        cJSON* groups_array = cJSON_CreateArray();
+        JsonDocument doc;
+        JsonArray groups_array = doc["groups"].to<JsonArray>();
 
         for (uint8_t i = 0; i < 16; ++i) {
             if (groups.test(i)) {
-                cJSON_AddItemToArray(groups_array, cJSON_CreateNumber(i));
+                groups_array.add(i);
             }
         }
-        cJSON_AddItemToObject(root, "groups", groups_array);
 
-        char* payload = cJSON_PrintUnformatted(root);
-        if (payload) {
-            mqtt.publish(topic, payload, 1, true);
-            free(payload);
-            ESP_LOGD(TAG, "Published groups for %s", addr_str.data());
-        }
-        cJSON_Delete(root);
+        std::string payload;
+        serializeJson(doc, payload);
+        mqtt.publish(topic, payload, 1, true);
+        ESP_LOGD(TAG, "Published groups for %s", addr_str.data());
     }
 
     void DaliGroupManagement::publishAllGroups() const {
@@ -326,31 +311,27 @@ namespace daliMQTT
         auto const& mqtt = MQTTClient::Instance();
         const auto config = ConfigManager::Instance().getConfig();
 
-        // Topic: base/light/group/+/state
+        // base/light/group/+/state
         const std::string state_topic = utils::stringFormat("%s/light/group/%d/state", config.mqtt_base_topic.c_str(), group_id);
 
-        cJSON* root = cJSON_CreateObject();
-        cJSON_AddStringToObject(root, "state", (level > 0 ? "ON" : "OFF"));
-        cJSON_AddNumberToObject(root, "brightness", level);
+        JsonDocument doc;
+        doc["state"] = (level > 0 ? "ON" : "OFF");
+        doc["brightness"] = level;
 
         if (color_temp.has_value()) {
-            cJSON_AddNumberToObject(root, "color_temp", *color_temp);
+            doc["color_temp"] = *color_temp;
         }
         if (rgb.has_value()) {
-            cJSON* color = cJSON_CreateObject();
-            cJSON_AddNumberToObject(color, "r", rgb->r);
-            cJSON_AddNumberToObject(color, "g", rgb->g);
-            cJSON_AddNumberToObject(color, "b", rgb->b);
-            cJSON_AddItemToObject(root, "color", color);
+            JsonObject color = doc["color"].to<JsonObject>();
+            color["r"] = rgb->r;
+            color["g"] = rgb->g;
+            color["b"] = rgb->b;
         }
 
-        char* payload = cJSON_PrintUnformatted(root);
-        if (payload) {
-            ESP_LOGD(TAG, "Publishing Group %d State: %s", group_id, payload);
-            mqtt.publish(state_topic, payload, 0, true);
-            free(payload);
-        }
-        cJSON_Delete(root);
+        std::string payload;
+        serializeJson(doc, payload);
+        ESP_LOGD(TAG, "Publishing Group %d State: %s", group_id, payload.c_str());
+        mqtt.publish(state_topic, payload, 0, true);
     }
 
     void DaliGroupManagement::stepGroupLevel(const uint8_t group_id, const bool is_up) {

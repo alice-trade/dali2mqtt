@@ -56,32 +56,28 @@ namespace daliMQTT
         const std::string state_topic = utils::stringFormat("%s/light/%s/state", config.mqtt_base_topic.c_str(), addr_str.data());
         if (device.current_level == 255) return;
 
-        cJSON* root = cJSON_CreateObject();
-        cJSON_AddStringToObject(root, "state", (device.current_level > 0 ? "ON" : "OFF"));
-        cJSON_AddNumberToObject(root, "brightness", device.current_level);
-        cJSON_AddNumberToObject(root, "status_byte", device.status_byte);
+        JsonDocument doc;
+        doc["state"] = (device.current_level > 0 ? "ON" : "OFF");
+        doc["brightness"] = device.current_level;
+        doc["status_byte"] = device.status_byte;
 
         if (device.color.has_value()) {
             const auto& c = device.color.value();
             if (c.current_tc.has_value()) {
-                cJSON_AddNumberToObject(root, "color_temp", c.current_tc.value());
+                doc["color_temp"] = c.current_tc.value();
             }
             if (c.current_rgb.has_value()) {
-                cJSON* color = cJSON_CreateObject();
-                cJSON_AddNumberToObject(color, "r", c.current_rgb->r);
-                cJSON_AddNumberToObject(color, "g", c.current_rgb->g);
-                cJSON_AddNumberToObject(color, "b", c.current_rgb->b);
-                cJSON_AddItemToObject(root, "color", color);
+                JsonObject color = doc["color"].to<JsonObject>();
+                color["r"] = c.current_rgb->r;
+                color["g"] = c.current_rgb->g;
+                color["b"] = c.current_rgb->b;
             }
         }
 
-        char* payload = cJSON_PrintUnformatted(root);
-        if (payload) {
-            ESP_LOGD(TAG, "Publishing to %s: %s", state_topic.c_str(), payload);
-            mqtt.publish(state_topic, payload, 0, true);
-            free(payload);
-        }
-        cJSON_Delete(root);
+        std::string payload;
+        serializeJson(doc, payload);
+        ESP_LOGD(TAG, "Publishing to %s: %s", state_topic.c_str(), payload.c_str());
+        mqtt.publish(state_topic, payload, 0, true);
     }
 
     void DaliDeviceController::publishAvailability(const DaliLongAddress_t long_addr, const bool is_available) {
@@ -165,28 +161,25 @@ namespace daliMQTT
         }
         const std::string attr_topic = utils::stringFormat("%s/light/%s/attributes", config.mqtt_base_topic.c_str(), addr_str.data());
 
-        cJSON* root = cJSON_CreateObject();
+        JsonDocument doc;
 
         if (dev_copy.device_type.has_value()) {
-            cJSON_AddNumberToObject(root, "device_type", dev_copy.device_type.value());
+            doc["device_type"] = dev_copy.device_type.value();
         }
 
         if (!dev_copy.gtin.empty()) {
-            cJSON_AddStringToObject(root, "gtin", dev_copy.gtin.c_str());
+            doc["gtin"] = dev_copy.gtin;
         }
 
-        cJSON_AddNumberToObject(root, "dev_min_level", dev_copy.min_level);
-        cJSON_AddNumberToObject(root, "dev_max_level", dev_copy.max_level);
-        cJSON_AddNumberToObject(root, "dev_power_on_level", dev_copy.power_on_level);
-        cJSON_AddNumberToObject(root, "dev_system_failure_level", dev_copy.system_failure_level);
-        cJSON_AddNumberToObject(root, "short_address", dev_copy.short_address);
+        doc["dev_min_level"] = dev_copy.min_level;
+        doc["dev_max_level"] = dev_copy.max_level;
+        doc["dev_power_on_level"] = dev_copy.power_on_level;
+        doc["dev_system_failure_level"] = dev_copy.system_failure_level;
+        doc["short_address"] = dev_copy.short_address;
 
-        char* json_str = cJSON_PrintUnformatted(root);
-        if (json_str) {
-            mqtt.publish(attr_topic, json_str, 1, true);
-            free(json_str);
-        }
-        cJSON_Delete(root);
+        std::string json_str;
+        serializeJson(doc, json_str);
+        mqtt.publish(attr_topic, json_str, 1, true);
 
         ESP_LOGI(TAG, "Published extended attributes for %s", addr_str.data());
     }
@@ -479,38 +472,36 @@ namespace daliMQTT
                 topic_addr_val = std::string(la_str.data());
             }
         }
-        cJSON* root = cJSON_CreateObject();
-        cJSON_AddStringToObject(root, "type", "event");
-        cJSON_AddStringToObject(root, "address_type", addr_type_str.c_str());
-        cJSON_AddNumberToObject(root, "address", address);
-        cJSON_AddNumberToObject(root, "instance", instance_byte);
-        cJSON_AddNumberToObject(root, "event_code", event_byte);
+        JsonDocument doc;
+        doc["type"] = "event";
+        doc["address_type"] = addr_type_str;
+        doc["address"] = address;
+        doc["instance"] = instance_byte;
+        doc["event_code"] = event_byte;
 
         #ifdef CONFIG_DALI2MQTT_SNIFFER_DEBUG_PUBLISH_MQTT
             char hex_buf[10];
             snprintf(hex_buf, sizeof(hex_buf), "%06lX", data);
-            cJSON_AddStringToObject(root, "raw_hex", hex_buf);
+            doc["raw_hex"] = hex_buf;
         #endif
 
         if (topic_addr_type == "long") {
-            cJSON_AddStringToObject(root, "long_addr", topic_addr_val.c_str());
+            doc["long_addr"] = topic_addr_val;
         }
-        char* json_payload = cJSON_PrintUnformatted(root);
-        cJSON_Delete(root);
 
-        if (json_payload) {
-            auto const& mqtt = MQTTClient::Instance();
-            const auto config = ConfigManager::Instance().getConfig();
+        std::string json_payload;
+        serializeJson(doc, json_payload);
 
-            std::string topic = utils::stringFormat("%s/event/%s/%s", // base/event/{address_type}/{address_str}
-                config.mqtt_base_topic.c_str(),
-                topic_addr_type.c_str(),
-                topic_addr_val.c_str()
-            );
-            mqtt.publish(topic, json_payload, 0, false);
-            ESP_LOGD(TAG, "Input Device Event Published: %s -> %s", topic.c_str(), json_payload);
-            free(json_payload);
-        }
+        auto const& mqtt = MQTTClient::Instance();
+        const auto config = ConfigManager::Instance().getConfig();
+
+        std::string topic = utils::stringFormat("%s/event/%s/%s",
+            config.mqtt_base_topic.c_str(),
+            topic_addr_type.c_str(),
+            topic_addr_val.c_str()
+        );
+        mqtt.publish(topic, json_payload, 0, false);
+        ESP_LOGD(TAG, "Input Device Event Published: %s -> %s", topic.c_str(), json_payload.c_str());
     }
 
     void DaliDeviceController::requestBroadcastSync(const uint32_t base_delay_ms, const uint32_t stagger_ms) {
