@@ -319,7 +319,7 @@ namespace daliMQTT
         bool changed = false;
 
         #define JsonSetStrConfig(NAME, KEY) \
-            if (doc.containsKey(KEY) && doc[KEY].is<const char*>()) { \
+            if (doc[KEY].is<const char*>()) { \
                 std::string val = doc[KEY].as<std::string>(); \
                 if (!val.empty() && val != "***" && current_cfg.NAME != val) { \
                     current_cfg.NAME = val; \
@@ -335,8 +335,8 @@ namespace daliMQTT
         JsonSetStrConfig(mqtt_user, "mqtt_user");
         JsonSetStrConfig(mqtt_pass, "mqtt_pass");
 
-        if (doc.containsKey("mqtt_ca_cert") && doc["mqtt_ca_cert"].is<const char*>()) {
-            std::string val = doc["mqtt_ca_cert"].as<std::string>();
+        if (doc["mqtt_ca_cert"].is<const char*>()) {
+            auto val = doc["mqtt_ca_cert"].as<std::string>();
             if (val != "***" && current_cfg.mqtt_ca_cert != val) {
                 current_cfg.mqtt_ca_cert = val;
                 changed = true;
@@ -360,7 +360,7 @@ namespace daliMQTT
         #undef JsonSetStrConfig
 
         auto checkBool = [&](const char* key, bool& target) {
-            if (doc.containsKey(key)) {
+            if (!doc[key].isNull()) {
                 bool val = doc[key].is<bool>() ? doc[key].as<bool>() : (doc[key].as<int>() != 0);
                 if (target != val) { target = val; changed = true; }
             }
@@ -371,8 +371,8 @@ namespace daliMQTT
         checkBool("hass_discovery_enabled", current_cfg.hass_discovery_enabled);
 
         auto checkNum = [&](const char* key, uint32_t& target) {
-            if (doc.containsKey(key) && doc[key].is<uint32_t>()) {
-                uint32_t val = doc[key].as<uint32_t>();
+            if (doc[key].is<uint32_t>()) {
+                const auto val = doc[key].as<uint32_t>();
                 if (target != val) { target = val; changed = true; }
             }
         };

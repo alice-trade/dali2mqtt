@@ -114,21 +114,21 @@ namespace daliMQTT {
         DaliPublishState targetState;
         std::optional<bool> target_on_state;
 
-        if (doc.containsKey("state") && doc["state"].is<const char*>()) {
+        if (doc["state"].is<const char*>()) {
             const char* state_val = doc["state"];
             if (strcmp(state_val, "ON") == 0) target_on_state = true;
             else if (strcmp(state_val, "OFF") == 0) target_on_state = false;
         }
 
-        if (doc.containsKey("brightness") && doc["brightness"].is<int>()) {
+        if (doc["brightness"].is<int>()) {
             targetState.level = static_cast<uint8_t>(std::clamp(doc["brightness"].as<int>(), 0, 254));
         }
 
-        if (doc.containsKey("color_temp") && doc["color_temp"].is<int>()) {
+        if (doc["color_temp"].is<int>()) {
             targetState.color_temp = static_cast<uint16_t>(doc["color_temp"].as<int>());
         }
 
-        if (doc.containsKey("color") && doc["color"].is<JsonObject>()) {
+        if (doc["color"].is<JsonObject>()) {
             JsonObject color = doc["color"];
             if (color["r"].is<int>() && color["g"].is<int>() && color["b"].is<int>()) {
                 targetState.rgb = DaliRGB{
@@ -237,7 +237,7 @@ namespace daliMQTT {
 
     void MQTTCommandHandler::handleGroupCommand(const std::string &data) {
         JsonDocument doc;
-        if (deserializeJson(doc, data) || !doc.containsKey("long_address") || !doc.containsKey("group") || !doc.containsKey("state")) {
+        if (deserializeJson(doc, data) || doc["long_address"].isNull() || doc["group"].isNull() || doc["state"].isNull()) {
             ESP_LOGE(TAG, "Invalid group command JSON structure");
             return;
         }
@@ -287,7 +287,7 @@ namespace daliMQTT {
             const uint32_t raw_data = (addr_val << 8) | cmd_val;
             auto& dali = DaliAdapter::Instance();
 
-            if (doc.containsKey("tag")) {
+            if (!doc["tag"].isNull()) {
                 const auto result = dali.sendRawQuery(raw_data, bits);
                 auto const &mqtt = MQTTClient::Instance();
 
@@ -333,7 +333,7 @@ namespace daliMQTT {
         auto& controller = DaliDeviceController::Instance();
 
         if (is_broadcast) {
-            uint32_t stagger = doc.containsKey("stagger_ms") ? doc["stagger_ms"].as<uint32_t>() : 100;
+            uint32_t stagger = !doc["stagger_ms"].isNull() ? doc["stagger_ms"].as<uint32_t>() : 100;
             controller.requestBroadcastSync(delay_ms, stagger);
         } else {
             if (doc["address"].is<const char*>()) {

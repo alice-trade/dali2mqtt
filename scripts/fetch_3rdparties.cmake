@@ -20,7 +20,7 @@ FetchContent_Declare(
     if(NOT TARGET ArduinoJson)
         add_library(arduinojson INTERFACE)
         target_include_directories(arduinojson SYSTEM INTERFACE
-                "${arduinojson_SOURCE_DIR}/include"
+                "${arduinojson_SOURCE_DIR}/src"
         )
         add_library(ArduinoJson ALIAS arduinojson)
     endif()
