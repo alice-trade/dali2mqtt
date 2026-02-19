@@ -3,7 +3,7 @@
 
 #ifndef DALIMQTT_DALICOMMANDS_HXX
 #define DALIMQTT_DALICOMMANDS_HXX
-#include "dali/DaliСommon.hxx"
+#include "dali/DaliCommon.hxx"
 
 namespace daliMQTT::Commands {
 

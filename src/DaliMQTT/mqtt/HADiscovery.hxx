@@ -3,7 +3,7 @@
 
 #ifndef DALIMQTT_HA_DISCOVERY_HXX
 #define DALIMQTT_HA_DISCOVERY_HXX
-#include "dali/DaliСommon.hxx"
+#include "dali/DaliCommon.hxx"
 
 namespace daliMQTT
 {

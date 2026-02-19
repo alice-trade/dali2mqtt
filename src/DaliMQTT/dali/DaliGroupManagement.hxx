@@ -3,7 +3,7 @@
 
 #ifndef DALIMQTT_DALIGROUPMANAGEMENT_HXX
 #define DALIMQTT_DALIGROUPMANAGEMENT_HXX
-#include "dali/DaliСommon.hxx"
+#include "dali/DaliCommon.hxx"
 
 namespace daliMQTT
 {

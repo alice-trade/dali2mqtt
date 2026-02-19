@@ -6,7 +6,7 @@
 
 #include "dali/driver/DaliDriver.hxx"
 #include "dali/DaliCommands.hxx"
-#include "dali/DaliСommon.hxx"
+#include "dali/DaliCommon.hxx"
 
 namespace daliMQTT
 {
