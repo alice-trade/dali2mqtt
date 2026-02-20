@@ -61,11 +61,9 @@ namespace daliMQTT {
                 break;
             }
             case DaliAddressType::Broadcast: {
-                auto devices = device_controller.getDevices();
-                for (const auto &[long_addr, device]: devices) {
-                    const auto& id = getIdentity(device);
-                    if (id.available) {
-                        update_device(long_addr);
+                for (auto devices = device_controller.getDevices(); const auto& device: devices) {
+                    if (const auto& id = getIdentity(device); id.available) {
+                        update_device(id.long_address);
                     }
                 }
                 break;
@@ -169,10 +167,9 @@ namespace daliMQTT {
                     }
                 }
                 else if (addr_type == DaliAddressType::Broadcast) {
-                    auto devices = controller.getDevices();
-                    for (const auto& [long_addr, dev] : devices) {
+                    for (auto devices = controller.getDevices(); const auto& dev : devices) {
                         if (getIdentity(dev).available) {
-                            controller.updateDeviceState(long_addr, stateUpdateForMode);
+                            controller.updateDeviceState(getIdentity(dev).long_address, stateUpdateForMode);
                         }
                     }
                 }
@@ -255,7 +252,7 @@ namespace daliMQTT {
         std::string result_topic = utils::stringFormat("%s%s", config.mqtt_base_topic.c_str(), CONFIG_DALI2MQTT_MQTT_GROUP_RES_SUBTOPIC);
         std::string payload = utils::stringFormat(R"({"status":"success","device":"%s","group":%d,"action":"%s"})",
                                                   doc["long_address"].as<const char*>(), group, (assign ? "added" : "removed"));
-        mqtt.publish(result_topic, payload);
+        mqtt.publish(result_topic.c_str(), payload.c_str());
     }
 
     void MQTTCommandHandler::handleSceneCommand(const std::string &data) {
@@ -289,21 +286,18 @@ namespace daliMQTT {
 
             if (!doc["tag"].isNull()) {
                 const auto result = dali.sendRawQuery(raw_data, bits);
-                auto const &mqtt = MQTTClient::Instance();
-
                 JsonDocument resp;
-                resp["tag"] = doc["tag"];
 
-                if (result) {
-                    resp["status"] = "ok";
-                    resp["response"] = *result;
-                } else {
-                    resp["status"] = "no_reply";
-                }
+                resp["tag"] = doc["tag"];
+                if (result) { resp["status"] = "ok"; resp["response"] = *result; }
+                else { resp["status"] = "no_reply"; }
 
                 std::string payload;
                 serializeJson(resp, payload);
-                mqtt.publish(ConfigManager::Instance().getMqttBaseTopic() + "/cmd/res", payload);
+
+                char res_topic[128];
+                snprintf(res_topic, sizeof(res_topic), "%s/cmd/res", ConfigManager::Instance().getMqttBaseTopic().c_str());
+                MQTTClient::Instance().publish(res_topic, payload.c_str());
             } else {
                 dali.sendRaw(raw_data, bits);
                 if (doc["twice"].as<bool>()) {
@@ -358,9 +352,9 @@ namespace daliMQTT {
 
     void MQTTCommandHandler::handleConfigGet() {
         std::string json_string = ConfigManager::Instance().getSerializedConfig(true);
-        auto const &mqtt = MQTTClient::Instance();
-        const std::string reply_topic = ConfigManager::Instance().getMqttBaseTopic() + "/config";
-        mqtt.publish(reply_topic, json_string, 0, false);
+        char reply_topic[128];
+        snprintf(reply_topic, sizeof(reply_topic), "%s/config", ConfigManager::Instance().getMqttBaseTopic().c_str());
+        MQTTClient::Instance().publish(reply_topic, json_string.c_str(), 0, false);
     }
 
     void MQTTCommandHandler::handleConfigSet(const std::string& data) {
@@ -372,7 +366,7 @@ namespace daliMQTT {
         switch (result) {
         case ConfigUpdateResult::MQTTUpdate:
             ESP_LOGI(TAG, "MQTT Config changed. Reloading...");
-            mqtt.publish(status_topic, R"({"status":"updated", "action":"reconnecting_mqtt"})", 0, false);
+            mqtt.publish(status_topic.c_str(), R"({"status":"updated", "action":"reconnecting_mqtt"})", 0, false);
             xTaskCreate([](void*){
                 vTaskDelay(pdMS_TO_TICKS(500));
                 AppController::Instance().onConfigReloadRequest();
@@ -383,7 +377,7 @@ namespace daliMQTT {
         case ConfigUpdateResult::SystemUpdate:
         case ConfigUpdateResult::WIFIUpdate:
             ESP_LOGI(TAG, "System/WiFi Config changed. Rebooting...");
-            mqtt.publish(status_topic, R"({"status":"updated", "action":"rebooting"})", 0, false);
+            mqtt.publish(status_topic.c_str(), R"({"status":"updated", "action":"rebooting"})", 0, false);
             vTaskDelay(pdMS_TO_TICKS(1000));
             esp_restart();
             break;
@@ -396,17 +390,15 @@ namespace daliMQTT {
     }
 
     void MQTTCommandHandler::backgroundScanTask(void* arg) {
-        ESP_LOGI(TAG, "Starting MQTT-initiated DALI scan...");
-        auto const& mqtt = MQTTClient::Instance();
         auto config = ConfigManager::Instance().getConfig();
-        std::string status_topic = config.mqtt_base_topic + "/config/bus/sync_status";
+        char status_topic[128];
+        snprintf(status_topic, sizeof(status_topic), "%s/config/bus/sync_status", config.mqtt_base_topic.c_str());
 
-        mqtt.publish(status_topic, R"({"status":"scanning"})", 0, false);
-
+        MQTTClient::Instance().publish(status_topic, R"({"status":"scanning"})", 0, false);
         DaliDeviceController::Instance().performScan();
-        DaliGroupManagement::Instance().refreshAssignmentsFromBus();
 
-        mqtt.publish(status_topic, R"({"status":"idle", "last_action":"scan_complete"})", 0, false);
+        DaliGroupManagement::Instance().refreshAssignmentsFromBus();
+        MQTTClient::Instance().publish(status_topic, R"({"status":"idle", "last_action":"scan_complete"})", 0, false);
         ESP_LOGI(TAG, "MQTT-initiated DALI scan finished.");
 
         g_mqtt_bus_busy = false;
@@ -417,7 +409,8 @@ namespace daliMQTT {
         ESP_LOGI(TAG, "Starting MQTT-initiated DALI initialization...");
         auto const& mqtt = MQTTClient::Instance();
         auto config = ConfigManager::Instance().getConfig();
-        std::string status_topic = config.mqtt_base_topic + "/config/bus/sync_status";
+        char status_topic[128];
+        snprintf(status_topic, sizeof(status_topic), "%s/config/bus/sync_status", config.mqtt_base_topic.c_str());
 
         mqtt.publish(status_topic, R"({"status":"initializing"})", 0, false);
 
@@ -434,7 +427,8 @@ namespace daliMQTT {
         ESP_LOGI(TAG, "Starting MQTT-initiated DALI Input Device initialization...");
         auto const& mqtt = MQTTClient::Instance();
         auto config = ConfigManager::Instance().getConfig();
-        std::string status_topic = config.mqtt_base_topic + "/config/input_device/sync_status";
+        char status_topic[128];
+        snprintf(status_topic, sizeof(status_topic), "%s/config/input_device/sync_status", config.mqtt_base_topic.c_str());
 
         mqtt.publish(status_topic, R"({"status":"initializing"})", 0, false);
 

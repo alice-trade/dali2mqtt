@@ -37,6 +37,8 @@ namespace daliMQTT::Driver {
         uint32_t resolution_hz{1000000};
     };
 
+    using DaliEventCallback = void(*)(const DaliMessage&, void*);
+
     class DaliDriver {
         public:
             DaliDriver();
@@ -62,22 +64,15 @@ namespace daliMQTT::Driver {
             [[nodiscard]] esp_err_t sendAsync(uint32_t data, uint8_t bits) const;
 
             /**
-             * @brief Returns the handle to the event queue.
-             * The DaliAdapter should monitor this queue for incoming frames and errors.
-             */
-            [[nodiscard]] QueueHandle_t getEventQueue() const { return m_event_queue; }
-
-            /**
              * @brief Generates a "Corrupted Frame" / "System Failure" signal (Low for 1.5ms)
              * Used after collision detection.
              */
             esp_err_t sendSystemFailureSignal();
 
-            /**
-             * @brief Clears the RX event queue.
-             * Useful before sending a Query to ensure the next received item is a fresh response.
-             */
-            void flushRxQueue() const;
+            void setEventCallback(const DaliEventCallback cb, void* ctx) {
+                m_event_cb = cb;
+                m_event_cb_ctx = ctx;
+            }
 
         private:
             struct Constants {
@@ -107,8 +102,9 @@ namespace daliMQTT::Driver {
             rmt_encoder_handle_t m_dali_encoder{nullptr};
 
             QueueHandle_t m_tx_queue{nullptr};
-            QueueHandle_t m_event_queue{nullptr};
             TaskHandle_t m_driver_task{nullptr};
+            DaliEventCallback m_event_cb{nullptr};
+            void* m_event_cb_ctx{nullptr};
 
 
             struct TxState {

@@ -6,8 +6,7 @@
 
 namespace daliMQTT
 {
-    /** Map: short_address -> brightness_level (0-254) */
-    using SceneDeviceLevels = std::map<uint8_t, uint8_t>;
+    using SceneDeviceLevels = std::array<uint8_t, 64>;
 
     class DaliSceneManagement {
     public:

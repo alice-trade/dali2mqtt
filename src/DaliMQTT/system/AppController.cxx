@@ -107,66 +107,66 @@ namespace daliMQTT
         auto const& mqtt = MQTTClient::Instance();
 
         std::string availability_topic = utils::stringFormat("%s%s", config.mqtt_base_topic.c_str(), CONFIG_DALI2MQTT_MQTT_AVAILABILITY_TOPIC);
-        mqtt.publish(availability_topic, CONFIG_DALI2MQTT_MQTT_PAYLOAD_ONLINE, 1, true);
+        mqtt.publish(availability_topic.c_str(), CONFIG_DALI2MQTT_MQTT_PAYLOAD_ONLINE, 1, true);
 
         std::string ip_topic = utils::stringFormat("%s/ip_addr", config.mqtt_base_topic.c_str());
         std::string ip_addr = Wifi::Instance().getIpAddress();
-        mqtt.publish(ip_topic, ip_addr, 1, true);
+        mqtt.publish(ip_topic.c_str(), ip_addr.c_str(), 1, true);
 
         std::string version_topic = utils::stringFormat("%s/version", config.mqtt_base_topic.c_str());
-        mqtt.publish(version_topic, DALIMQTT_VERSION, 1, true);
+        mqtt.publish(version_topic.c_str(), DALIMQTT_VERSION, 1, true);
 
         // base/light/LONG_ADDR/set
         std::string light_single_topic = utils::stringFormat("%s/light/+/set", config.mqtt_base_topic.c_str());
-        mqtt.subscribe(light_single_topic);
+        mqtt.subscribe(light_single_topic.c_str());
         ESP_LOGI(TAG, "Subscribed to lights: %s", light_single_topic.c_str());
 
         // base/light/group/GROUP_ID/set
         std::string light_group_topic = utils::stringFormat("%s/light/group/+/set", config.mqtt_base_topic.c_str());
-        mqtt.subscribe(light_group_topic);
+        mqtt.subscribe(light_group_topic.c_str());
         ESP_LOGI(TAG, "Subscribed to light groups: %s", light_group_topic.c_str());
 
         // base/light/broadcast/set
         std::string light_broadcast_topic = utils::stringFormat("%s/light/broadcast/set", config.mqtt_base_topic.c_str());
-        mqtt.subscribe(light_broadcast_topic);
+        mqtt.subscribe(light_broadcast_topic.c_str());
         ESP_LOGI(TAG, "Subscribed to broadcast: %s", light_broadcast_topic.c_str());
 
         // base/config/group/set
         std::string config_group_topic = utils::stringFormat("%s%s", config.mqtt_base_topic.c_str(), CONFIG_DALI2MQTT_MQTT_GROUP_SET_SUBTOPIC);
-        mqtt.subscribe(config_group_topic);
+        mqtt.subscribe(config_group_topic.c_str());
         ESP_LOGI(TAG, "Subscribed to group config: %s", config_group_topic.c_str());
 
         // base/scene/set
         std::string scene_cmd_topic = utils::stringFormat("%s%s", config.mqtt_base_topic.c_str(), CONFIG_DALI2MQTT_MQTT_SCENE_CMD_SUBTOPIC);
-        mqtt.subscribe(scene_cmd_topic);
+        mqtt.subscribe(scene_cmd_topic.c_str());
         ESP_LOGI(TAG, "Subscribed to scenes: %s", scene_cmd_topic.c_str());
 
         // base/cmd/send
         std::string cmd_topic = utils::stringFormat("%s/cmd/send", config.mqtt_base_topic.c_str());
-        mqtt.subscribe(cmd_topic);
+        mqtt.subscribe(cmd_topic.c_str());
         ESP_LOGW(TAG, "DEBUG INTERFACE ENABLED. Subscribed to: %s", cmd_topic.c_str());
 
         // base/cmd/sync
         std::string sync_topic = utils::stringFormat("%s/cmd/sync", config.mqtt_base_topic.c_str());
-        mqtt.subscribe(sync_topic);
+        mqtt.subscribe(sync_topic.c_str());
         ESP_LOGI(TAG, "Subscribed to sync: %s", sync_topic.c_str());
 
         // base/config/bus/scan
         std::string bus_scan_topic = utils::stringFormat("%s/config/bus/scan", config.mqtt_base_topic.c_str());
-        mqtt.subscribe(bus_scan_topic);
+        mqtt.subscribe(bus_scan_topic.c_str());
 
         // base/config/bus/initialize
         std::string bus_init_topic = utils::stringFormat("%s/config/bus/initialize", config.mqtt_base_topic.c_str());
-        mqtt.subscribe(bus_init_topic);
+        mqtt.subscribe(bus_init_topic.c_str());
         ESP_LOGI(TAG, "Subscribed to bus management: %s, %s", bus_scan_topic.c_str(), bus_init_topic.c_str());
 
         // base/config/get
         std::string config_get_topic = utils::stringFormat("%s/config/get", config.mqtt_base_topic.c_str());
-        mqtt.subscribe(config_get_topic);
+        mqtt.subscribe(config_get_topic.c_str());
 
         // base/config/set
         std::string config_set_topic = utils::stringFormat("%s/config/set", config.mqtt_base_topic.c_str());
-        mqtt.subscribe(config_set_topic);
+        mqtt.subscribe(config_set_topic.c_str());
         ESP_LOGI(TAG, "Subscribed to system config management: %s, %s", config_get_topic.c_str(), config_set_topic.c_str());
 
         if (config.hass_discovery_enabled) {

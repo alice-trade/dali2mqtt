@@ -10,6 +10,18 @@
 
 namespace daliMQTT
 {
+    struct AdapterEvent {
+        enum class Type { CMD, DRIVER_EVENT } type;
+        struct CmdData {
+            uint32_t data;
+            uint8_t bits;
+            bool is_query;
+            bool send_twice;
+            TaskHandle_t caller;
+        } cmd;
+        Driver::DaliMessage msg;
+    };
+
     class DaliAdapter {
     public:
         DaliAdapter(const DaliAdapter&) = delete;
@@ -35,18 +47,18 @@ namespace daliMQTT
         /**
          * @brief Send a raw DALI frame asynchronously.
          */
-        esp_err_t sendRaw(uint32_t data, uint8_t bits = 16);
+        esp_err_t sendRaw(uint32_t data, uint8_t bits = 16) const;
 
         /**
          * @brief Send a standard 16-bit command (IEC 62386-102).
          */
-        esp_err_t sendCommand(DaliAddressType addr_type, uint8_t addr, Commands::OpCode command, bool send_twice = false);
+        esp_err_t sendCommand(DaliAddressType addr_type, uint8_t addr, Commands::OpCode command, bool send_twice = false) const;
 
         /**
          * @brief Send a special command (IEC 62386-102).
          * Special commands (like INITIALISE) often require specific handling.
          */
-        esp_err_t sendCommand(Commands::SpecialOpCode command, uint8_t data, bool send_twice = false);
+        esp_err_t sendCommand(Commands::SpecialOpCode command, uint8_t data, bool send_twice = false) const;
 
         /**
          * @brief Send a DT8 command (IEC 62386-209).
@@ -59,19 +71,19 @@ namespace daliMQTT
         /**
          * @brief Send DACP (Direct Arc Power Control) level.
          */
-        esp_err_t sendDACP(DaliAddressType addr_type, uint8_t addr, uint8_t level);
+        esp_err_t sendDACP(DaliAddressType addr_type, uint8_t addr, uint8_t level) const;
 
         /**
          * @brief Send a standard query (IEC 62386-102) and wait for an 8-bit backward frame response.
          * @return uint8_t response or std::nullopt on timeout/collision.
          */
-        [[nodiscard]] std::optional<uint8_t> sendQuery(DaliAddressType addr_type, uint8_t addr, Commands::OpCode command);
+        [[nodiscard]] std::optional<uint8_t> sendQuery(DaliAddressType addr_type, uint8_t addr, Commands::OpCode command) const;
 
         /**
          * @brief Send a query of SPECIAL command and wait for an 8-bit backward frame response.
          * @return uint8_t response or std::nullopt on timeout/collision.
          */
-        std::optional<uint8_t> sendQuery(Commands::SpecialOpCode command, uint8_t data);
+        std::optional<uint8_t> sendQuery(Commands::SpecialOpCode command, uint8_t data) const;
 
         /**
          * @brief Send a DT8 query (IEC 62386-209) and wait for an 8-bit backward frame response.
@@ -84,14 +96,15 @@ namespace daliMQTT
         /**
          * @brief Send query raw.
          */
-        [[nodiscard]] std::optional<uint8_t> sendRawQuery(uint32_t data, uint8_t bits = 16);
+        [[nodiscard]] std::optional<uint8_t> sendRawQuery(uint32_t data, uint8_t bits = 16) const;
 
         /**
          * @brief Send Input Device Command (24-bit).
          */
-        std::optional<uint8_t> sendInputDeviceCommand(uint8_t shortAddress, uint8_t opcode, std::optional<uint8_t> param = std::nullopt);
+        std::optional<uint8_t> sendInputDeviceCommand(uint8_t shortAddress, uint8_t opcode, std::optional<uint8_t> param = std::nullopt) const;
 
         uint8_t initializeBus(bool provision_all = true);
+
         uint8_t initialize24BitDevicesBus();
 
         /**
@@ -158,50 +171,45 @@ namespace daliMQTT
             return m_dali_event_queue;
         }
 
-        /**
-        * @brief Starts the DALI bus sniffer.
-        */
+        void lockBus() const { if (m_bus_mutex) xSemaphoreTakeRecursive(m_bus_mutex, portMAX_DELAY); }
+        void unlockBus() const { if (m_bus_mutex) xSemaphoreGiveRecursive(m_bus_mutex); }
+
         esp_err_t startSniffer();
 
-        /**
-        * @brief Stops the DALI bus sniffer.
-        */
         esp_err_t stopSniffer();
+
+        void onDriverEvent(const Driver::DaliMessage& msg) const;
+
     private:
         DaliAdapter() = default;
 
         // Internal helper task to process Driver events
         [[noreturn]] static void busWorkerTask(void* arg);
 
-        uint32_t findAddressBinarySearch(bool input_devices);
+        uint32_t findAddressBinarySearch(bool input_devices) const;
 
-        void setDtr0(const uint8_t val) {
-            sendRaw(Commands::Factory::Special(Commands::SpecialOpCode::Dtr0, val).data, 16);
-        }
-
-        void setDtr1(const uint8_t val) {
-            sendRaw(Commands::Factory::Special(Commands::SpecialOpCode::Dtr1, val).data, 16);
-        }
+        void setDtr0(const uint8_t val) { sendRaw(Commands::Factory::Special(Commands::SpecialOpCode::Dtr0, val).data, 16); }
+        void setDtr1(const uint8_t val) { sendRaw(Commands::Factory::Special(Commands::SpecialOpCode::Dtr1, val).data, 16); }
 
         esp_err_t sendDT8Cmd(uint8_t shortAddr, Commands::DT8OpCode cmd);
-
         std::optional<uint8_t> queryDT8Value(uint8_t shortAddress, uint8_t dtr0_selector);
 
-        Driver::DaliDriver m_driver{}; // Driver Instance
+        Driver::DaliDriver m_driver{};
+        QueueHandle_t m_event_queue{nullptr};
+        QueueHandle_t m_dali_event_queue{nullptr};
+        SemaphoreHandle_t m_bus_mutex{nullptr};
 
-        QueueHandle_t m_dali_event_queue{nullptr}; // Event Queue
-
-        QueueHandle_t m_response_queue{nullptr}; // Queue to pass BackwardFrame to waiting thread
-        std::atomic<bool> m_expecting_response{false};
-        std::recursive_mutex m_transaction_mutex{};
-
+        std::vector<AdapterEvent::CmdData> m_cmd_buffer;
         TaskHandle_t m_worker_task_handle{nullptr};
         std::atomic<bool> m_initialized{false};
         std::atomic<bool> m_sniffer_enabled{false};
 
-        TaskHandle_t m_tx_caller_task{nullptr};
-        std::atomic<bool> m_waiting_for_tx_result{false};
-        std::atomic<Driver::DaliEventType> m_last_tx_status{};
+        static constexpr UBaseType_t NOTIFY_IDX = 1;
+    };
+
+    struct DaliBusLock {
+        DaliBusLock() { DaliAdapter::Instance().lockBus(); }
+        ~DaliBusLock() { DaliAdapter::Instance().unlockBus(); }
     };
 } // daliMQTT
 

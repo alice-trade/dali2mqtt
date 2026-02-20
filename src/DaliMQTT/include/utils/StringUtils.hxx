@@ -6,25 +6,29 @@
 
 namespace daliMQTT::utils {
     inline std::string stringFormat(const char* fmt, ...) {
+        char stack_buf[256];
+
         va_list args;
         va_start(args, fmt);
-
-        va_list args_copy;
-        va_copy(args_copy, args);
-        const int len = vsnprintf(nullptr, 0, fmt, args_copy);
-        va_end(args_copy);
+        const int len = vsnprintf(stack_buf, sizeof(stack_buf), fmt, args);
+        va_end(args);
 
         if (len < 0) {
-            va_end(args);
             return {};
         }
 
-        std::vector<char> buf(len + 1);
-        vsnprintf(buf.data(), len + 1, fmt, args);
+        if (static_cast<size_t>(len) < sizeof(stack_buf)) {
+            return {stack_buf, static_cast<size_t>(len)};
+        }
+
+        std::vector<char> dyn_buf(len + 1);
+        va_start(args, fmt);
+        vsnprintf(dyn_buf.data(), dyn_buf.size(), fmt, args);
         va_end(args);
 
-        return {buf.data(), static_cast<size_t>(len)};
+        return {dyn_buf.data(), static_cast<size_t>(len)};
     }
+
 }
 
 #endif //DALIMQTT_STRINGUTILS_HXX

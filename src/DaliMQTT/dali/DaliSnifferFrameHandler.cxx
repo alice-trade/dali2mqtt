@@ -17,7 +17,6 @@ namespace daliMQTT {
         const uint8_t data_byte = frame.data & 0xFF;
         const bool is_command = (addr_byte & 0x01);
         const auto cmd = static_cast<Commands::OpCode>(data_byte);
-        using enum daliMQTT::Commands::OpCode;
 
         bool is_broadcast = (addr_byte == 0xFE || addr_byte == 0xFF);
         std::optional<uint8_t> target_group_id = std::nullopt;
@@ -39,6 +38,7 @@ namespace daliMQTT {
             if (!is_command) {
                 group_mgr.updateGroupState(gid, {.level = data_byte});
             } else {
+                using enum daliMQTT::Commands::OpCode;
                 switch (cmd) {
                     case Off:
                     case StepDownAndOff: group_mgr.updateGroupState(gid, {.level = 0}); break;
@@ -57,13 +57,13 @@ namespace daliMQTT {
         bool needs_sync = false;
         std::vector<uint8_t> sync_candidates;
 
-        for (auto& [la, dev_var] : m_devices) {
+        for (auto& dev_var : m_devices) {
             auto* gear = std::get_if<ControlGear>(&dev_var);
             if (!gear) continue;
 
             bool is_affected = is_broadcast;
             if (!is_affected && target_group_id.has_value()) {
-                auto grps = DaliGroupManagement::Instance().getGroupsForDevice(la);
+                auto grps = DaliGroupManagement::Instance().getGroupsForDevice(gear->long_address);
                 if (grps && grps->test(*target_group_id)) is_affected = true;
             }
             if (!is_affected && target_short_addr.has_value()) {
@@ -75,14 +75,13 @@ namespace daliMQTT {
             if (!is_command) {
                 next_level = data_byte; // DACP
             } else {
+                using enum daliMQTT::Commands::OpCode;
                 switch (cmd) {
                     case Off:
                     case StepDownAndOff: next_level = 0; break;
                     case RecallMaxLevel: next_level = 254; break;
                     case RecallMinLevel: next_level = 1; break;
-                    case OnAndStepUp:
-                        next_level = (gear->current_level == 0) ? gear->last_level : gear->current_level;
-                        break;
+                    case OnAndStepUp: next_level = (gear->current_level == 0) ? gear->last_level : gear->current_level; break;
                     case static_cast<Commands::OpCode>(Commands::DT8OpCode::Activate):
                     case static_cast<Commands::OpCode>(Commands::DT8OpCode::SetTempTc):
                     case static_cast<Commands::OpCode>(Commands::DT8OpCode::SetTempRGB):
@@ -95,12 +94,9 @@ namespace daliMQTT {
             }
 
             if (next_level.has_value()) {
-                procUpdateDeviceState(la, {.level = *next_level});
+                procUpdateDeviceState(gear->long_address, {.level = *next_level});
             }
-
-            if (needs_sync) {
-                sync_candidates.push_back(gear->short_address);
-            }
+            if (needs_sync) sync_candidates.push_back(gear->short_address);
         }
 
         if (needs_sync && !sync_candidates.empty()) {

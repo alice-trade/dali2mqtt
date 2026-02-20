@@ -32,17 +32,18 @@ namespace daliMQTT {
         JsonDocument doc;
         JsonArray root = doc.to<JsonArray>();
 
-        for (const auto& [long_addr, dev] : devices) {
-            JsonObject device_obj = root.add<JsonObject>();
-            const auto addr_str = utils::longAddressToString(long_addr);
+        for (const auto& dev : devices) {
+            auto device_obj = root.add<JsonObject>();
+            const auto& identity = getIdentity(dev);
+
+            const auto addr_str = utils::longAddressToString(identity.long_address);
             device_obj["long_address"] = addr_str.data();
 
-            const auto& identity = getIdentity(dev);
             if (!identity.gtin.empty()) {
-                device_obj["gtin"] = identity.gtin;
+                device_obj["gtin"] = identity.gtin.c_str();
             }
 
-            if (auto* gear = std::get_if<ControlGear>(&dev)) {
+            if (const auto* gear = std::get_if<ControlGear>(&dev)) {
                 device_obj["type"] = "gear";
                 device_obj["short_address"] = gear->short_address;
                 device_obj["level"] = gear->current_level;
@@ -61,7 +62,7 @@ namespace daliMQTT {
                     device_obj["fail_level"] = gear->system_failure_level;
                 }
             }
-            else if (auto* id = std::get_if<InputDevice>(&dev)) {
+            else if (const auto* id = std::get_if<InputDevice>(&dev)) {
                 device_obj["type"] = "input";
                 device_obj["short_address"] = id->short_address;
                 device_obj["available"] = id->available;
@@ -144,9 +145,11 @@ namespace daliMQTT {
                 status_str = "refreshing_groups";
                 break;
         }
-        const std::string response = utils::stringFormat(R"({"status":"%s"})", status_str);
+        char response[64];
+        snprintf(response, sizeof(response), R"({"status":"%s"})", status_str);
+
         httpd_resp_set_type(req, "application/json");
-        httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
+        httpd_resp_send(req, response, HTTPD_RESP_USE_STRLEN);
         return ESP_OK;
     }
 
@@ -247,7 +250,7 @@ namespace daliMQTT {
                     }
                 }
             }
-            new_assignments[*long_addr_opt] = groups;
+            new_assignments.push_back({*long_addr_opt, groups});
         }
 
         DaliGroupManagement::Instance().setAllAssignments(new_assignments);
@@ -278,6 +281,7 @@ namespace daliMQTT {
 
         const uint8_t scene_id = doc["scene_id"].as<int>();
         SceneDeviceLevels levels;
+        levels.fill(255);
         const auto& controller = DaliDeviceController::Instance();
 
         for (JsonPair kv : doc["levels"].as<JsonObject>()) {
@@ -344,7 +348,7 @@ namespace daliMQTT {
             return ESP_FAIL;
         }
 
-        auto levels = DaliSceneManagement::Instance().getSceneLevels(static_cast<uint8_t>(scene_id));
+        const auto levels = DaliSceneManagement::Instance().getSceneLevels(static_cast<uint8_t>(scene_id));
 
         JsonDocument doc;
         doc["scene_id"] = scene_id;
@@ -352,10 +356,13 @@ namespace daliMQTT {
         JsonObject levels_obj = doc["levels"].to<JsonObject>();
         const auto& controller = DaliDeviceController::Instance();
 
-        for (const auto& [short_addr, level] : levels) {
-            auto long_addr_opt = controller.getLongAddress(short_addr);
-            if (long_addr_opt) {
-                levels_obj[utils::longAddressToString(*long_addr_opt).data()] = level;
+        for (uint8_t short_addr = 0; short_addr < 64; ++short_addr) {
+            uint8_t level = levels[short_addr];
+            if (level != 255) {
+                auto long_addr_opt = controller.getLongAddress(short_addr);
+                if (long_addr_opt) {
+                    levels_obj[utils::longAddressToString(*long_addr_opt).data()] = level;
+                }
             }
         }
 

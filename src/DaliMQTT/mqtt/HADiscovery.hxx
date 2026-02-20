@@ -7,6 +7,10 @@
 
 namespace daliMQTT
 {
+    struct DeviceNameEntry {
+        DaliLongAddress_t addr;
+        std::string name;
+    };
     class MQTTHomeAssistantDiscovery
     {
         public:
@@ -21,7 +25,7 @@ namespace daliMQTT
             std::string base_topic;
             std::string availability_topic;
             std::string bridge_public_name;
-            std::map<std::string, std::string> device_identification;
+            std::vector<DeviceNameEntry> device_names;
     };
 } // daliMQTT
 

@@ -7,7 +7,7 @@
 
 namespace daliMQTT
 {
-    using GroupAssignments = std::map<DaliLongAddress_t, std::bitset<16>>;
+    using GroupAssignments = std::vector<std::pair<DaliLongAddress_t, std::bitset<16>>>;
 
     class DaliGroupManagement {
     public:

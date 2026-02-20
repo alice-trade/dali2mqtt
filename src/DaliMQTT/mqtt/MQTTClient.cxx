@@ -60,16 +60,14 @@ namespace daliMQTT
         return status;
     }
 
-    void MQTTClient::publish(const std::string& topic, const std::string& payload, const int qos, const bool retain) const
-    {
+    void MQTTClient::publish(const char* topic, const char* payload, const int qos, const bool retain) const {
         if (!client_handle) return;
-        esp_mqtt_client_publish(client_handle, topic.c_str(), payload.c_str(), payload.length(), qos, retain);
+        esp_mqtt_client_publish(client_handle, topic, payload, strlen(payload), qos, retain);
     }
 
-    void MQTTClient::subscribe(const std::string& topic, const int qos) const
-    {
+    void MQTTClient::subscribe(const char* topic, const int qos) const {
         if (!client_handle) return;
-        esp_mqtt_client_subscribe(client_handle, topic.c_str(), qos);
+        esp_mqtt_client_subscribe(client_handle, topic, qos);
     }
 
     void MQTTClient::mqttEventHandler(void* handler_args, [[maybe_unused]] esp_event_base_t base, int32_t event_id, void* event_data) {
