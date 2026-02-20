@@ -38,13 +38,13 @@ namespace daliMQTT
         esp_err_t refreshAssignmentsFromBus();
 
         /** Gets the state of a specific group. */
-        [[nodiscard]] DaliGroup getGroupState(uint8_t group_id) const;
+        [[nodiscard]] DaliGroup getGroupState(uint8_t bus_id, uint8_t group_id) const;
 
         /** Updates the state of a group. */
-        void updateGroupState(uint8_t group_id, const DaliPublishState& state);
+        void updateGroupState(uint8_t bus_id, uint8_t group_id, const DaliPublishState& state);
 
         /** Restores the group level. */
-        void restoreGroupLevel(uint8_t group_id);
+        void restoreGroupLevel(uint8_t bus_id, uint8_t group_id);
 
         /** Publishes the current group configuration to MQTT. */
         void publishAllGroups() const;
@@ -54,20 +54,20 @@ namespace daliMQTT
         * @brief Relative level change (Step Up/Down)
         * @param is_up: true to increase, false to decrease
         */
-        void stepGroupLevel(uint8_t group_id, bool is_up);
+        void stepGroupLevel(uint8_t bus_id,uint8_t group_id, bool is_up);
     private:
         DaliGroupManagement() = default;
 
         void loadFromConfig();
         esp_err_t saveToConfig();
 
-        void publishGroupState(uint8_t group_id, uint8_t level,
+        void publishGroupState(uint8_t bus_id, uint8_t group_id, uint8_t level,
                                        std::optional<uint16_t> color_temp,
                                        std::optional<DaliRGB> rgb) const;
         void publishDeviceGroupState(DaliLongAddress_t longAddr, const std::bitset<16>& groups) const;
 
         GroupAssignments m_assignments{};
-        std::array<DaliGroup, 16> m_group_states{};
+        std::array<DaliGroup, Constants::MaxBuses * 16> m_group_states{};
         mutable std::mutex m_mutex{};
     };
 

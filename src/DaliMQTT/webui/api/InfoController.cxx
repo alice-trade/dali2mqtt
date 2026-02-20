@@ -5,7 +5,6 @@
 #include <esp_system.h>
 #include <esp_timer.h>
 #include <utils/StringUtils.hxx>
-#include "dali/DaliAdapter.hxx"
 #include "dali/DaliDeviceController.hxx"
 #include "webui/WebUI.hxx"
 #include "wifi/Wifi.hxx"
@@ -15,7 +14,7 @@ namespace daliMQTT {
     static constexpr char  TAG[] = "WebUIInfo";
 
  // --- Helpers for API Info ---
-    static const char* get_chip_model_name(esp_chip_model_t model) {
+    static const char* get_chip_model_name(const esp_chip_model_t model) {
         switch (model) {
             case CHIP_ESP32:   return "ESP32";
             case CHIP_ESP32S2: return "ESP32-S2";
@@ -59,13 +58,19 @@ namespace daliMQTT {
         const std::string firmware_version = utils::stringFormat("%s (built at: %s)", DALIMQTT_VERSION, DALIMQTT_CONFIGURED_TIMESTAMP);
 
         // Get DALI status
-        const auto& dali_api = DaliAdapter::Instance();
+        auto& dc = DaliDeviceController::Instance();
+        int active_buses = 0;
+        for (uint8_t i = 0; i < Constants::MaxBuses; ++i) {
+            auto* adapter = DaliDeviceController::Instance().getAdapter(i);
+            if (adapter && adapter->isInitialized()) active_buses++;
+        }
+
         std::string dali_status;
-        if (dali_api.isInitialized()) {
-            const auto discovered_devices = DaliDeviceController::Instance().getDevices().size();
-            dali_status = utils::stringFormat("Active, %zu devices found", discovered_devices);
+        if (active_buses > 0) {
+            const auto discovered_devices = dc.getDevices().size();
+            dali_status = utils::stringFormat("Active (%d buses), %zu devices found", active_buses, discovered_devices);
         } else {
-            dali_status = "Inactive (Provisioning Mode)";
+            dali_status = "Inactive (No buses enabled or Provisioning Mode)";
         }
 
         // Get ESP uptime status

@@ -19,8 +19,8 @@ namespace daliMQTT
 
         private:
             void publishLight(DaliLongAddress_t long_addr);
-            void publishGroup(uint8_t group_id);
-            void publishSceneSelector();
+            void publishGroup(uint8_t bus_id, uint8_t group_id) const;
+            void publishSceneSelector(uint8_t bus_id) const;
 
             std::string base_topic;
             std::string availability_topic;

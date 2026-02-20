@@ -52,22 +52,27 @@ namespace daliMQTT
             publishLight(getIdentity(dev).long_address);
         }
 
-        for (uint8_t i = 0; i < 16; ++i) {
-            publishGroup(i);
+        for (uint8_t b = 0; b < Constants::MaxBuses; ++b) {
+            auto* adapter = DaliDeviceController::Instance().getAdapter(b);
+            if (adapter && adapter->isInitialized()) {
+                for (uint8_t i = 0; i < 16; ++i) {
+                    publishGroup(b, i);
+                }
+                publishSceneSelector(b);
+            }
         }
-
-        publishSceneSelector();
     }
 
     void MQTTHomeAssistantDiscovery::publishLight(const DaliLongAddress_t long_addr) {
         const auto& mqtt = MQTTClient::Instance();
-
         const auto addr_str_arr = utils::longAddressToString(long_addr);
         const char* addr_str = addr_str_arr.data();
         const char* readable_name_ptr = nullptr;
+
         auto it = std::find_if(device_names.begin(), device_names.end(), [long_addr](const DeviceNameEntry& entry) {
             return entry.addr == long_addr;
         });
+
         char name_buffer[64];
         if (it != device_names.end() && !it->name.empty()) {
             readable_name_ptr = it->name.c_str();
@@ -154,26 +159,26 @@ namespace daliMQTT
         mqtt.publish(discovery_topic, json_payload.c_str(), 1, true);
     }
 
-    void MQTTHomeAssistantDiscovery::publishGroup(uint8_t group_id) {
+    void MQTTHomeAssistantDiscovery::publishGroup(uint8_t bus_id, uint8_t group_id) const {
         const auto& mqtt = MQTTClient::Instance();
         const auto config = ConfigManager::Instance().getConfig();
 
         char object_id[64];
-        snprintf(object_id, sizeof(object_id), "dali_group_%s_%d", config.client_id.c_str(), group_id);
+        snprintf(object_id, sizeof(object_id), "dali_b%d_group_%s_%d", bus_id, config.client_id.c_str(), group_id);
 
         char discovery_topic[128];
         snprintf(discovery_topic, sizeof(discovery_topic), "homeassistant/light/%s/config", object_id);
 
         JsonDocument doc;
         char readable_name[32];
-        snprintf(readable_name, sizeof(readable_name), "DALI Group %d", group_id);
+        snprintf(readable_name, sizeof(readable_name), "DALI Bus %d Group %d", bus_id, group_id);
         doc["name"] = readable_name;
         doc["unique_id"] = object_id;
         doc["schema"] = "json";
 
         char cmd_topic[128], state_topic[128];
-        snprintf(cmd_topic, sizeof(cmd_topic), "%s/light/group/%d/set", base_topic.c_str(), group_id);
-        snprintf(state_topic, sizeof(state_topic), "%s/light/group/%d/state", base_topic.c_str(), group_id);
+        snprintf(cmd_topic, sizeof(cmd_topic), "%s/light/bus/%d/group/%d/set", base_topic.c_str(), bus_id, group_id);
+        snprintf(state_topic, sizeof(state_topic), "%s/light/bus/%d/group/%d/state", base_topic.c_str(), bus_id, group_id);
 
         doc["command_topic"] = cmd_topic;
         doc["state_topic"] = state_topic;
@@ -192,9 +197,11 @@ namespace daliMQTT
                     });
                     if (dev_it != devices.end()) {
                         if (auto* gear = std::get_if<ControlGear>(&(*dev_it))) {
-                            if (gear->color.has_value()) {
-                                if (gear->color->supports_tc) group_supports_tc = true;
-                                if (gear->color->supports_rgb) group_supports_rgb = true;
+                            if (extractBusId(gear->internal_address) == bus_id) {
+                                if (gear->color.has_value()) {
+                                    if (gear->color->supports_tc) group_supports_tc = true;
+                                    if (gear->color->supports_rgb) group_supports_rgb = true;
+                                }
                             }
                         }
                     }
@@ -230,23 +237,25 @@ namespace daliMQTT
         mqtt.publish(discovery_topic, json_payload.c_str(), 1, true);
     }
 
-    void MQTTHomeAssistantDiscovery::publishSceneSelector() {
+    void MQTTHomeAssistantDiscovery::publishSceneSelector(uint8_t bus_id) const {
         const auto& mqtt = MQTTClient::Instance();
         const auto config = ConfigManager::Instance().getConfig();
 
         char object_id[64];
-        snprintf(object_id, sizeof(object_id), "dali_scenes_%s", config.client_id.c_str());
+        snprintf(object_id, sizeof(object_id), "dali_b%d_scenes_%s", bus_id, config.client_id.c_str());
 
         char discovery_topic[128];
         snprintf(discovery_topic, sizeof(discovery_topic), "homeassistant/select/%s/config", object_id);
 
         JsonDocument doc;
 
-        doc["name"] = "DALI Scenes";
+        char readable_name[32];
+        snprintf(readable_name, sizeof(readable_name), "DALI Bus %d Scenes", bus_id);
+        doc["name"] = readable_name;
         doc["unique_id"] = object_id;
 
         char cmd_topic[128];
-        snprintf(cmd_topic, sizeof(cmd_topic), "%s%s", base_topic.c_str(), CONFIG_DALI2MQTT_MQTT_SCENE_CMD_SUBTOPIC);
+        snprintf(cmd_topic, sizeof(cmd_topic), "%s/scene/bus/%d/set", base_topic.c_str(), bus_id);
         doc["command_topic"] = cmd_topic;
 
         JsonArray options = doc["options"].to<JsonArray>();

@@ -18,7 +18,7 @@ namespace daliMQTT {
 
     static void dali_scan_task(void*) {
         ESP_LOGI(TAG, "Starting background DALI scan...");
-        DaliDeviceController::Instance().performScan();
+        DaliDeviceController::Instance().scanAllActiveBuses();
         DaliGroupManagement::Instance().refreshAssignmentsFromBus();
         ESP_LOGI(TAG, "Background DALI scan finished.");
         g_dali_task_status = DaliTaskStatus::IDLE;
@@ -30,7 +30,7 @@ namespace daliMQTT {
 
         auto devices = DaliDeviceController::Instance().getDevices();
         JsonDocument doc;
-        JsonArray root = doc.to<JsonArray>();
+        auto root = doc.to<JsonArray>();
 
         for (const auto& dev : devices) {
             auto device_obj = root.add<JsonObject>();
@@ -45,7 +45,8 @@ namespace daliMQTT {
 
             if (const auto* gear = std::get_if<ControlGear>(&dev)) {
                 device_obj["type"] = "gear";
-                device_obj["short_address"] = gear->short_address;
+                device_obj["driverId"] = extractBusId(gear->internal_address);
+                device_obj["short_address"] = extractShortAddr(gear->internal_address);
                 device_obj["level"] = gear->current_level;
                 device_obj["available"] = gear->available;
                 device_obj["lamp_failure"] = (gear->status_byte >> 1) & 0x01;
@@ -64,7 +65,8 @@ namespace daliMQTT {
             }
             else if (const auto* id = std::get_if<InputDevice>(&dev)) {
                 device_obj["type"] = "input";
-                device_obj["short_address"] = id->short_address;
+                device_obj["driverId"] = extractBusId(id->internal_address);
+                device_obj["short_address"] = extractShortAddr(id->internal_address);
                 device_obj["available"] = id->available;
             }
         }
@@ -250,7 +252,7 @@ namespace daliMQTT {
                     }
                 }
             }
-            new_assignments.push_back({*long_addr_opt, groups});
+            new_assignments.emplace_back(*long_addr_opt, groups);
         }
 
         DaliGroupManagement::Instance().setAllAssignments(new_assignments);
@@ -280,23 +282,29 @@ namespace daliMQTT {
         }
 
         const uint8_t scene_id = doc["scene_id"].as<int>();
-        SceneDeviceLevels levels;
-        levels.fill(255);
+        std::array<SceneDeviceLevels, Constants::MaxBuses> bus_levels{};
+        for (auto& l : bus_levels) l.fill(255);
+
         const auto& controller = DaliDeviceController::Instance();
 
         for (JsonPair kv : doc["levels"].as<JsonObject>()) {
             auto long_addr_opt = utils::stringToLongAddress(kv.key().c_str());
             if (!long_addr_opt) continue;
 
-            auto short_addr_opt = controller.getShortAddress(*long_addr_opt);
-            if (!short_addr_opt) continue;
+            auto int_addr_opt = controller.getInternalAddress(*long_addr_opt);
+            if (!int_addr_opt) continue;
 
             if (kv.value().is<int>()) {
-                levels[*short_addr_opt] = kv.value().as<int>();
+                bus_levels[extractBusId(*int_addr_opt)][extractShortAddr(*int_addr_opt)] = kv.value().as<int>();
             }
         }
 
-        DaliSceneManagement::Instance().saveScene(scene_id, levels);
+        for (uint8_t b = 0; b < Constants::MaxBuses; ++b) {
+            auto* adapter = DaliDeviceController::Instance().getAdapter(b);
+            if (adapter && adapter->isInitialized()) {
+                DaliSceneManagement::Instance().saveScene(b, scene_id, bus_levels[b]);
+            }
+        }
 
         httpd_resp_send(req, R"({"status":"ok", "message":"Scene configuration saved to devices."})", -1);
         return ESP_OK;
@@ -348,20 +356,23 @@ namespace daliMQTT {
             return ESP_FAIL;
         }
 
-        const auto levels = DaliSceneManagement::Instance().getSceneLevels(static_cast<uint8_t>(scene_id));
-
         JsonDocument doc;
         doc["scene_id"] = scene_id;
-
         JsonObject levels_obj = doc["levels"].to<JsonObject>();
         const auto& controller = DaliDeviceController::Instance();
 
-        for (uint8_t short_addr = 0; short_addr < 64; ++short_addr) {
-            uint8_t level = levels[short_addr];
-            if (level != 255) {
-                auto long_addr_opt = controller.getLongAddress(short_addr);
-                if (long_addr_opt) {
-                    levels_obj[utils::longAddressToString(*long_addr_opt).data()] = level;
+        for (uint8_t b = 0; b < Constants::MaxBuses; ++b) {
+            auto* adapter = DaliDeviceController::Instance().getAdapter(b);
+            if (!adapter || !adapter->isInitialized()) continue;
+
+            const auto levels = DaliSceneManagement::Instance().getSceneLevels(b, static_cast<uint8_t>(scene_id));
+            for (uint8_t short_addr = 0; short_addr < 64; ++short_addr) {
+                uint8_t level = levels[short_addr];
+                if (level != 255) {
+                    auto long_addr_opt = controller.getLongAddress(packInternalAddr(b, short_addr));
+                    if (long_addr_opt) {
+                        levels_obj[utils::longAddressToString(*long_addr_opt).data()] = level;
+                    }
                 }
             }
         }

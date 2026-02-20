@@ -5,7 +5,7 @@ project(DaliMQTT-Core LANGUAGES CXX)
 add_library(DaliMQTT-Core STATIC)
 
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/pch.hxx")
-    target_precompile_headers(DaliMQTT-Core PRIVATE pch.hxx)
+    target_precompile_headers(DaliMQTT-Core PUBLIC pch.hxx)
 endif()
 
 string(TIMESTAMP PROJ_BUILD_TIMESTAMP "%Y-%m-%dT%H:%M:%SZ")

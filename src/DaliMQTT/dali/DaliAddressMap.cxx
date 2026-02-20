@@ -8,7 +8,7 @@ namespace daliMQTT
 {
     static constexpr char TAG[] = "DaliAddrMapLoader";
 
-    bool DaliAddressMap::load(std::vector<DaliDevice>& devices, std::array<DaliLongAddress_t, 256>& short_to_long) {
+    bool DaliAddressMap::load(std::vector<DaliDevice>& devices, std::array<DaliLongAddress_t, Constants::MaxBuses * 256>& int_to_long) {
         NvsHandle nvs_handle(NVS_NAMESPACE, NVS_READONLY);
         if (!nvs_handle) {
             ESP_LOGE(TAG, "Failed to open NVS for reading address map.");
@@ -40,21 +40,21 @@ namespace daliMQTT
 
         devices.clear();
         devices.reserve(mappings.size());
-        short_to_long.fill(0xFFFFFFFF);
+        int_to_long.fill(0xFFFFFFFF);
 
         for (const auto& record : mappings) {
             if (record.is_input_device) {
                 InputDevice dev;
                 dev.long_address = record.long_address;
-                dev.short_address = record.short_address;
+                dev.internal_address = record.internal_address;
                 dev.gtin = std::string(record.gtin, strnlen(record.gtin, GTIN_STORAGE_SIZE));
                 dev.available = false;
-                devices.push_back(dev);
-                short_to_long[record.short_address | 0x80] = record.long_address; // +0x80 для Input Devices
+                devices.emplace_back(dev);
+                int_to_long[record.internal_address | 0x80] = record.long_address;
             } else {
                 ControlGear dev;
                 dev.long_address = record.long_address;
-                dev.short_address = record.short_address;
+                dev.internal_address = record.internal_address;
                 dev.gtin = std::string(record.gtin, strnlen(record.gtin, GTIN_STORAGE_SIZE));
                 if (record.device_type != 0xFF) dev.device_type = record.device_type;
 
@@ -73,8 +73,8 @@ namespace daliMQTT
                     dev.static_data_loaded = true;
                 }
                 dev.available = false;
-                devices.push_back(dev);
-                short_to_long[record.short_address] = record.long_address;
+                devices.emplace_back(dev);
+                int_to_long[record.internal_address] = record.long_address;
             }
         }
 
@@ -94,7 +94,7 @@ namespace daliMQTT
             const auto& identity = getIdentity(device_var);
 
             record.long_address = identity.long_address;
-            record.short_address = identity.short_address;
+            record.internal_address = identity.internal_address;
 
             if (!identity.gtin.empty()) {
                 strncpy(record.gtin, identity.gtin.c_str(), GTIN_STORAGE_SIZE - 1);

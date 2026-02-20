@@ -7,6 +7,21 @@ namespace daliMQTT {
     static constexpr char TAG[] = "DaliAdapter";
     using namespace Commands;
 
+    struct AdapterLock {
+        const DaliAdapter* adapter;
+        explicit AdapterLock(const DaliAdapter* a) : adapter(a) { if (adapter) adapter->lockBus(); }
+        ~AdapterLock() { if (adapter) adapter->unlockBus(); }
+    };
+
+    DaliAdapter::DaliAdapter(const uint8_t bus_id, QueueHandle_t shared_central_queue)
+            : m_bus_id(bus_id), m_dali_event_queue(shared_central_queue) {}
+
+    DaliAdapter::~DaliAdapter() {
+        if (m_worker_task_handle) vTaskDelete(m_worker_task_handle);
+        if (m_bus_mutex) vSemaphoreDelete(m_bus_mutex);
+        if (m_event_queue) vQueueDelete(m_event_queue);
+    }
+
     esp_err_t DaliAdapter::init(gpio_num_t rx_pin, gpio_num_t tx_pin) {
         if (m_initialized) return ESP_OK;
 
@@ -55,7 +70,7 @@ namespace daliMQTT {
     }
 
     esp_err_t DaliAdapter::sendRaw(const uint32_t data, const uint8_t bits) const {
-        DaliBusLock lock;
+        AdapterLock lock(this);
         AdapterEvent ev;
         ev.type = AdapterEvent::Type::CMD;
         ev.cmd = { data, bits, false, false, xTaskGetCurrentTaskHandle() };
@@ -68,7 +83,7 @@ namespace daliMQTT {
     }
 
     std::optional<uint8_t> DaliAdapter::sendRawQuery(const uint32_t data, const uint8_t bits) const {
-        DaliBusLock lock;
+        AdapterLock lock(this);
         AdapterEvent ev;
         ev.type = AdapterEvent::Type::CMD;
         ev.cmd = { data, bits, true, false, xTaskGetCurrentTaskHandle() };
@@ -84,7 +99,7 @@ namespace daliMQTT {
     }
 
     esp_err_t DaliAdapter::sendCommand(const DaliAddressType addr_type, const uint8_t addr, const OpCode command, const bool send_twice) const {
-        DaliBusLock lock;
+        AdapterLock lock(this);
         Frame frame;
         if (addr_type == DaliAddressType::Broadcast) frame = Factory::CommandBroadcast(command);
         else if (addr_type == DaliAddressType::Group) frame = Factory::CommandGroup(addr, command);
@@ -102,7 +117,7 @@ namespace daliMQTT {
     }
 
     esp_err_t DaliAdapter::sendCommand(const SpecialOpCode command, const uint8_t data, const bool send_twice) const {
-        DaliBusLock lock;
+        AdapterLock lock(this);
         auto [payload, bits] = Factory::Special(command, data);
         AdapterEvent ev;
         ev.type = AdapterEvent::Type::CMD;
@@ -187,10 +202,10 @@ namespace daliMQTT {
                         self->m_cmd_buffer.push_back(ev.cmd);
                     }
                 } else if (ev.type == AdapterEvent::Type::DRIVER_EVENT) {
-                    auto& msg = ev.msg;
+                    const auto& msg = ev.msg;
                     if (state == State::IDLE) {
                         if (msg.type == Driver::DaliEventType::FrameReceived && self->m_sniffer_enabled && self->m_dali_event_queue) {
-                            dali_frame_t frame{msg.data, msg.length, msg.is_backward};
+                            dali_frame_t frame{msg.data, msg.length, msg.is_backward, self->m_bus_id};
                             xQueueSend(self->m_dali_event_queue, &frame, 0);
                         }
                     } else if (state == State::TX_WAIT) {
@@ -224,19 +239,14 @@ namespace daliMQTT {
                     }
                 }
             }
-
-            if (state == State::WAIT_RX) {
-                if ((esp_timer_get_time() - rx_timeout) > 15000) { // 15ms timeout for response
-                    finishCmd(ESP_ERR_TIMEOUT, 0);
-                }
-            }
+            if (state == State::WAIT_RX && (esp_timer_get_time() - rx_timeout) > 15000) finishCmd(ESP_ERR_TIMEOUT, 0);
         }
     }
 
     uint8_t DaliAdapter::initializeBus(const bool provision_all) {
         using enum daliMQTT::Commands::SpecialOpCode;
         ESP_LOGI(TAG, "Starting Commissioning (Control Gear)...");
-        DaliBusLock lock;
+        AdapterLock lock(this);
 
         sendRaw(Factory::Special(Terminate, 0).data, 16);
         sendRaw(Factory::Special(Terminate, 0).data, 16);
@@ -326,7 +336,7 @@ namespace daliMQTT {
 
     uint8_t DaliAdapter::initialize24BitDevicesBus() {
         ESP_LOGI(TAG, "Starting Commissioning (Input Devices)...");
-        DaliBusLock lock;
+        AdapterLock lock(this);
         // Terminate
         sendRaw(Factory::InputDeviceCmd(0xFF, 0xFF, 0x06).data, 24);
 
@@ -366,7 +376,7 @@ namespace daliMQTT {
     }
 
     std::optional<DaliLongAddress_t> DaliAdapter::getLongAddress(const uint8_t shortAddress) {
-        DaliBusLock lock;
+        AdapterLock lock(this);
         const auto h = sendQuery(DaliAddressType::Short, shortAddress, OpCode::QueryRandomAddrH);
         if (!h) return std::nullopt;
         const auto m = sendQuery(DaliAddressType::Short, shortAddress, OpCode::QueryRandomAddrM);
@@ -378,7 +388,7 @@ namespace daliMQTT {
     }
 
     std::optional<std::bitset<16>> DaliAdapter::getDeviceGroups(const uint8_t shortAddress) {
-        DaliBusLock lock;
+        AdapterLock lock(this);
         const auto g0_7 = sendQuery(DaliAddressType::Short, shortAddress, OpCode::QueryGroups0_7);
         const auto g8_15 = sendQuery(DaliAddressType::Short, shortAddress, OpCode::QueryGroups8_15);
 
@@ -390,7 +400,7 @@ namespace daliMQTT {
     }
 
     std::optional<std::string> DaliAdapter::getGTIN(const uint8_t shortAddress) {
-        DaliBusLock lock;
+        AdapterLock lock(this);
         std::string gtin;
         for(uint8_t i=0; i<6; i++) {
             auto byte = readMemoryLocation(shortAddress, 0, 3 + i);
@@ -406,27 +416,27 @@ namespace daliMQTT {
     }
 
     std::optional<uint8_t> DaliAdapter::readMemoryLocation(const uint8_t shortAddress, const uint8_t bank, const uint8_t offset) {
-        DaliBusLock lock;
+        AdapterLock lock(this);
         setDtr1(bank);
         setDtr0(offset);
         return sendQuery(DaliAddressType::Short, shortAddress, OpCode::ReadMemoryLocation);
     }
 
     std::optional<uint8_t> DaliAdapter::getDT8Features(const uint8_t shortAddress) {
-        DaliBusLock lock;
+        AdapterLock lock(this);
         sendRaw(Factory::Special(SpecialOpCode::EnableDeviceTypeX, 8).data, 16);
         return sendQuery(DaliAddressType::Short, shortAddress, DT8OpCode::QueryColourType);
     }
 
     std::optional<uint8_t> DaliAdapter::queryDT8Value(const uint8_t shortAddress, const uint8_t dtr0_selector) {
-        DaliBusLock lock;
+        AdapterLock lock(this);
         setDtr0(dtr0_selector);
         sendRaw(Factory::Special(SpecialOpCode::EnableDeviceTypeX, 8).data, 16);
         return sendQuery(DaliAddressType::Short, shortAddress, DT8OpCode::QueryColourValue);
     }
 
     std::optional<uint16_t> DaliAdapter::getDT8ColorTemp(const uint8_t shortAddress) {
-        DaliBusLock lock;
+        AdapterLock lock(this);
         const auto msb = queryDT8Value(shortAddress, 0); // High byte
         if(!msb) return std::nullopt;
         const auto lsb = queryDT8Value(shortAddress, 1); // Low byte
@@ -435,7 +445,7 @@ namespace daliMQTT {
     }
 
     std::optional<DaliRGB> DaliAdapter::getDT8RGB(const uint8_t shortAddress) {
-        DaliBusLock lock;
+        AdapterLock lock(this);
         const auto r = queryDT8Value(shortAddress, 2);
         const auto g = queryDT8Value(shortAddress, 3);
         const auto b = queryDT8Value(shortAddress, 4);
@@ -444,14 +454,14 @@ namespace daliMQTT {
     }
 
     esp_err_t DaliAdapter::sendDT8Cmd(const uint8_t shortAddr, const DT8OpCode cmd) {
-        DaliBusLock lock;
+        AdapterLock lock(this);
         // Frame: 0xC1 <Type> (Special command).
         sendRaw(Factory::Special(SpecialOpCode::EnableDeviceTypeX, 8).data, 16);
         return sendCommand(DaliAddressType::Short, shortAddr, cmd, false);
     }
 
     esp_err_t DaliAdapter::setDT8ColorTemp(const DaliAddressType addr_type, const uint8_t addr, const uint16_t mireds) {
-        DaliBusLock lock;
+        AdapterLock lock(this);
         // Set DTR1 (High Byte)
         setDtr1((mireds >> 8) & 0xFF);
         // Set DTR0 (Low Byte)
@@ -471,7 +481,7 @@ namespace daliMQTT {
     }
 
     esp_err_t DaliAdapter::setDT8RGB(const DaliAddressType addr_type, const uint8_t addr, const uint8_t r, const uint8_t g, const uint8_t b) {
-        DaliBusLock lock;
+        AdapterLock lock(this);
         // Sequence: DTR1=Mask, DTR0=Val -> Set Temporary RGB Dimlevel (0xEB)
         auto sendColorComp = [&](const uint8_t mask, const uint8_t val) {
             setDtr1(mask);

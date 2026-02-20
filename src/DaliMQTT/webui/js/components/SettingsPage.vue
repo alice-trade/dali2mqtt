@@ -6,7 +6,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { api } from '../api';
-
+// TODO: Add DALI Driver Setup
 interface ConfigData {
   wifi_ssid: string;
   wifi_password?: string;

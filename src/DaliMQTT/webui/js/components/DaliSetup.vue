@@ -13,6 +13,7 @@ interface DaliDevice {
   short_address: number;
   type: 'gear' | 'input';
 }
+// TODO: Adapt DALI multiple drivers
 
 type GroupAssignments = Record<string, number[]>; // key: long_address
 type GroupMatrix = Record<string, boolean[]>;    // key: long_address

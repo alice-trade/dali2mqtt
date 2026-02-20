@@ -13,31 +13,33 @@ namespace daliMQTT
         ESP_LOGI(TAG, "DALI Scene Manager initialized.");
     }
 
-    esp_err_t DaliSceneManagement::activateScene(const uint8_t sceneId) const
+    esp_err_t DaliSceneManagement::activateScene(uint8_t bus_id, const uint8_t sceneId) const
     {
-        if (sceneId >= 16) {
-            return ESP_ERR_INVALID_ARG;
-        }
-        ESP_LOGI(TAG, "Activating DALI Scene %d", sceneId);
-        auto& dali = DaliAdapter::Instance();
-        return dali.sendCommand(DaliAddressType::Broadcast,
-                0,
+        if (sceneId >= 16) return ESP_ERR_INVALID_ARG;
+        ESP_LOGI(TAG, "Activating DALI Scene %d on bus %d", sceneId, bus_id);
+
+        auto* adapter = DaliDeviceController::Instance().getAdapter(bus_id);
+        if(!adapter) return ESP_FAIL;
+
+        return adapter->sendCommand(DaliAddressType::Broadcast, 0,
                 static_cast<Commands::OpCode>(static_cast<uint8_t>(Commands::OpCode::GoToScene0) + sceneId)
             );
     }
 
-    esp_err_t DaliSceneManagement::saveScene(uint8_t sceneId, const SceneDeviceLevels& levels) const {
+    esp_err_t DaliSceneManagement::saveScene(uint8_t bus_id, uint8_t sceneId, const SceneDeviceLevels& levels) const {
         if (sceneId >= 16) return ESP_ERR_INVALID_ARG;
-        ESP_LOGI(TAG, "Saving configuration for DALI Scene %d", sceneId);
-        auto& dali = DaliAdapter::Instance();
+        ESP_LOGI(TAG, "Saving configuration for DALI Scene %d on bus %d", sceneId, bus_id);
+
+        auto* adapter = DaliDeviceController::Instance().getAdapter(bus_id);
+        if(!adapter) return ESP_FAIL;
 
         for (uint8_t addr = 0; addr < 64; ++addr) {
             uint8_t level = levels[addr];
             if (level != 255) {
                 ESP_LOGD(TAG, "Setting device %d to level %d for scene %d", addr, level, sceneId);
-                dali.sendCommand(Commands::SpecialOpCode::Dtr0, level);
+                adapter->sendCommand(Commands::SpecialOpCode::Dtr0, level);
                 auto storeCmd = static_cast<Commands::OpCode>(0x40 + sceneId);
-                dali.sendCommand(DaliAddressType::Short, addr, storeCmd, true);
+                adapter->sendCommand(DaliAddressType::Short, addr, storeCmd, true);
                 vTaskDelay(pdMS_TO_TICKS(15));
             }
         }
@@ -45,23 +47,25 @@ namespace daliMQTT
         return ESP_OK;
     }
 
-    SceneDeviceLevels DaliSceneManagement::getSceneLevels(uint8_t sceneId) const {
+    SceneDeviceLevels DaliSceneManagement::getSceneLevels(uint8_t bus_id, uint8_t sceneId) const {
         SceneDeviceLevels results;
         results.fill(255);
         if (sceneId >= 16) return results;
 
-        auto& dali = DaliAdapter::Instance();
-        auto devices = DaliDeviceController::Instance().getDevices();
+        auto* adapter = DaliDeviceController::Instance().getAdapter(bus_id);
+        if(!adapter) return results;
 
-        ESP_LOGI(TAG, "Querying levels for Scene %d...", sceneId);
+        auto devices = DaliDeviceController::Instance().getDevices();
+        ESP_LOGI(TAG, "Querying levels for Scene %d on bus %d...", sceneId, bus_id);
 
         for (const auto& device : devices) {
             const auto& id = getIdentity(device);
             if (!id.available || !std::holds_alternative<ControlGear>(device)) continue;
+            if (extractBusId(id.internal_address) != bus_id) continue;
 
             auto queryCmd = static_cast<Commands::OpCode>(0xB0 + sceneId);
-            auto res = dali.sendQuery(DaliAddressType::Short, id.short_address, queryCmd);
-            results[id.short_address] = res.value_or(255);
+            auto res = adapter->sendQuery(DaliAddressType::Short, extractShortAddr(id.internal_address), queryCmd);
+            results[extractShortAddr(id.internal_address)] = res.value_or(255);
             vTaskDelay(pdMS_TO_TICKS(15));
         }
 

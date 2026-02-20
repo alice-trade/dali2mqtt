@@ -77,8 +77,8 @@ namespace daliMQTT
     esp_err_t DaliGroupManagement::setGroupMembership(DaliLongAddress_t longAddress, uint8_t group, bool assigned) {
         if (group >= 16) return ESP_ERR_INVALID_ARG;
 
-        auto short_address_opt = DaliDeviceController::Instance().getShortAddress(longAddress);
-        if (!short_address_opt) {
+        auto int_addr_opt = DaliDeviceController::Instance().getInternalAddress(longAddress);
+        if (!int_addr_opt) {
             ESP_LOGE(TAG, "Cannot set group membership: device with long address %lX not found on bus.", longAddress);
             return ESP_ERR_NOT_FOUND;
         }
@@ -95,8 +95,12 @@ namespace daliMQTT
             }
         }
 
-        auto& dali = DaliAdapter::Instance();
-        esp_err_t result = assigned ? dali.assignToGroup(*short_address_opt, group) : dali.removeFromGroup(*short_address_opt, group);
+        uint8_t bus_id = extractBusId(*int_addr_opt);
+        uint8_t short_addr = extractShortAddr(*int_addr_opt);
+        auto* adapter = DaliDeviceController::Instance().getAdapter(bus_id);
+        if(!adapter) return ESP_FAIL;
+
+        esp_err_t result = assigned ? adapter->assignToGroup(short_addr, group) : adapter->removeFromGroup(short_addr, group);
         if (result == ESP_OK) {
             saveToConfig();
             publishDeviceGroupState(longAddress, getGroupsForDevice(longAddress).value_or(std::bitset<16>()));
@@ -105,7 +109,7 @@ namespace daliMQTT
     }
 
     esp_err_t DaliGroupManagement::setAllAssignments(const GroupAssignments& newAssignments) {
-        struct Cmd { uint8_t sa; uint8_t grp; bool assign; };
+        struct Cmd { uint8_t sa; uint8_t grp; bool assign; uint8_t bus_id; };
         std::vector<Cmd> commands;
 
         {
@@ -118,11 +122,11 @@ namespace daliMQTT
                 }
 
                 if (old_groups != new_groups) {
-                    if (auto sa_opt = DaliDeviceController::Instance().getShortAddress(new_addr)) {
+                    if (auto int_addr_opt = DaliDeviceController::Instance().getInternalAddress(new_addr)) {
                         std::bitset<16> diff = old_groups ^ new_groups;
                         for (uint8_t i = 0; i < 16; ++i) {
                             if (diff.test(i)) {
-                                commands.push_back({*sa_opt, i, new_groups.test(i)});
+                                commands.push_back({extractShortAddr(*int_addr_opt), i, new_groups.test(i), extractBusId(*int_addr_opt)});
                             }
                         }
                     }
@@ -131,10 +135,12 @@ namespace daliMQTT
             m_assignments = newAssignments;
         }
 
-        auto& dali = DaliAdapter::Instance();
         for (const auto& c : commands) {
-            if (c.assign) dali.assignToGroup(c.sa, c.grp);
-            else dali.removeFromGroup(c.sa, c.grp);
+            auto* adapter = DaliDeviceController::Instance().getAdapter(c.bus_id);
+            if(adapter) {
+                if (c.assign) adapter->assignToGroup(c.sa, c.grp);
+                else adapter->removeFromGroup(c.sa, c.grp);
+            }
             vTaskDelay(pdMS_TO_TICKS(15));
         }
 
@@ -148,14 +154,15 @@ namespace daliMQTT
         if (devices.empty()) return ESP_OK;
 
         GroupAssignments new_assignments;
-        auto& dali = DaliAdapter::Instance();
 
         for (const auto& device : devices) {
             const auto& id = getIdentity(device);
             if (!id.available) continue;
             if (std::holds_alternative<ControlGear>(device)) {
-                if (auto groups_opt = dali.getDeviceGroups(id.short_address)) {
-                    new_assignments.push_back({id.long_address, *groups_opt});
+                if(auto* adapter = DaliDeviceController::Instance().getAdapter(extractBusId(id.internal_address))) {
+                    if (auto groups_opt = adapter->getDeviceGroups(extractShortAddr(id.internal_address))) {
+                        new_assignments.emplace_back(id.long_address, *groups_opt);
+                    }
                 }
             }
             vTaskDelay(pdMS_TO_TICKS(20));
@@ -170,9 +177,9 @@ namespace daliMQTT
         return saveToConfig();
     }
 
-    DaliGroup DaliGroupManagement::getGroupState(const uint8_t group_id) const {
+    DaliGroup DaliGroupManagement::getGroupState(uint8_t bus_id, const uint8_t group_id) const {
         std::lock_guard<std::mutex> lock(m_mutex);
-        if (group_id < 16) return m_group_states[group_id];
+        if (bus_id < Constants::MaxBuses && group_id < 16) return m_group_states[(bus_id * 16) + group_id];
         return DaliGroup{};
     }
 
@@ -201,12 +208,16 @@ namespace daliMQTT
         }
     }
 
-    void DaliGroupManagement::updateGroupState(const uint8_t group_id, const DaliPublishState& state) {
-        if (group_id >= 16) return;
+    void DaliGroupManagement::updateGroupState(uint8_t bus_id, const uint8_t group_id, const DaliPublishState& state) {
+        if (bus_id >= Constants::MaxBuses || group_id >= 16) return;
+
+        uint8_t index = (bus_id * 16) + group_id;
         bool changed = false;
+
         {
             std::lock_guard<std::mutex> lock(m_mutex);
-            auto& group = m_group_states[group_id];
+            auto& group = m_group_states[index];
+
             if (state.level.has_value()) {
                 const uint8_t lvl = state.level.value();
                 if (lvl > 0) group.last_level = lvl;
@@ -222,28 +233,32 @@ namespace daliMQTT
                 group.rgb = state.rgb; changed = true;
             }
         }
-        publishGroupState(group_id, m_group_states[group_id].current_level, m_group_states[group_id].color_temp, m_group_states[group_id].rgb);
+
+        publishGroupState(bus_id, group_id, m_group_states[index].current_level, m_group_states[index].color_temp, m_group_states[index].rgb);
     }
 
-    void DaliGroupManagement::restoreGroupLevel(const uint8_t group_id) {
-        if (group_id >= 16) return;
+    void DaliGroupManagement::restoreGroupLevel(uint8_t bus_id, const uint8_t group_id) {
+        if (bus_id >= Constants::MaxBuses || group_id >= 16) return;
         uint8_t target;
         {
             std::lock_guard<std::mutex> lock(m_mutex);
-            target = (m_group_states[group_id].last_level > 0) ? m_group_states[group_id].last_level : 254;
+            uint8_t index = (bus_id * 16) + group_id;
+            target = (m_group_states[index].last_level > 0) ? m_group_states[index].last_level : 254;
         }
-        updateGroupState(group_id, {.level = target});
+        updateGroupState(bus_id, group_id, {.level = target});
     }
 
-    void DaliGroupManagement::stepGroupLevel(const uint8_t group_id, const bool is_up) {
-        if (group_id >= 16) return;
+    void DaliGroupManagement::stepGroupLevel(uint8_t bus_id, const uint8_t group_id, const bool is_up) {
+        if (bus_id >= Constants::MaxBuses || group_id >= 16) return;
         constexpr int STEP_SIZE = 10;
         uint8_t new_level = 0;
         bool should_update = false;
 
         {
             std::lock_guard<std::mutex> lock(m_mutex);
-            const uint8_t current = m_group_states[group_id].current_level;
+            uint8_t index = (bus_id * 16) + group_id;
+            const uint8_t current = m_group_states[index].current_level;
+
             if (current == 0) return;
 
             int calculated = current;
@@ -261,17 +276,17 @@ namespace daliMQTT
             }
         }
 
-        if (should_update) updateGroupState(group_id, {.level = new_level});
+        if (should_update) updateGroupState(bus_id, group_id, {.level = new_level});
     }
 
-    void DaliGroupManagement::publishGroupState(const uint8_t group_id, const uint8_t level,
+    void DaliGroupManagement::publishGroupState(uint8_t bus_id, const uint8_t group_id, const uint8_t level,
                                                 std::optional<uint16_t> color_temp,
                                                 std::optional<DaliRGB> rgb) const {
         auto const& mqtt = MQTTClient::Instance();
         const auto config = ConfigManager::Instance().getConfig();
 
         char topic[128];
-        snprintf(topic, sizeof(topic), "%s/light/group/%d/state", config.mqtt_base_topic.c_str(), group_id);
+        snprintf(topic, sizeof(topic), "%s/light/bus/%d/group/%d/state", config.mqtt_base_topic.c_str(), bus_id, group_id);
 
         JsonDocument doc;
         doc["state"] = (level > 0 ? "ON" : "OFF");

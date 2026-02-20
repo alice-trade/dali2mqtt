@@ -3,9 +3,16 @@
 
 #ifndef DALIMQTT_CONFIGMANAGER_HXX
 #define DALIMQTT_CONFIGMANAGER_HXX
+#include "dali/DaliCommon.hxx"
 
 namespace daliMQTT
 {
+    struct DaliBusConfig {
+        bool enabled{false};
+        int32_t rx_pin{-1};
+        int32_t tx_pin{-1};
+    };
+
     struct AppConfig {
         // WiFi
         std::string wifi_ssid;
@@ -24,6 +31,7 @@ namespace daliMQTT
         std::string http_pass;
 
         // DALI
+        std::array<DaliBusConfig, Constants::MaxBuses> buses;
         uint32_t dali_poll_interval_ms;
         std::string dali_device_identificators;
         std::string dali_group_assignments;

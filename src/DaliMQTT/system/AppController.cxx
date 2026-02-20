@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "system/ConfigManager.hxx"
-#include "dali/DaliAdapter.hxx"
 #include "mqtt/MQTTCommandProcess.hxx"
 #include "system/SystemHardwareControls.hxx"
 #include "dali/DaliGroupManagement.hxx"
@@ -48,8 +47,6 @@ namespace daliMQTT
 
     void AppController::initDaliSubsystem() {
         ESP_LOGI(TAG, "Initializing DALI Subsystem...");
-        auto& dali_api = DaliAdapter::Instance();
-        dali_api.init(static_cast<gpio_num_t>(CONFIG_DALI2MQTT_DALI_RX_PIN), static_cast<gpio_num_t>(CONFIG_DALI2MQTT_DALI_TX_PIN));
 
         auto& dali_manager = DaliDeviceController::Instance();
         dali_manager.init();
@@ -121,8 +118,8 @@ namespace daliMQTT
         mqtt.subscribe(light_single_topic.c_str());
         ESP_LOGI(TAG, "Subscribed to lights: %s", light_single_topic.c_str());
 
-        // base/light/group/GROUP_ID/set
-        std::string light_group_topic = utils::stringFormat("%s/light/group/+/set", config.mqtt_base_topic.c_str());
+        // base/light/bus/BUS_ID/group/GROUP_ID/set
+        std::string light_group_topic = utils::stringFormat("%s/light/bus/+/group/+/set", config.mqtt_base_topic.c_str());
         mqtt.subscribe(light_group_topic.c_str());
         ESP_LOGI(TAG, "Subscribed to light groups: %s", light_group_topic.c_str());
 
@@ -131,15 +128,15 @@ namespace daliMQTT
         mqtt.subscribe(light_broadcast_topic.c_str());
         ESP_LOGI(TAG, "Subscribed to broadcast: %s", light_broadcast_topic.c_str());
 
+        // base/scene/bus/BUS_ID/set
+        std::string scene_bus_cmd_topic = utils::stringFormat("%s/scene/bus/+/set", config.mqtt_base_topic.c_str());
+        mqtt.subscribe(scene_bus_cmd_topic.c_str());
+        ESP_LOGI(TAG, "Subscribed to bus scenes: %s", scene_bus_cmd_topic.c_str());
+
         // base/config/group/set
         std::string config_group_topic = utils::stringFormat("%s%s", config.mqtt_base_topic.c_str(), CONFIG_DALI2MQTT_MQTT_GROUP_SET_SUBTOPIC);
         mqtt.subscribe(config_group_topic.c_str());
         ESP_LOGI(TAG, "Subscribed to group config: %s", config_group_topic.c_str());
-
-        // base/scene/set
-        std::string scene_cmd_topic = utils::stringFormat("%s%s", config.mqtt_base_topic.c_str(), CONFIG_DALI2MQTT_MQTT_SCENE_CMD_SUBTOPIC);
-        mqtt.subscribe(scene_cmd_topic.c_str());
-        ESP_LOGI(TAG, "Subscribed to scenes: %s", scene_cmd_topic.c_str());
 
         // base/cmd/send
         std::string cmd_topic = utils::stringFormat("%s/cmd/send", config.mqtt_base_topic.c_str());

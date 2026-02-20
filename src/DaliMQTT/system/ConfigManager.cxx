@@ -7,6 +7,7 @@
 #include <dirent.h>
 #include <esp_mac.h>
 #include <utils/StringUtils.hxx>
+#include "dali/DaliCommon.hxx"
 
 namespace daliMQTT
 {
@@ -89,6 +90,18 @@ namespace daliMQTT
             config_cache.syslog_server = CONFIG_DALI2MQTT_SYSLOG_DEFAULT_SERVER;
         }
         #endif
+
+        for (uint8_t i = 0; i < Constants::MaxBuses; ++i) {
+            uint8_t en = 0;
+            nvs_get_u8(nvs_handle.get(), utils::stringFormat("b%d_en", i).c_str(), &en);
+            config_cache.buses[i].enabled = (en == 1);
+            int32_t rx = -1, tx = -1;
+            nvs_get_i32(nvs_handle.get(), utils::stringFormat("b%d_rx", i).c_str(), &rx);
+            nvs_get_i32(nvs_handle.get(), utils::stringFormat("b%d_tx", i).c_str(), &tx);
+            config_cache.buses[i].rx_pin = rx;
+            config_cache.buses[i].tx_pin = tx;
+        }
+
         getString(nvs_handle.get(), "ota_url", config_cache.app_ota_url, "");
         getU32(nvs_handle.get(), "dali_poll", config_cache.dali_poll_interval_ms, CONFIG_DALI2MQTT_DALI_DEFAULT_POLL_INTERVAL_MS);
 
@@ -151,7 +164,11 @@ namespace daliMQTT
         SetNVS(setString, "ota_url",     cfg.app_ota_url);
         SetNVS(nvs_set_u32, "dali_poll", cfg.dali_poll_interval_ms);
         SetNVS(nvs_set_u8, "hass_disc",  cfg.hass_discovery_enabled ? 1 : 0);
-
+        for (uint8_t i = 0; i < Constants::MaxBuses; ++i) {
+            SetNVS(nvs_set_u8, utils::stringFormat("b%d_en", i).c_str(), cfg.buses[i].enabled ? 1 : 0);
+            SetNVS(nvs_set_i32, utils::stringFormat("b%d_rx", i).c_str(), cfg.buses[i].rx_pin);
+            SetNVS(nvs_set_i32, utils::stringFormat("b%d_tx", i).c_str(), cfg.buses[i].tx_pin);
+        }
         #undef SetNVS
         return ESP_OK;
     }
@@ -295,6 +312,14 @@ namespace daliMQTT
         doc["ota_url"] = cfg.app_ota_url;
         doc["hass_discovery_enabled"] = cfg.hass_discovery_enabled;
 
+        const auto busesArray = doc["buses"].to<JsonArray>();
+        for (const auto& b : cfg.buses) {
+            auto busObj = busesArray.add<JsonObject>();
+            busObj["enabled"] = b.enabled;
+            busObj["rx_pin"] = b.rx_pin;
+            busObj["tx_pin"] = b.tx_pin;
+        }
+
         const char* pass_placeholder = mask_passwords ? "***" : "";
         doc["wifi_password"] = mask_passwords ? pass_placeholder : cfg.wifi_password;
         doc["mqtt_pass"] = mask_passwords ? pass_placeholder : cfg.mqtt_pass;
@@ -380,6 +405,21 @@ namespace daliMQTT
         checkNum("dali_poll_interval_ms", current_cfg.dali_poll_interval_ms);
         checkNum("dali_poll", current_cfg.dali_poll_interval_ms);
 
+        if (doc["buses"].is<JsonArray>()) {
+            auto arr = doc["buses"].as<JsonArray>();
+            for (uint8_t i = 0; i < Constants::MaxBuses && i < arr.size(); ++i) {
+                auto bus = arr[i].as<JsonObject>();
+                if (bus["enabled"].is<bool>() && current_cfg.buses[i].enabled != bus["enabled"].as<bool>()) {
+                    current_cfg.buses[i].enabled = bus["enabled"].as<bool>(); changed = true;
+                }
+                if (bus["rx_pin"].is<int>() && current_cfg.buses[i].rx_pin != bus["rx_pin"].as<int>()) {
+                    current_cfg.buses[i].rx_pin = bus["rx_pin"].as<int>(); changed = true;
+                }
+                if (bus["tx_pin"].is<int>() && current_cfg.buses[i].tx_pin != bus["tx_pin"].as<int>()) {
+                    current_cfg.buses[i].tx_pin = bus["tx_pin"].as<int>(); changed = true;
+                }
+            }
+        }
         if (!changed) {
             return ConfigUpdateResult::NoUpdate;
         }

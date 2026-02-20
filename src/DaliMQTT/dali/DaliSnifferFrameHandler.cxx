@@ -36,30 +36,31 @@ namespace daliMQTT {
             const uint8_t gid = *target_group_id;
 
             if (!is_command) {
-                group_mgr.updateGroupState(gid, {.level = data_byte});
+                group_mgr.updateGroupState(frame.bus_id, gid, {.level = data_byte});
             } else {
                 using enum daliMQTT::Commands::OpCode;
                 switch (cmd) {
                     case Off:
-                    case StepDownAndOff: group_mgr.updateGroupState(gid, {.level = 0}); break;
-                    case RecallMaxLevel: group_mgr.updateGroupState(gid, {.level = 254}); break;
-                    case RecallMinLevel: group_mgr.updateGroupState(gid, {.level = 1}); break;
-                    case OnAndStepUp:    group_mgr.restoreGroupLevel(gid); break;
+                    case StepDownAndOff: group_mgr.updateGroupState(frame.bus_id, gid, {.level = 0}); break;
+                    case RecallMaxLevel: group_mgr.updateGroupState(frame.bus_id, gid, {.level = 254}); break;
+                    case RecallMinLevel: group_mgr.updateGroupState(frame.bus_id, gid, {.level = 1}); break;
+                    case OnAndStepUp:    group_mgr.restoreGroupLevel(frame.bus_id, gid); break;
                     case Up:
-                    case StepUp:         group_mgr.stepGroupLevel(gid, true); break;
+                    case StepUp:         group_mgr.stepGroupLevel(frame.bus_id, gid, true); break;
                     case Down:
-                    case StepDown:       group_mgr.stepGroupLevel(gid, false); break;
+                    case StepDown:       group_mgr.stepGroupLevel(frame.bus_id, gid, false); break;
                     default: break;
                 }
             }
         }
 
         bool needs_sync = false;
-        std::vector<uint8_t> sync_candidates;
+        std::vector<uint16_t> sync_candidates;
 
         for (auto& dev_var : m_devices) {
             auto* gear = std::get_if<ControlGear>(&dev_var);
             if (!gear) continue;
+            if (extractBusId(gear->internal_address) != frame.bus_id) continue;
 
             bool is_affected = is_broadcast;
             if (!is_affected && target_group_id.has_value()) {
@@ -67,7 +68,7 @@ namespace daliMQTT {
                 if (grps && grps->test(*target_group_id)) is_affected = true;
             }
             if (!is_affected && target_short_addr.has_value()) {
-                if (gear->short_address == *target_short_addr) is_affected = true;
+                if (extractShortAddr(gear->internal_address) == *target_short_addr) is_affected = true;
             }
             if (!is_affected) continue;
             std::optional<uint8_t> next_level = std::nullopt;
@@ -96,18 +97,14 @@ namespace daliMQTT {
             if (next_level.has_value()) {
                 procUpdateDeviceState(gear->long_address, {.level = *next_level});
             }
-            if (needs_sync) sync_candidates.push_back(gear->short_address);
+            if (needs_sync) sync_candidates.push_back(gear->internal_address);
         }
 
         if (needs_sync && !sync_candidates.empty()) {
-            if (is_broadcast) {
-                requestBroadcastSync(400, 150);
-            } else {
-                uint32_t delay = 400;
-                for (uint8_t sa : sync_candidates) {
-                    requestDeviceSync(sa, delay);
-                    delay += 150;
-                }
+            uint32_t delay = 400;
+            for (uint16_t internal_addr : sync_candidates) {
+                requestDeviceSync(internal_addr, delay);
+                delay += 150;
             }
         }
     }

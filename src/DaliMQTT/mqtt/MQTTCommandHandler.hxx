@@ -21,7 +21,7 @@ namespace daliMQTT {
         /** MQTT command handlers */
         static void handleLightCommand(const std::vector<std::string_view>& parts, const std::string& data);
         static void handleGroupCommand(const std::string& data);
-        static void handleSceneCommand(const std::string& data);
+        static void handleSceneCommand(uint8_t bus_id, const std::string& data);
         static void processSendDALICommand(const std::string& data);
         static void handleSyncCommand(const std::string& data);
         static void handleScanCommand();
@@ -34,7 +34,7 @@ namespace daliMQTT {
         static void backgroundInputInitTask(void* arg);
 
         // Publishing Light state
-        static void publishLightState(DaliAddressType addr_type, uint8_t target_id, const std::string& state_str, const DaliPublishState& state_data);
+        static void publishLightState(DaliAddressType addr_type, uint8_t target_bus, uint8_t target_id, const std::string& state_str, const DaliPublishState& state_data);
     };
 
 } // namespace daliMQTT

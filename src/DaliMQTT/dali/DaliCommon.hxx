@@ -8,6 +8,10 @@
 
 namespace daliMQTT
 {
+    namespace Constants
+    {
+        constexpr uint8_t MaxBuses = 3;
+    }
     // Dali address Type
     enum class DaliAddressType : uint8_t {
         Short,
@@ -21,6 +25,7 @@ namespace daliMQTT
         uint32_t data;
         uint8_t length;
         bool is_backward_frame;
+        uint8_t bus_id;
     };
 
     struct DaliPublishState {
@@ -47,6 +52,13 @@ namespace daliMQTT
         return std::visit(GetIdentityVisitor{}, dev);
     }
 
+    inline uint16_t packInternalAddr(const uint8_t bus_id, const uint8_t short_addr) {
+        return (static_cast<uint16_t>(bus_id) << 8) | short_addr;
+    }
+    inline uint8_t extractBusId(const uint16_t internal_addr) {
+        return (internal_addr >> 8) & 0xFF;
+    }
+
     struct DaliGroup {
         uint8_t id{};                  // Group ID
         uint8_t current_level{0};      // Current Level
@@ -56,7 +68,7 @@ namespace daliMQTT
     };
     using DaliLongAddrStr = std::array<char, 7>; // DALI Long Str: 6 hex chars + null
     struct DeferredRequest {
-        uint8_t short_address;
+        uint16_t internal_address;
         int64_t execute_at_ts; // Timestamp (ms)
     };
 } // daliMQTT

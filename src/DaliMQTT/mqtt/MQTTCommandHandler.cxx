@@ -15,7 +15,7 @@ namespace daliMQTT {
     static constexpr char TAG[] = "MQTTCommandHandler";
     static std::atomic<bool> g_mqtt_bus_busy{false};
 
-    void MQTTCommandHandler::publishLightState(DaliAddressType addr_type, const uint8_t target_id,
+    void MQTTCommandHandler::publishLightState(DaliAddressType addr_type, uint8_t target_bus, const uint8_t target_id,
                                                const std::string &state_str, const DaliPublishState& state_data) {
         auto &device_controller = DaliDeviceController::Instance();
 
@@ -35,17 +35,18 @@ namespace daliMQTT {
         if (addr_type == DaliAddressType::Group) {
             DaliPublishState groupState = state_data;
             if (state_str == "ON" && !groupState.level.has_value()) {
-                auto grp = DaliGroupManagement::Instance().getGroupState(target_id);
+                auto grp = DaliGroupManagement::Instance().getGroupState(target_bus, target_id);
                 groupState.level = (grp.last_level > 0) ? grp.last_level : 254;
             } else if (state_str == "OFF") {
                 groupState.level = 0;
             }
-            DaliGroupManagement::Instance().updateGroupState(target_id, groupState);
+            DaliGroupManagement::Instance().updateGroupState(target_bus, target_id, groupState);
         }
 
         switch (addr_type) {
             case DaliAddressType::Short: {
-                if (const auto long_addr_opt = device_controller.getLongAddress(target_id)) {
+                // If it's a short command, target_id is internalAddress (bus<<8 | sa)
+                if (const auto long_addr_opt = device_controller.getLongAddress(packInternalAddr(target_bus, target_id))) {
                     update_device(*long_addr_opt);
                 }
                 break;
@@ -55,7 +56,10 @@ namespace daliMQTT {
                 auto all_assignments = group_manager.getAllAssignments();
                 for (const auto &[long_addr, groups]: all_assignments) {
                     if (groups.test(target_id)) {
-                        update_device(long_addr);
+                        auto int_addr = device_controller.getInternalAddress(long_addr);
+                        if (int_addr && extractBusId(*int_addr) == target_bus) {
+                            update_device(long_addr);
+                        }
                     }
                 }
                 break;
@@ -74,41 +78,41 @@ namespace daliMQTT {
     }
 
     void MQTTCommandHandler::handleLightCommand(const std::vector<std::string_view> &parts, const std::string &data) {
-        // topic format: light/{long_addr_hex}/set OR light/group/{id}/set
-        if (parts.size() < 3 || parts[0] != "light" || parts.back() != "set") return;
+        if (parts[0] != "light" || parts.back() != "set") return;
 
         DaliAddressType addr_type = DaliAddressType::Short;
+        uint8_t target_bus = 0;
         uint8_t target_id = 0;
 
-        if (parts[1] == "group") {
-            if (parts.size() < 4) return;
+        // format 1: light/bus/B/group/G/set
+        if (parts.size() >= 5 && parts[1] == "bus" && parts[3] == "group") {
             addr_type = DaliAddressType::Group;
-            int parsed_id = -1;
-            auto [ptr, ec] = std::from_chars(parts[2].data(), parts[2].data() + parts[2].size(), parsed_id);
-            if (ec != std::errc() || parsed_id < 0 || parsed_id > 15) {
-                ESP_LOGW(TAG, "Invalid group ID received");
-                return;
-            }
-            target_id = static_cast<uint8_t>(parsed_id);
-        } else if (parts[1] == "broadcast") {
+            target_bus = std::stoi(std::string(parts[2]));
+            target_id = std::stoi(std::string(parts[4]));
+        }
+        // format 2: light/broadcast/set
+        else if (parts.size() >= 3 && parts[1] == "broadcast") {
             addr_type = DaliAddressType::Broadcast;
-            target_id = 0;
-        } else {
+        }
+        // format 3: light/LONG_ADDR_HEX/set
+        else if (parts.size() >= 3) {
             addr_type = DaliAddressType::Short;
             const auto long_addr_opt = utils::stringToLongAddress(parts[1]);
             if (!long_addr_opt) return;
-            const auto short_addr_opt = DaliDeviceController::Instance().getShortAddress(*long_addr_opt);
-            if (!short_addr_opt) {
+            const auto int_addr_opt = DaliDeviceController::Instance().getInternalAddress(*long_addr_opt);
+            if (!int_addr_opt) {
                 ESP_LOGD(TAG, "Received command for unknown long address: %s", std::string(parts[1]).c_str());
                 return;
             }
-            target_id = *short_addr_opt;
+            target_bus = extractBusId(*int_addr_opt);
+            target_id = extractShortAddr(*int_addr_opt);
+        } else {
+            return;
         }
 
         JsonDocument doc;
         if (deserializeJson(doc, data)) return;
 
-        auto &dali = DaliAdapter::Instance();
         DaliPublishState targetState;
         std::optional<bool> target_on_state;
 
@@ -137,99 +141,58 @@ namespace daliMQTT {
             }
         }
 
-        if (targetState.color_temp.has_value() || targetState.rgb.has_value()) {
-            DaliPublishState stateUpdateForMode;
+        auto& controller = DaliDeviceController::Instance();
+
+        auto executeCommand = [&](DaliAdapter* adapter, uint8_t t_id) {
+            if (!adapter || !adapter->isInitialized()) return;
 
             if (targetState.color_temp.has_value()) {
-                dali.setDT8ColorTemp(addr_type, target_id, *targetState.color_temp);
-                stateUpdateForMode.active_mode = DaliColorMode::Tc;
+                adapter->setDT8ColorTemp(addr_type, t_id, *targetState.color_temp);
             }
-
             if (targetState.rgb.has_value()) {
-                dali.setDT8RGB(addr_type, target_id, targetState.rgb->r, targetState.rgb->g, targetState.rgb->b);
-                stateUpdateForMode.active_mode = DaliColorMode::Rgb;
+                adapter->setDT8RGB(addr_type, t_id, targetState.rgb->r, targetState.rgb->g, targetState.rgb->b);
             }
-
-            if (stateUpdateForMode.active_mode.has_value()) {
-                auto& controller = DaliDeviceController::Instance();
-
-                if (addr_type == DaliAddressType::Short) {
-                    if (auto long_addr = controller.getLongAddress(target_id)) {
-                        controller.updateDeviceState(*long_addr, stateUpdateForMode);
-                    }
-                }
-                else if (addr_type == DaliAddressType::Group) {
-                    auto all_assignments = DaliGroupManagement::Instance().getAllAssignments();
-                    for (const auto& [long_addr, groups] : all_assignments) {
-                        if (groups.test(target_id)) {
-                            controller.updateDeviceState(long_addr, stateUpdateForMode);
-                        }
-                    }
-                }
-                else if (addr_type == DaliAddressType::Broadcast) {
-                    for (auto devices = controller.getDevices(); const auto& dev : devices) {
-                        if (getIdentity(dev).available) {
-                            controller.updateDeviceState(getIdentity(dev).long_address, stateUpdateForMode);
-                        }
-                    }
-                }
+            if (target_on_state.has_value() && !(*target_on_state)) {
+                adapter->sendCommand(addr_type, t_id, Commands::OpCode::Off);
+            } else if (target_on_state.has_value() && *target_on_state) {
+                 if (targetState.level.has_value() && *targetState.level > 0) adapter->sendDACP(addr_type, t_id, *targetState.level);
+                 else {
+                     std::optional<uint8_t> restore_level;
+                     if (addr_type == DaliAddressType::Short) {
+                         if (auto long_addr = controller.getLongAddress(packInternalAddr(adapter->getBusId(), t_id))) {
+                             auto saved = controller.getLastLevel(*long_addr);
+                             if (saved.has_value() && *saved > 0) restore_level = saved;
+                         }
+                     }
+                     if (restore_level.has_value()) {
+                         targetState.level = *restore_level;
+                         adapter->sendDACP(addr_type, t_id, targetState.level.value());
+                     } else {
+                         targetState.level = 254;
+                         adapter->sendCommand(addr_type, t_id, Commands::OpCode::RecallMaxLevel);
+                     }
+                 }
+            } else if (targetState.level.has_value()) {
+                if (targetState.level > 0) adapter->sendDACP(addr_type, t_id, targetState.level.value());
+                else adapter->sendCommand(addr_type, t_id, Commands::OpCode::Off);
             }
+        };
+
+        if (addr_type == DaliAddressType::Broadcast) {
+            for (uint8_t i = 0; i < Constants::MaxBuses; ++i) executeCommand(DaliDeviceController::Instance().getAdapter(i), 0);
+        } else {
+            executeCommand(controller.getAdapter(target_bus), target_id);
         }
 
-        if (target_on_state.has_value() && !(*target_on_state)) {
-            // OFF
-            ESP_LOGD(TAG, "MQTT Command: OFF for target %u (type %d)", target_id, addr_type);
-            dali.sendCommand(addr_type, target_id, Commands::OpCode::Off);
-            publishLightState(addr_type, target_id, "OFF", targetState);
-        } else if (target_on_state.has_value() && *target_on_state) {
-             if (targetState.level.has_value() && *targetState.level > 0) {
-                // ON + Level
-                ESP_LOGD(TAG, "MQTT Command: ON with brightness %d for target %u (type %d)", *targetState.level,
-                         target_id, addr_type);
-                 dali.sendDACP(addr_type, target_id, *targetState.level);
-                 publishLightState(addr_type, target_id, "ON", targetState);
-            } else {
-                // ON (Restore)
-                std::optional<uint8_t> restore_level;
-                if (addr_type == DaliAddressType::Short) {
-                    auto &controller = DaliDeviceController::Instance();
-                    if (auto long_addr = controller.getLongAddress(target_id)) {
-                        auto saved = controller.getLastLevel(*long_addr);
-                        if (saved.has_value() && *saved > 0) {
-                            restore_level = saved;
-                        }
-                    }
-                }
+        // Publish State Back
+        if (targetState.color_temp.has_value()) targetState.active_mode = DaliColorMode::Tc;
+        if (targetState.rgb.has_value()) targetState.active_mode = DaliColorMode::Rgb;
 
-                if (restore_level.has_value()) {
-                    targetState.level = *restore_level;
-                    ESP_LOGD(TAG, "MQTT Command: ON (Restore) -> restoring level %d for target %u", targetState.level.value(), target_id);
-                    dali.sendDACP(addr_type, target_id, targetState.level.value());
-                    publishLightState(addr_type, target_id, "ON", targetState);
-                } else {
-                    targetState.level = 254;
-                    ESP_LOGD(TAG, "MQTT Command: ON (Default) -> RECALL_MAX_LEVEL for target %u (type %d)", target_id,
-                             addr_type);
-                    dali.sendCommand(addr_type, target_id, Commands::OpCode::RecallMaxLevel);
-                    publishLightState(addr_type, target_id, "ON", targetState);
-                }
-            }
-        } else if (targetState.level.has_value()) {
-            // Level Direct Change
-            if (targetState.level > 0) {
-                ESP_LOGD(TAG, "MQTT Command: Set brightness to %d for target %u (type %d)", targetState.level.value(), target_id,
-                         addr_type);
-                dali.sendDACP(addr_type, target_id, targetState.level.value());
-                publishLightState(addr_type, target_id, "ON", targetState);
-            } else {
-                targetState.level = 0;
-                ESP_LOGD(TAG, "MQTT Command: Set brightness to 0 (OFF) for target %u (type %d)", target_id, addr_type);
-                dali.sendCommand(addr_type, target_id, Commands::OpCode::Off);
-                publishLightState(addr_type, target_id, "OFF", targetState);
-            }
-        } else if (targetState.color_temp.has_value() || targetState.rgb.has_value()) {
-            publishLightState(addr_type, target_id, "ON", targetState);
-        }
+        std::string final_state_str = "ON";
+        if (target_on_state.has_value() && !(*target_on_state)) final_state_str = "OFF";
+        else if (targetState.level.has_value() && targetState.level.value() == 0) final_state_str = "OFF";
+
+        publishLightState(addr_type, target_bus, target_id, final_state_str, targetState);
     }
 
     void MQTTCommandHandler::handleGroupCommand(const std::string &data) {
@@ -255,7 +218,15 @@ namespace daliMQTT {
         mqtt.publish(result_topic.c_str(), payload.c_str());
     }
 
-    void MQTTCommandHandler::handleSceneCommand(const std::string &data) {
+    void MQTTCommandHandler::handleSceneCommand(uint8_t bus_id, const std::string &data) {
+        std::string scene_str = data;
+        if (scene_str.starts_with("Scene ")) {
+            scene_str.erase(0, 6);
+            int scene_id = std::stoi(scene_str);
+            DaliSceneManagement::Instance().activateScene(bus_id, scene_id);
+            return;
+        }
+
         JsonDocument doc;
         if (deserializeJson(doc, data) || !doc["scene"].is<int>()) {
             ESP_LOGE(TAG, "Invalid scene command JSON structure");
@@ -263,7 +234,7 @@ namespace daliMQTT {
         }
 
         uint8_t scene_id = doc["scene"].as<int>();
-        DaliSceneManagement::Instance().activateScene(scene_id);
+        DaliSceneManagement::Instance().activateScene(bus_id, scene_id);
     }
 
     void MQTTCommandHandler::processSendDALICommand(const std::string &data) {
@@ -271,21 +242,22 @@ namespace daliMQTT {
         if (deserializeJson(doc, data)) return;
 
         if (doc["addr"].is<int>() && doc["cmd"].is<int>()) {
+            uint8_t target_bus = 0;
+            if (doc["bus"].is<int>()) target_bus = doc["bus"].as<int>();
+
             const auto addr_val = static_cast<uint32_t>(doc["addr"].as<int>());
             const auto cmd_val = static_cast<uint32_t>(doc["cmd"].as<int>());
             uint8_t bits = 16;
 
-            if (doc["bits"].is<int>()) {
-                bits = static_cast<uint8_t>(doc["bits"].as<int>());
-            } else {
-                if (addr_val > 0xFF) bits = 24;
-            }
+            if (doc["bits"].is<int>()) bits = static_cast<uint8_t>(doc["bits"].as<int>());
+            else if (addr_val > 0xFF) bits = 24;
 
             const uint32_t raw_data = (addr_val << 8) | cmd_val;
-            auto& dali = DaliAdapter::Instance();
+            auto* adapter = DaliDeviceController::Instance().getAdapter(target_bus);
+            if (!adapter || !adapter->isInitialized()) return;
 
             if (!doc["tag"].isNull()) {
-                const auto result = dali.sendRawQuery(raw_data, bits);
+                const auto result = adapter->sendRawQuery(raw_data, bits);
                 JsonDocument resp;
 
                 resp["tag"] = doc["tag"];
@@ -299,10 +271,10 @@ namespace daliMQTT {
                 snprintf(res_topic, sizeof(res_topic), "%s/cmd/res", ConfigManager::Instance().getMqttBaseTopic().c_str());
                 MQTTClient::Instance().publish(res_topic, payload.c_str());
             } else {
-                dali.sendRaw(raw_data, bits);
+                adapter->sendRaw(raw_data, bits);
                 if (doc["twice"].as<bool>()) {
                     vTaskDelay(pdMS_TO_TICKS(10));
-                    dali.sendRaw(raw_data, bits);
+                    adapter->sendRaw(raw_data, bits);
                 }
             }
         }
@@ -319,9 +291,7 @@ namespace daliMQTT {
         bool is_broadcast = false;
 
         if (doc["addr_type"].is<const char*>()) {
-            if (strcmp(doc["addr_type"].as<const char*>(), "broadcast") == 0) {
-                is_broadcast = true;
-            }
+            if (strcmp(doc["addr_type"].as<const char*>(), "broadcast") == 0) is_broadcast = true;
         }
 
         auto& controller = DaliDeviceController::Instance();
@@ -335,20 +305,20 @@ namespace daliMQTT {
                 auto long_addr_opt = utils::stringToLongAddress(addr_str);
 
                 if (long_addr_opt) {
-                    auto short_addr_opt = controller.getShortAddress(*long_addr_opt);
-                    if (short_addr_opt) {
-                        controller.requestDeviceSync(*short_addr_opt, delay_ms);
+                    auto internal_addr_opt = controller.getInternalAddress(*long_addr_opt);
+                    if (internal_addr_opt) {
+                        controller.requestDeviceSync(*internal_addr_opt, delay_ms);
                     } else {
                         ESP_LOGD(TAG, "Sync requested for unknown device long address: %s", addr_str.c_str());
                     }
                 } else {
                     ESP_LOGD(TAG, "Invalid address format in sync command: %s", addr_str.c_str());
                 }
-            } else {
-                ESP_LOGD(TAG, "Sync command missing 'address' field for device sync");
             }
         }
     }
+
+    // ... [handleConfigGet, handleConfigSet, backgroundScanTask, backgroundInitTask, backgroundInputInitTask - без изменений] ...
 
     void MQTTCommandHandler::handleConfigGet() {
         std::string json_string = ConfigManager::Instance().getSerializedConfig(true);
@@ -359,7 +329,6 @@ namespace daliMQTT {
 
     void MQTTCommandHandler::handleConfigSet(const std::string& data) {
         ConfigUpdateResult result = ConfigManager::Instance().updateConfigFromJson(data.c_str());
-
         auto const &mqtt = MQTTClient::Instance();
         std::string status_topic = ConfigManager::Instance().getMqttBaseTopic() + "/config/status";
 
@@ -373,7 +342,6 @@ namespace daliMQTT {
                 vTaskDelete(nullptr);
             }, "mqtt_reload", 4096, nullptr, 5, nullptr);
             break;
-
         case ConfigUpdateResult::SystemUpdate:
         case ConfigUpdateResult::WIFIUpdate:
             ESP_LOGI(TAG, "System/WiFi Config changed. Rebooting...");
@@ -381,7 +349,6 @@ namespace daliMQTT {
             vTaskDelay(pdMS_TO_TICKS(1000));
             esp_restart();
             break;
-
         case ConfigUpdateResult::NoUpdate:
         default:
             ESP_LOGI(TAG, "Config update received but no significant changes.");
@@ -442,26 +409,15 @@ namespace daliMQTT {
     }
 
     void MQTTCommandHandler::handleScanCommand() {
-        if (g_mqtt_bus_busy.exchange(true)) {
-            ESP_LOGW(TAG, "Bus operation already in progress. Ignoring scan request.");
-            return;
-        }
-        if (xTaskCreate(backgroundScanTask, "mqtt_scan_task", 8192, nullptr, 4, nullptr) != pdPASS) {
-            ESP_LOGE(TAG, "Failed to create scan task");
-            g_mqtt_bus_busy = false;
-        }
+        if (g_mqtt_bus_busy.exchange(true)) return;
+        if (xTaskCreate(backgroundScanTask, "mqtt_scan_task", 8192, nullptr, 4, nullptr) != pdPASS) g_mqtt_bus_busy = false;
     }
 
     void MQTTCommandHandler::handleInitializeCommand() {
-        if (g_mqtt_bus_busy.exchange(true)) {
-            ESP_LOGW(TAG, "Bus operation already in progress. Ignoring init request.");
-            return;
-        }
-        if (xTaskCreate(backgroundInitTask, "mqtt_init_task", 8192, nullptr, 4, nullptr) != pdPASS) {
-            ESP_LOGE(TAG, "Failed to create init task");
-            g_mqtt_bus_busy = false;
-        }
+        if (g_mqtt_bus_busy.exchange(true)) return;
+        if (xTaskCreate(backgroundInitTask, "mqtt_init_task", 8192, nullptr, 4, nullptr) != pdPASS) g_mqtt_bus_busy = false;
     }
+
 
     void MQTTCommandHandler::handle(const std::string &topic, const std::string &data) {
         ESP_LOGD(TAG, "MQTT Rx: %s -> %s", topic.c_str(), data.c_str());
@@ -483,54 +439,30 @@ namespace daliMQTT {
             handleLightCommand(parts, data);
         } else if (parts[0] == "config") {
             if (parts.size() == 2) {
-                if (parts[1] == "get") {
-                    handleConfigGet();
-                } else if (parts[1] == "set") {
-                    handleConfigSet(data);
-                }
+                if (parts[1] == "get") handleConfigGet();
+                else if (parts[1] == "set") handleConfigSet(data);
             } else if (parts.size() > 2 && parts[1] == "group" && parts[2] == "set") {
                 handleGroupCommand(data);
-            }
-            else if (parts.size() > 2 && parts[1] == "bus") {
-                if (parts[2] == "scan") {
-                    handleScanCommand();
-                } else if (parts[2] == "initialize") {
-                    handleInitializeCommand();
+            } else if (parts.size() > 2 && parts[1] == "bus") {
+                if (parts[2] == "scan") handleScanCommand();
+                else if (parts[2] == "initialize") handleInitializeCommand();
+            } else if (parts.size() > 2 && parts[1] == "input_device") {
+                if (parts[2] == "scan") handleScanCommand();
+                else if (parts[2] == "initialize") {
+                    if (g_mqtt_bus_busy.exchange(true)) return;
+                    if (xTaskCreate(backgroundInputInitTask, "mqtt_input_init", 4096, nullptr, 4, nullptr) != pdPASS) g_mqtt_bus_busy = false;
                 }
+            } else if (parts.size() > 2 && parts[1] == "discovery" && parts[2] == "publish") {
+                AppController::Instance().publishHAMqttDiscovery();
             }
-            else if (parts.size() > 2 && parts[1] == "input_device") {
-                if (parts[2] == "scan") {
-                    handleScanCommand();
-                } else if (parts[2] == "initialize") {
-                    if (g_mqtt_bus_busy.exchange(true)) {
-                        ESP_LOGW(TAG, "Bus operation already in progress. Ignoring input init request.");
-                        return;
-                    }
-                    if (xTaskCreate(backgroundInputInitTask, "mqtt_input_init", 4096, nullptr, 4, nullptr) != pdPASS) {
-                        ESP_LOGE(TAG, "Failed to create input init task");
-                        g_mqtt_bus_busy = false;
-                    }
-                }
-            } else if (parts[0] == "config" && parts.size() > 1 && parts[1] == "discovery") {
-                if (parts.size() > 2 && parts[2] == "publish") {
-                    AppController::Instance().publishHAMqttDiscovery();
-                }
-            }
-        } else if (parts[0] == "scene" && parts.size() > 1 && parts[1] == "set") {
-            std::string scene_str = data;
-            // HASS Scene Select
-            if (scene_str.starts_with("Scene ")) {
-                scene_str.erase(0, 6); // "Scene "
-                int scene_id = std::stoi(scene_str);
-                DaliSceneManagement::Instance().activateScene(scene_id);
-            } else {
-                handleSceneCommand(data);
-            }
+        } else if (parts[0] == "scene" && parts.size() >= 4 && parts[1] == "bus" && parts[3] == "set") {
+            // scene/bus/{bus_id}/set
+            uint8_t bus_id = std::stoi(std::string(parts[2]));
+            handleSceneCommand(bus_id, data);
         } else if (parts[0] == "cmd" && parts.size() > 1 && parts[1] == "send") {
             processSendDALICommand(data);
         } else if (parts[0] == "cmd" && parts.size() > 1 && parts[1] == "sync") {
             handleSyncCommand(data);
         }
-
     }
 } // namespace daliMQTT

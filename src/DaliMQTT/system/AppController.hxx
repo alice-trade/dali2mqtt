@@ -19,14 +19,14 @@ namespace daliMQTT
             void startProvisioningMode();
             void startNormalMode();
 
-            void onConfigReloadRequest();
+            static void onConfigReloadRequest();
             void publishHAMqttDiscovery() const;
 
 
         private:
             AppController() = default;
 
-            void initDaliSubsystem();
+            static void initDaliSubsystem();
             void initNetworkSubsystem();
 
             // Callbacks

@@ -24,13 +24,8 @@ namespace daliMQTT
 
     class DaliAdapter {
     public:
-        DaliAdapter(const DaliAdapter&) = delete;
-        DaliAdapter& operator=(const DaliAdapter&) = delete;
-
-        static DaliAdapter& Instance() {
-            static DaliAdapter instance;
-            return instance;
-        }
+        DaliAdapter(uint8_t bus_id, QueueHandle_t central_queue);
+        ~DaliAdapter();
 
         /**
          * @brief Initialize the Adapter and the underlying RMT driver.
@@ -43,6 +38,8 @@ namespace daliMQTT
         [[nodiscard]] bool isInitialized() const {
             return m_initialized;
         }
+
+        [[nodiscard]] uint8_t getBusId() const { return m_bus_id; }
 
         /**
          * @brief Send a raw DALI frame asynchronously.
@@ -83,13 +80,13 @@ namespace daliMQTT
          * @brief Send a query of SPECIAL command and wait for an 8-bit backward frame response.
          * @return uint8_t response or std::nullopt on timeout/collision.
          */
-        std::optional<uint8_t> sendQuery(Commands::SpecialOpCode command, uint8_t data) const;
+        [[nodiscard]] std::optional<uint8_t> sendQuery(Commands::SpecialOpCode command, uint8_t data) const;
 
         /**
          * @brief Send a DT8 query (IEC 62386-209) and wait for an 8-bit backward frame response.
          *  @return uint8_t response or std::nullopt on timeout/collision.
          */
-        [[nodiscard]] std::optional<uint8_t> sendQuery(DaliAddressType addr_type, uint8_t addr, Commands::DT8OpCode command) {
+        [[nodiscard]] std::optional<uint8_t> sendQuery(DaliAddressType addr_type, uint8_t addr, Commands::DT8OpCode command) const {
             return sendQuery(addr_type, addr, static_cast<Commands::OpCode>(command));
         }
 
@@ -101,7 +98,7 @@ namespace daliMQTT
         /**
          * @brief Send Input Device Command (24-bit).
          */
-        std::optional<uint8_t> sendInputDeviceCommand(uint8_t shortAddress, uint8_t opcode, std::optional<uint8_t> param = std::nullopt) const;
+        [[nodiscard]] std::optional<uint8_t> sendInputDeviceCommand(uint8_t shortAddress, uint8_t opcode, std::optional<uint8_t> param = std::nullopt) const;
 
         uint8_t initializeBus(bool provision_all = true);
 
@@ -110,14 +107,14 @@ namespace daliMQTT
         /**
          * @brief Adds a device to a group.
          */
-        esp_err_t assignToGroup(const uint8_t shortAddress, const uint8_t group) {
+        [[nodiscard]] esp_err_t assignToGroup(const uint8_t shortAddress, const uint8_t group) const {
             return sendCommand(DaliAddressType::Short, shortAddress, static_cast<Commands::OpCode>(0x60 + group), true);
         }
 
         /**
          * @brief Removes a device from a group.
          */
-        esp_err_t removeFromGroup(const uint8_t shortAddress, const uint8_t group) {
+        [[nodiscard]] esp_err_t removeFromGroup(const uint8_t shortAddress, const uint8_t group) const {
             return sendCommand(DaliAddressType::Short, shortAddress, static_cast<Commands::OpCode>(0x70 + group), true);
         }
 
@@ -181,12 +178,12 @@ namespace daliMQTT
         void onDriverEvent(const Driver::DaliMessage& msg) const;
 
     private:
-        DaliAdapter() = default;
+        uint8_t m_bus_id{};
 
         // Internal helper task to process Driver events
         [[noreturn]] static void busWorkerTask(void* arg);
 
-        uint32_t findAddressBinarySearch(bool input_devices) const;
+        [[nodiscard]] uint32_t findAddressBinarySearch(bool input_devices) const;
 
         void setDtr0(const uint8_t val) { sendRaw(Commands::Factory::Special(Commands::SpecialOpCode::Dtr0, val).data, 16); }
         void setDtr1(const uint8_t val) { sendRaw(Commands::Factory::Special(Commands::SpecialOpCode::Dtr1, val).data, 16); }
@@ -205,11 +202,6 @@ namespace daliMQTT
         std::atomic<bool> m_sniffer_enabled{false};
 
         static constexpr UBaseType_t NOTIFY_IDX = 1;
-    };
-
-    struct DaliBusLock {
-        DaliBusLock() { DaliAdapter::Instance().lockBus(); }
-        ~DaliBusLock() { DaliAdapter::Instance().unlockBus(); }
     };
 } // daliMQTT
 

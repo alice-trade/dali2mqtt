@@ -8,6 +8,7 @@
 #include <atomic>
 #include <bitset>
 #include <charconv>
+#include <memory>
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>

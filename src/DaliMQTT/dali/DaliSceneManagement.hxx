@@ -20,9 +20,9 @@ namespace daliMQTT
 
         void init();
 
-        esp_err_t activateScene(uint8_t sceneId) const;
-        esp_err_t saveScene(uint8_t sceneId, const SceneDeviceLevels& levels) const;
-        [[nodiscard]] SceneDeviceLevels getSceneLevels(uint8_t sceneId) const;
+        esp_err_t activateScene(uint8_t bus_id, uint8_t sceneId) const;
+        esp_err_t saveScene(uint8_t bus_id, uint8_t sceneId, const SceneDeviceLevels& levels) const;
+        [[nodiscard]] SceneDeviceLevels getSceneLevels(uint8_t bus_id, uint8_t sceneId) const;
 
     private:
         DaliSceneManagement() = default;
