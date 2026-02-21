@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2026 Alice-Trade Inc.
- * SPDX-License-Identifier: GPL-2.0-or-later
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 import axios from 'axios';

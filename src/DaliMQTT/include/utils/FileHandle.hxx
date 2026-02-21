@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Alice-Trade Inc.
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 #ifndef DALIMQTT_FILEHANDLER_HXX
 #define DALIMQTT_FILEHANDLER_HXX

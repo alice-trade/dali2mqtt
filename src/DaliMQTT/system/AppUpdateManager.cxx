@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Alice-Trade Inc.
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "system/AppUpdateManager.hxx"
 #include <esp_http_client.h>
