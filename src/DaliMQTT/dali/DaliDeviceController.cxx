@@ -17,7 +17,7 @@ namespace daliMQTT
     void DaliDeviceController::init() {
         ESP_LOGI(TAG, "Initializing DALI Device Controller...");
         applyBusConfiguration();
-        m_internal_to_long_map.fill(0xFFFFFFFF);
+        m_internal_to_long_map.fill(InvalidLongAddr);
 
         bool map_loaded = DaliAddressMap::load(m_devices, m_internal_to_long_map);
         if (!map_loaded || !validateAddressMap()) {
@@ -875,7 +875,7 @@ namespace daliMQTT
         if (is_input_device) map_idx |= 0x80;
 
         std::lock_guard<std::mutex> lock(m_devices_mutex);
-        if (m_internal_to_long_map[map_idx] != 0xFFFFFFFF) {
+        if (m_internal_to_long_map[map_idx] != InvalidLongAddr) {
             return m_internal_to_long_map[map_idx];
         }
         return std::nullopt;

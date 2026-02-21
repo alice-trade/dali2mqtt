@@ -8,6 +8,7 @@
 
 namespace daliMQTT {
     using DaliLongAddress_t = uint32_t;
+    inline constexpr DaliLongAddress_t InvalidLongAddr = 0xFFFFFFFF;
 
     struct DeviceIdentity {
         DaliLongAddress_t long_address{0};          // 24-bit DALI Long (random) Address

@@ -40,7 +40,7 @@ namespace daliMQTT
 
         devices.clear();
         devices.reserve(mappings.size());
-        int_to_long.fill(0xFFFFFFFF);
+        int_to_long.fill(InvalidLongAddr);
 
         for (const auto& record : mappings) {
             DaliInternalAddr internalAddrObject(record.internal_address);

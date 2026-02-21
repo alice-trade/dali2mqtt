@@ -265,7 +265,7 @@ namespace daliMQTT {
         uint8_t devices_found = 0;
         while (true) {
             uint32_t longAddr = findAddressBinarySearch(false);
-            if (longAddr > 0xFFFFFF) break; // No more devices
+            if (longAddr == InvalidLongAddr) break; // No more devices
             uint8_t prog_byte = (devices_found << 1) | 1;
             if (devices_found >= 64) {
                 ESP_LOGW(TAG, "More than 64 devices found. Skipping assignment.");
@@ -313,7 +313,7 @@ namespace daliMQTT {
         };
 
         sendSearchAddr(0xFFFFFF);
-        if (!sendCompare()) return 0xFFFFFFFF; // No devices
+        if (!sendCompare()) return InvalidLongAddr; // No devices
 
         while ((high - low) > 0) {
             searchAddr = low + (high - low) / 2;
@@ -331,7 +331,7 @@ namespace daliMQTT {
         sendSearchAddr(searchAddr);
         if (sendCompare()) return searchAddr;
 
-        return 0xFFFFFFFF;
+        return InvalidLongAddr;
     }
 
     uint8_t DaliAdapter::initialize24BitDevicesBus() {
@@ -353,8 +353,7 @@ namespace daliMQTT {
 
         while (true) {
             uint32_t longAddr = findAddressBinarySearch(true);
-            if (longAddr > 0xFFFFFF) break;
-
+            if (longAddr == InvalidLongAddr) break;
             if (devices_found >= 64) {
                 // Withdraw (0x03)
                 sendRaw(Factory::InputDeviceCmd(0xFF, 0xFF, 0x03).data, 24);
