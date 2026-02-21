@@ -15,6 +15,12 @@ namespace daliMQTT {
         }
         const uint8_t addr_byte = (frame.data >> 8) & 0xFF;
         const uint8_t data_byte = frame.data & 0xFF;
+
+        if ((addr_byte & 0xE0) == 0xA0 || (addr_byte & 0xE0) == 0xC0) {
+            ESP_LOGV(TAG, "Sniffed Special Command: 0x%02X, ignoring for state sync", addr_byte);
+            return;
+        }
+
         const bool is_command = (addr_byte & 0x01);
         const auto cmd = static_cast<Commands::OpCode>(data_byte);
 

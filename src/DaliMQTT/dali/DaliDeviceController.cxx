@@ -341,18 +341,27 @@ namespace daliMQTT
                 vTaskDelay(priority_delay_ticks);
             } else {
                 // Round Robin Logic
-                uint8_t current_bus = self->m_round_robin_index / 64;
-                uint8_t current_sa  = self->m_round_robin_index % 64;
+                uint16_t target_internal_addr = 0xFFFF;
+                bool do_group_sync = false;
+                {
+                    std::lock_guard<std::mutex> lock(self->m_devices_mutex);
+                    size_t dev_count = self->m_devices.size();
 
-                if (auto* adapter = self->getAdapter(current_bus); adapter && adapter->isInitialized()) {
-                    self->pollSingleDevice(packInternalAddr(current_bus, current_sa));
+                    if (dev_count > 0) {
+                        if (self->m_round_robin_index >= dev_count) {
+                            self->m_round_robin_index = 0;
+                            do_group_sync = true;
+                        }
+
+                        if (self->m_round_robin_index < dev_count) {
+                            const auto& dev = self->m_devices[self->m_round_robin_index];
+                            target_internal_addr = getIdentity(dev).internal_address;
+                            self->m_round_robin_index++;
+                        }
+                    }
                 }
 
-                self->m_round_robin_index++;
-                if (self->m_round_robin_index >= (64 * Constants::MaxBuses)) {
-                    self->m_round_robin_index = 0;
-
-                    // Sync Group states from device info
+                if (do_group_sync) {
                     auto all_assignments = DaliGroupManagement::Instance().getAllAssignments();
                     std::vector<DaliDevice> devices_snapshot;
                     {
@@ -373,7 +382,6 @@ namespace daliMQTT
                                             if (!group_sync_states[bus_id][group].has_value()) {
                                                 group_sync_states[bus_id][group] = DaliPublishState{ .level = 0 };
                                             }
-
                                             auto& g_state = group_sync_states[bus_id][group].value();
 
                                             if (gear->current_level > g_state.level.value_or(0)) {
@@ -401,6 +409,11 @@ namespace daliMQTT
                                 DaliGroupManagement::Instance().updateGroupState(b, g, group_sync_states[b][g].value());
                             }
                         }
+                    }
+                } else if (target_internal_addr != 0xFFFF) {
+                    auto* adapter = self->getAdapter(extractBusId(target_internal_addr));
+                    if (adapter && adapter->isInitialized()) {
+                        self->pollSingleDevice(target_internal_addr);
                     }
                 }
                 vTaskDelay(rr_delay_ticks);
@@ -437,7 +450,7 @@ namespace daliMQTT
             snprintf(topic_addr_val, sizeof(topic_addr_val), "%u", address);
 
         if (addr_type_str == "short") {
-            if (const auto long_addr_opt = getLongAddress(packInternalAddr(frame.bus_id, address))) {
+            if (const auto long_addr_opt = getLongAddress(packInternalAddr(frame.bus_id, address), true)) {
                 addr_type_str = "long";
                 auto la_str = utils::longAddressToString(*long_addr_opt);
                 snprintf(topic_addr_val, sizeof(topic_addr_val), "%s", la_str.data());
@@ -857,10 +870,14 @@ namespace daliMQTT
         return std::nullopt;
     }
 
-    std::optional<DaliLongAddress_t> DaliDeviceController::getLongAddress(const uint16_t internalAddress) const {
-        uint8_t bus_id = extractBusId(internalAddress);
-        uint8_t short_addr = extractShortAddr(internalAddress);
+    std::optional<DaliLongAddress_t> DaliDeviceController::getLongAddress(const uint16_t internalAddress, const bool is_input_device) const {
+        const uint8_t bus_id = extractBusId(internalAddress);
+        const uint8_t short_addr = extractShortAddr(internalAddress);
+
         size_t map_idx = (bus_id * 256) + short_addr;
+        if (is_input_device) {
+            map_idx |= 0x80;
+        }
 
         std::lock_guard<std::mutex> lock(m_devices_mutex);
         if (m_internal_to_long_map[map_idx] != 0xFFFFFFFF) {
@@ -868,4 +885,5 @@ namespace daliMQTT
         }
         return std::nullopt;
     }
+
 } // daliMQTT

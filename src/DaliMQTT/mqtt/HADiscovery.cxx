@@ -69,7 +69,7 @@ namespace daliMQTT
         const char* addr_str = addr_str_arr.data();
         const char* readable_name_ptr = nullptr;
 
-        auto it = std::find_if(device_names.begin(), device_names.end(), [long_addr](const DeviceNameEntry& entry) {
+        auto it = std::ranges::find_if(device_names, [long_addr](const DeviceNameEntry& entry) {
             return entry.addr == long_addr;
         });
 

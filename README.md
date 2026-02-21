@@ -204,11 +204,11 @@ The project contains a set of unit and integration tests to ensure code quality.
 
 ### Building Tests
 
-To build the test firmware, pass the `BUILD_TESTS=ON` flag to the CMake command:
+To build the test firmware, pass the `BUILD_TESTING=ON` flag to the CMake command:
 
 ```bash
 # Configuration for building tests
-cmake -B build -G Ninja -DBUILD_TESTS=ON
+cmake -B build -G Ninja -DBUILD_TESTING=ON
 
 # Build and run tests
 cmake --build build --target test

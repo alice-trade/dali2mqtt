@@ -1,6 +1,6 @@
-option(BUILD_TESTS "Build the unit test executable" OFF)
+option(BUILD_TESTING "Build the unit test executable" OFF)
 
-if(BUILD_TESTS)
+if(BUILD_TESTING)
     message(STATUS "Test targets enabled. Use 'ninja test', 'test-flash', 'test-monitor'.")
 
     set(TESTS_BINARY_DIR ${CMAKE_BINARY_DIR}/tests_build)

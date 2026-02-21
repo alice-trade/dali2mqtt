@@ -45,7 +45,7 @@ namespace daliMQTT
 
         [[nodiscard]] std::optional<uint16_t> getInternalAddress(DaliLongAddress_t longAddress) const;
 
-        [[nodiscard]] std::optional<DaliLongAddress_t> getLongAddress(uint16_t internalAddress) const;
+        [[nodiscard]] std::optional<DaliLongAddress_t> getLongAddress(uint16_t internalAddress, bool is_input_device = false) const;
 
 
         /**

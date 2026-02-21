@@ -11,14 +11,16 @@
 namespace daliMQTT
 {
     struct AdapterEvent {
-        enum class Type { CMD, DRIVER_EVENT } type;
+        enum class Type { CMD, DRIVER_EVENT };
         struct CmdData {
             uint32_t data;
             uint8_t bits;
             bool is_query;
             bool send_twice;
             TaskHandle_t caller;
-        } cmd;
+        };
+        Type type{};
+        CmdData cmd{};
         Driver::DaliMessage msg;
     };
 

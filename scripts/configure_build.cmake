@@ -6,7 +6,7 @@ endif ()
 
 message(NOTICE "Using C/C++ compiler: " ${CMAKE_CXX_COMPILER})
 message(NOTICE "Using Build Tool: " ${CMAKE_BUILD_TOOL})
-message(NOTICE "IDF framework at: " $ENV{IDF_PATH})
+
 
 set(SUPPORTED_BUILD_TYPES "Release" "Debug")
 
