@@ -93,11 +93,20 @@ namespace daliMQTT
 
         for (uint8_t i = 0; i < Constants::MaxBuses; ++i) {
             uint8_t en = 0;
-            nvs_get_u8(nvs_handle.get(), utils::stringFormat("b%d_en", i).c_str(), &en);
-            config_cache.buses[i].enabled = (en == 1);
             int32_t rx = -1, tx = -1;
+
+            if (i == 0) {
+                #ifdef CONFIG_DALI2MQTT_DALI_RX_PIN
+                                rx = CONFIG_DALI2MQTT_DALI_RX_PIN;
+                #endif
+                #ifdef CONFIG_DALI2MQTT_DALI_TX_PIN
+                                tx = CONFIG_DALI2MQTT_DALI_TX_PIN;
+                #endif
+            }
+            nvs_get_u8(nvs_handle.get(), utils::stringFormat("b%d_en", i).c_str(), &en);
             nvs_get_i32(nvs_handle.get(), utils::stringFormat("b%d_rx", i).c_str(), &rx);
             nvs_get_i32(nvs_handle.get(), utils::stringFormat("b%d_tx", i).c_str(), &tx);
+            config_cache.buses[i].enabled = (en == 1);
             config_cache.buses[i].rx_pin = rx;
             config_cache.buses[i].tx_pin = tx;
         }

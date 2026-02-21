@@ -4,18 +4,18 @@ menu "DALI MQTT Bridge Settings"
     comment "Protocol Configuration"
 
     config DALI2MQTT_DALI_RX_PIN
-        int "DALI RX GPIO Pin"
+        int "DALI (Driver 0) RX GPIO Pin"
         default 16
         range 0 39
         help
-            GPIO pin number used for receiving DALI signals.
+            GPIO pin number for first driver used for receiving DALI signals.
 
     config DALI2MQTT_DALI_TX_PIN
-        int "DALI TX GPIO Pin"
+        int "DALI (Driver 0) TX GPIO Pin"
         default 17
         range 0 39
         help
-            GPIO pin number used for transmitting DALI signals.
+            GPIO pin number for first driver used for transmitting DALI signals.
 
     config DALI2MQTT_DALI_DEFAULT_POLL_INTERVAL_MS
         int "Default DALI Sync Poll Interval (ms)"
