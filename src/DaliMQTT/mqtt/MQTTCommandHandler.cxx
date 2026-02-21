@@ -46,7 +46,7 @@ namespace daliMQTT {
         switch (addr_type) {
             case DaliAddressType::Short: {
                 // If it's a short command, target_id is internalAddress (bus<<8 | sa)
-                if (const auto long_addr_opt = device_controller.getLongAddress(packInternalAddr(target_bus, target_id))) {
+                if (const auto long_addr_opt = device_controller.getLongAddress(DaliInternalAddr(target_bus, target_id))) {
                     update_device(*long_addr_opt);
                 }
                 break;
@@ -57,7 +57,7 @@ namespace daliMQTT {
                 for (const auto &[long_addr, groups]: all_assignments) {
                     if (groups.test(target_id)) {
                         auto int_addr = device_controller.getInternalAddress(long_addr);
-                        if (int_addr && extractBusId(*int_addr) == target_bus) {
+                        if (int_addr && int_addr->bus() == target_bus) {
                             update_device(long_addr);
                         }
                     }
@@ -104,8 +104,8 @@ namespace daliMQTT {
                 ESP_LOGD(TAG, "Received command for unknown long address: %s", std::string(parts[1]).c_str());
                 return;
             }
-            target_bus = extractBusId(*int_addr_opt);
-            target_id = extractShortAddr(*int_addr_opt);
+            target_bus = (*int_addr_opt).bus();
+            target_id = (*int_addr_opt).shortAddr();
         } else {
             return;
         }
@@ -159,7 +159,7 @@ namespace daliMQTT {
                  else {
                      std::optional<uint8_t> restore_level;
                      if (addr_type == DaliAddressType::Short) {
-                         if (auto long_addr = controller.getLongAddress(packInternalAddr(adapter->getBusId(), t_id))) {
+                         if (auto long_addr = controller.getLongAddress(DaliInternalAddr(adapter->getBusId(), t_id))) {
                              auto saved = controller.getLastLevel(*long_addr);
                              if (saved.has_value() && *saved > 0) restore_level = saved;
                          }

@@ -95,8 +95,8 @@ namespace daliMQTT
             }
         }
 
-        uint8_t bus_id = extractBusId(*int_addr_opt);
-        uint8_t short_addr = extractShortAddr(*int_addr_opt);
+        uint8_t bus_id = int_addr_opt->bus();
+        uint8_t short_addr = int_addr_opt->shortAddr();
         auto* adapter = DaliDeviceController::Instance().getAdapter(bus_id);
         if(!adapter) return ESP_FAIL;
 
@@ -126,7 +126,7 @@ namespace daliMQTT
                         std::bitset<16> diff = old_groups ^ new_groups;
                         for (uint8_t i = 0; i < 16; ++i) {
                             if (diff.test(i)) {
-                                commands.push_back({extractShortAddr(*int_addr_opt), i, new_groups.test(i), extractBusId(*int_addr_opt)});
+                                commands.push_back({int_addr_opt->shortAddr(), i, new_groups.test(i), int_addr_opt->bus()});
                             }
                         }
                     }
@@ -159,8 +159,8 @@ namespace daliMQTT
             const auto& id = getIdentity(device);
             if (!id.available) continue;
             if (std::holds_alternative<ControlGear>(device)) {
-                if(auto* adapter = DaliDeviceController::Instance().getAdapter(extractBusId(id.internal_address))) {
-                    if (auto groups_opt = adapter->getDeviceGroups(extractShortAddr(id.internal_address))) {
+                if(auto* adapter = DaliDeviceController::Instance().getAdapter(id.internal_address.bus())) {
+                    if (auto groups_opt = adapter->getDeviceGroups(id.internal_address.shortAddr())) {
                         new_assignments.emplace_back(id.long_address, *groups_opt);
                     }
                 }

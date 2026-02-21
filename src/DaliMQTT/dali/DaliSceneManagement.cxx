@@ -61,11 +61,11 @@ namespace daliMQTT
         for (const auto& device : devices) {
             const auto& id = getIdentity(device);
             if (!id.available || !std::holds_alternative<ControlGear>(device)) continue;
-            if (extractBusId(id.internal_address) != bus_id) continue;
+            if ((id.internal_address).bus() != bus_id) continue;
 
-            auto queryCmd = static_cast<Commands::OpCode>(0xB0 + sceneId);
-            auto res = adapter->sendQuery(DaliAddressType::Short, extractShortAddr(id.internal_address), queryCmd);
-            results[extractShortAddr(id.internal_address)] = res.value_or(255);
+            const auto queryCmd = static_cast<Commands::OpCode>(0xB0 + sceneId);
+            auto res = adapter->sendQuery(DaliAddressType::Short, (id.internal_address).shortAddr(), queryCmd);
+            results[(id.internal_address).shortAddr()] = res.value_or(255);
             vTaskDelay(pdMS_TO_TICKS(15));
         }
 

@@ -43,18 +43,20 @@ namespace daliMQTT
         int_to_long.fill(0xFFFFFFFF);
 
         for (const auto& record : mappings) {
+            DaliInternalAddr internalAddrObject(record.internal_address);
+            size_t map_idx = (internalAddrObject.bus() * 256) + internalAddrObject.shortAddr();
             if (record.is_input_device) {
                 InputDevice dev;
                 dev.long_address = record.long_address;
-                dev.internal_address = record.internal_address;
+                dev.internal_address = internalAddrObject;
                 dev.gtin = std::string(record.gtin, strnlen(record.gtin, GTIN_STORAGE_SIZE));
                 dev.available = false;
                 devices.emplace_back(dev);
-                int_to_long[record.internal_address | 0x80] = record.long_address;
+                int_to_long[map_idx | 0x80] = record.long_address;
             } else {
                 ControlGear dev;
                 dev.long_address = record.long_address;
-                dev.internal_address = record.internal_address;
+                dev.internal_address = internalAddrObject;
                 dev.gtin = std::string(record.gtin, strnlen(record.gtin, GTIN_STORAGE_SIZE));
                 if (record.device_type != 0xFF) dev.device_type = record.device_type;
 
@@ -74,7 +76,7 @@ namespace daliMQTT
                 }
                 dev.available = false;
                 devices.emplace_back(dev);
-                int_to_long[record.internal_address] = record.long_address;
+                int_to_long[map_idx] = record.long_address;
             }
         }
 
@@ -94,7 +96,7 @@ namespace daliMQTT
             const auto& identity = getIdentity(device_var);
 
             record.long_address = identity.long_address;
-            record.internal_address = identity.internal_address;
+            record.internal_address = identity.internal_address.value;
 
             if (!identity.gtin.empty()) {
                 strncpy(record.gtin, identity.gtin.c_str(), GTIN_STORAGE_SIZE - 1);

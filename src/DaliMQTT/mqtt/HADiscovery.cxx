@@ -197,7 +197,7 @@ namespace daliMQTT
                     });
                     if (dev_it != devices.end()) {
                         if (auto* gear = std::get_if<ControlGear>(&(*dev_it))) {
-                            if (extractBusId(gear->internal_address) == bus_id) {
+                            if (gear->internal_address.bus() == bus_id) {
                                 if (gear->color.has_value()) {
                                     if (gear->color->supports_tc) group_supports_tc = true;
                                     if (gear->color->supports_rgb) group_supports_rgb = true;

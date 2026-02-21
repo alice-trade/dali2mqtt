@@ -24,7 +24,7 @@ namespace daliMQTT
 
         void applyBusConfiguration();
 
-        DaliAdapter* getAdapter(uint8_t bus_id);
+        DaliAdapter* getAdapter(uint8_t bus_id) const;
 
         /**
          * @brief Performs full bus initialization (addressing).
@@ -43,9 +43,9 @@ namespace daliMQTT
 
         [[nodiscard]] std::vector<DaliDevice> getDevices() const;
 
-        [[nodiscard]] std::optional<uint16_t> getInternalAddress(DaliLongAddress_t longAddress) const;
+        [[nodiscard]] std::optional<DaliInternalAddr> getInternalAddress(DaliLongAddress_t longAddress) const;
 
-        [[nodiscard]] std::optional<DaliLongAddress_t> getLongAddress(uint16_t internalAddress, bool is_input_device = false) const;
+        [[nodiscard]] std::optional<DaliLongAddress_t> getLongAddress(DaliInternalAddr internalAddr, bool is_input_device = false) const;
 
 
         /**
@@ -66,7 +66,7 @@ namespace daliMQTT
         /**
          * @brief Requests a sync (poll) for a specific device.
          */
-        void requestDeviceSync(uint16_t internalAddress, uint32_t delay_ms = 0);
+        void requestDeviceSync(DaliInternalAddr internalAddress, uint32_t delay_ms = 0);
 
         /**
          * @brief Requests a broadcast sync for all devices with staggered delay.
@@ -84,18 +84,18 @@ namespace daliMQTT
         void ProcessInputDeviceFrame(const dali_frame_t& frame) const;
         bool validateAddressMap();
         std::bitset<64> discoverAndMapDevices(uint8_t bus_id);
-        void pollSingleDevice(uint16_t InternalAddr);
+        void pollSingleDevice(DaliInternalAddr internalAddr);
 
         struct ColorPollResult {
             std::optional<uint16_t> tc;
             std::optional<DaliRGB> rgb;
         };
 
-        std::optional<uint8_t> pollAvailabilityAndLevel(uint16_t internalAddr, DaliLongAddress_t longAddr);
-        void checkDT8Features(uint16_t internalAddr, DaliLongAddress_t longAddr);
-        ColorPollResult pollColorDataCyclic(uint16_t internalAddr, DaliLongAddress_t longAddr, uint8_t current_level);
+        std::optional<uint8_t> pollAvailabilityAndLevel(DaliInternalAddr internalAddr, DaliLongAddress_t longAddr);
+        void checkDT8Features(DaliInternalAddr internalAddr, DaliLongAddress_t longAddr);
+        ColorPollResult pollColorDataCyclic(DaliInternalAddr internalAddr, DaliLongAddress_t longAddr, uint8_t current_level);
         void performInitialGroupSync(DaliLongAddress_t longAddr, uint8_t level, const ColorPollResult& colorData);
-        void initialStaticDataFetch(uint16_t internalAddr, DaliLongAddress_t longAddr);
+        void initialStaticDataFetch(DaliInternalAddr internalAddr, DaliLongAddress_t longAddr);
         void procUpdateDeviceState(DaliLongAddress_t longAddr, const DaliPublishState& state);
 
         [[noreturn]] static void daliEventHandlerTask(void* pvParameters);
@@ -103,7 +103,7 @@ namespace daliMQTT
 
         void publishState(const DaliLongAddress_t long_addr, const ControlGear& device) const;
         static void publishAvailability(DaliLongAddress_t long_addr, bool is_available);
-        [[nodiscard]] std::optional<DaliLongAddress_t> getInputDeviceLongAddress(uint16_t internalAddress) const;
+        [[nodiscard]] std::optional<DaliLongAddress_t> getInputDeviceLongAddress(DaliInternalAddr internalAddress) const;
 
         TaskHandle_t m_event_handler_task{nullptr};
         TaskHandle_t m_sync_task_handle{nullptr};
@@ -113,8 +113,8 @@ namespace daliMQTT
         mutable std::mutex m_devices_mutex{};
 
         std::vector<DeferredRequest> m_deferred_requests{};
-        std::vector<uint8_t> m_priority_queue{};
-        std::set<uint8_t> m_priority_set{};
+        std::vector<DaliInternalAddr> m_priority_queue{};
+        std::set<DaliInternalAddr> m_priority_set{};
         mutable std::mutex m_queue_mutex{};
         uint8_t m_round_robin_index{0};
         bool m_nvs_dirty{false};

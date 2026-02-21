@@ -45,8 +45,8 @@ namespace daliMQTT {
 
             if (const auto* gear = std::get_if<ControlGear>(&dev)) {
                 device_obj["type"] = "gear";
-                device_obj["driverId"] = extractBusId(gear->internal_address);
-                device_obj["short_address"] = extractShortAddr(gear->internal_address);
+                device_obj["driverId"] = (gear->internal_address).bus();
+                device_obj["short_address"] = (gear->internal_address).shortAddr();
                 device_obj["level"] = gear->current_level;
                 device_obj["available"] = gear->available;
                 device_obj["lamp_failure"] = (gear->status_byte >> 1) & 0x01;
@@ -65,8 +65,8 @@ namespace daliMQTT {
             }
             else if (const auto* id = std::get_if<InputDevice>(&dev)) {
                 device_obj["type"] = "input";
-                device_obj["driverId"] = extractBusId(id->internal_address);
-                device_obj["short_address"] = extractShortAddr(id->internal_address);
+                device_obj["driverId"] = (id->internal_address).bus();
+                device_obj["short_address"] = (id->internal_address).shortAddr();
                 device_obj["available"] = id->available;
             }
         }
@@ -295,7 +295,7 @@ namespace daliMQTT {
             if (!int_addr_opt) continue;
 
             if (kv.value().is<int>()) {
-                bus_levels[extractBusId(*int_addr_opt)][extractShortAddr(*int_addr_opt)] = kv.value().as<int>();
+                bus_levels[int_addr_opt->bus()][int_addr_opt->shortAddr()] = kv.value().as<int>();
             }
         }
 
@@ -369,7 +369,7 @@ namespace daliMQTT {
             for (uint8_t short_addr = 0; short_addr < 64; ++short_addr) {
                 uint8_t level = levels[short_addr];
                 if (level != 255) {
-                    auto long_addr_opt = controller.getLongAddress(packInternalAddr(b, short_addr));
+                    auto long_addr_opt = controller.getLongAddress(DaliInternalAddr(b, short_addr));
                     if (long_addr_opt) {
                         levels_obj[utils::longAddressToString(*long_addr_opt).data()] = level;
                     }

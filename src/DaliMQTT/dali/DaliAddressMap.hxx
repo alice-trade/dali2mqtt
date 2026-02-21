@@ -8,7 +8,7 @@
 
 namespace daliMQTT {
     constexpr size_t GTIN_STORAGE_SIZE = 16;
-    struct AddressMapping {
+    struct __attribute__((packed)) AddressMapping {
             DaliLongAddress_t long_address;
             uint16_t internal_address;
             uint8_t device_type;
@@ -23,6 +23,7 @@ namespace daliMQTT {
             uint8_t _padding;
             uint8_t _padding_2;
     };
+    static_assert(sizeof(AddressMapping) == 32, "AddressMapping size changed. This breaks NVS blob compatibility.");
 
     class DaliAddressMap {
         public:

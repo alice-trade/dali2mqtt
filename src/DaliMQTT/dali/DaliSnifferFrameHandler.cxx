@@ -61,12 +61,12 @@ namespace daliMQTT {
         }
 
         bool needs_sync = false;
-        std::vector<uint16_t> sync_candidates;
+        std::vector<DaliInternalAddr> sync_candidates;
 
         for (auto& dev_var : m_devices) {
             auto* gear = std::get_if<ControlGear>(&dev_var);
             if (!gear) continue;
-            if (extractBusId(gear->internal_address) != frame.bus_id) continue;
+            if (gear->internal_address.bus() != frame.bus_id) continue;
 
             bool is_affected = is_broadcast;
             if (!is_affected && target_group_id.has_value()) {
@@ -74,7 +74,7 @@ namespace daliMQTT {
                 if (grps && grps->test(*target_group_id)) is_affected = true;
             }
             if (!is_affected && target_short_addr.has_value()) {
-                if (extractShortAddr(gear->internal_address) == *target_short_addr) is_affected = true;
+                if (gear->internal_address.shortAddr() == *target_short_addr) is_affected = true;
             }
             if (!is_affected) continue;
             std::optional<uint8_t> next_level = std::nullopt;
@@ -108,7 +108,7 @@ namespace daliMQTT {
 
         if (needs_sync && !sync_candidates.empty()) {
             uint32_t delay = 400;
-            for (uint16_t internal_addr : sync_candidates) {
+            for (DaliInternalAddr internal_addr : sync_candidates) {
                 requestDeviceSync(internal_addr, delay);
                 delay += 150;
             }
