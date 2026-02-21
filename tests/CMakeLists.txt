@@ -4,7 +4,7 @@ project(DaliMQTTTests LANGUAGES CXX)
 include(${PROJDIR}/scripts/common.cmake)
 include(${PROJDIR}/scripts/idf_buildup.cmake)
 
-add_subdirectory(${PROJDIR}/src/DaliMQTT daliMQTTModules)
+add_subdirectory(${PROJDIR}/src/DaliMQTT)
 
 set(TEST_APP_NAME "daliMQTTTestESP")
 file(GLOB_RECURSE TEST_CASE_FILES "**/*.test.cxx")
@@ -14,9 +14,6 @@ message(STATUS "Found test files: ${TEST_CASE_FILES}")
 add_executable(${TEST_APP_NAME}
         test_cases.cxx
         ${TEST_CASE_FILES}
-)
-target_precompile_headers(${TEST_APP_NAME} PRIVATE
-        ${PROJDIR}/src/DaliMQTT/pch.hxx
 )
 target_link_libraries(${TEST_APP_NAME} PRIVATE
         DaliMQTT-Core

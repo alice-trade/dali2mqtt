@@ -18,9 +18,9 @@ set(ESP_BUILD_UTILS_PATH ${CMAKE_CURRENT_SOURCE_DIR}/support/${TARGET})
 
 include(${PROJDIR}/scripts/idf_buildup.cmake)
 
-set(app ${CMAKE_PROJECT_NAME})
+set(app ${CMAKE_PROJECT_NAME}.elf)
 
-add_subdirectory(${PROJDIR}/src/DaliMQTT daliMQTTModules)
+add_subdirectory(${PROJDIR}/src/DaliMQTT)
 
 add_executable(${app} ${CMAKE_SOURCE_DIR}/src/DaliMQTT/main.cxx)
 target_link_libraries(${app} PRIVATE DaliMQTT-Core)

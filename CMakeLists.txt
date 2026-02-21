@@ -3,7 +3,8 @@ project(
         daliMQTT
         VERSION 0.15.0
         DESCRIPTION "DALI-to-MQTT bridge for ESP platform"
-        LANGUAGES C CXX)
+        LANGUAGES C CXX
+)
 
 include(scripts/common.cmake)
 set(PROJVER ${CMAKE_PROJECT_VERSION})
