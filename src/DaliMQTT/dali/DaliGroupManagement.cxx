@@ -111,6 +111,7 @@ namespace daliMQTT
     esp_err_t DaliGroupManagement::setAllAssignments(const GroupAssignments& newAssignments) {
         struct Cmd { uint8_t sa; uint8_t grp; bool assign; uint8_t bus_id; };
         std::vector<Cmd> commands;
+        std::vector<std::pair<DaliLongAddress_t, std::bitset<16>>> changed_devices;
 
         {
             std::lock_guard<std::mutex> lock(m_mutex);
@@ -122,17 +123,30 @@ namespace daliMQTT
                 }
 
                 if (old_groups != new_groups) {
-                    if (auto int_addr_opt = DaliDeviceController::Instance().getInternalAddress(new_addr)) {
-                        std::bitset<16> diff = old_groups ^ new_groups;
-                        for (uint8_t i = 0; i < 16; ++i) {
-                            if (diff.test(i)) {
-                                commands.push_back({int_addr_opt->shortAddr(), i, new_groups.test(i), int_addr_opt->bus()});
-                            }
-                        }
-                    }
+                    changed_devices.push_back({new_addr, old_groups ^ new_groups});
                 }
             }
             m_assignments = newAssignments;
+        }
+
+        for (const auto& [addr, diff] : changed_devices) {
+            if (auto int_addr_opt = DaliDeviceController::Instance().getInternalAddress(addr)) {
+                std::bitset<16> target_groups;
+                for (const auto& [na, ng] : newAssignments) {
+                    if (na == addr) { target_groups = ng; break; }
+                }
+
+                for (uint8_t i = 0; i < 16; ++i) {
+                    if (diff.test(i)) {
+                        commands.push_back({
+                            int_addr_opt->shortAddr(),
+                            i,
+                            target_groups.test(i),
+                            int_addr_opt->bus()
+                        });
+                    }
+                }
+            }
         }
 
         for (const auto& c : commands) {

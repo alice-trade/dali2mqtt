@@ -35,6 +35,7 @@ namespace daliMQTT
         mqtt_cfg.session.last_will.qos = 1;
         mqtt_cfg.session.last_will.retain = true;
 
+        std::lock_guard<std::mutex> lock(m_client_mutex);
         client_handle = esp_mqtt_client_init(&mqtt_cfg);
         esp_mqtt_client_register_event(client_handle, MQTT_EVENT_ANY, mqttEventHandler, this);
         status = MqttStatus::DISCONNECTED;
@@ -42,6 +43,7 @@ namespace daliMQTT
 
     void MQTTClient::connect()
     {
+        std::lock_guard<std::mutex> lock(m_client_mutex);
         if (client_handle) {
             status = MqttStatus::CONNECTING;
             esp_mqtt_client_start(client_handle);
@@ -50,6 +52,7 @@ namespace daliMQTT
 
     void MQTTClient::disconnect()
     {
+        std::lock_guard<std::mutex> lock(m_client_mutex);
         if (client_handle) {
             status = MqttStatus::DISCONNECTED;
             esp_mqtt_client_stop(client_handle);
@@ -61,11 +64,13 @@ namespace daliMQTT
     }
 
     void MQTTClient::publish(const char* topic, const char* payload, const int qos, const bool retain) const {
+        std::lock_guard<std::mutex> lock(m_client_mutex);
         if (!client_handle) return;
         esp_mqtt_client_publish(client_handle, topic, payload, strlen(payload), qos, retain);
     }
 
     void MQTTClient::subscribe(const char* topic, const int qos) const {
+        std::lock_guard<std::mutex> lock(m_client_mutex);
         if (!client_handle) return;
         esp_mqtt_client_subscribe(client_handle, topic, qos);
     }
@@ -116,9 +121,12 @@ namespace daliMQTT
                                   const std::string& availability_topic,
                                   const std::string& ca_cert) {
         disconnect();
-        if (client_handle) {
-            esp_mqtt_client_destroy(client_handle);
-            client_handle = nullptr;
+        {
+            std::lock_guard<std::mutex> lock(m_client_mutex);
+            if (client_handle) {
+                esp_mqtt_client_destroy(client_handle);
+                client_handle = nullptr;
+            }
         }
         init(uri, client_id, availability_topic, username, password, ca_cert);
         connect();

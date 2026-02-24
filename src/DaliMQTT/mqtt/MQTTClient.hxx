@@ -41,6 +41,7 @@ namespace daliMQTT
             MQTTClient() = default;
 
             static void mqttEventHandler(void* handler_args, esp_event_base_t base, int32_t event_id, void* event_data);
+            mutable std::mutex m_client_mutex{};
 
             esp_mqtt_client_handle_t client_handle{nullptr};
             std::atomic<MqttStatus> status{MqttStatus::DISCONNECTED};

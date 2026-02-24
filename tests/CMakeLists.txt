@@ -4,7 +4,7 @@ project(DaliMQTTTests LANGUAGES CXX)
 include(${PROJDIR}/scripts/common.cmake)
 include(${PROJDIR}/scripts/idf_buildup.cmake)
 
-add_subdirectory(${PROJDIR}/src/DaliMQTT)
+add_subdirectory(${PROJDIR}/src/DaliMQTT MainSourceTree)
 
 set(TEST_APP_NAME "daliMQTTTestESP")
 file(GLOB_RECURSE TEST_CASE_FILES "**/*.test.cxx")

@@ -30,9 +30,9 @@ namespace daliMQTT {
             g_syslog_instance = this;
         }
 
-        m_log_buffer = xMessageBufferCreate(MESSAGE_BUFFER_SIZE);
+        m_log_buffer = xRingbufferCreate(MESSAGE_BUFFER_SIZE, RINGBUF_TYPE_NOSPLIT);
         if (!m_log_buffer) {
-            ESP_LOGE(TAG, "Failed to create message buffer. Syslog disabled.");
+            ESP_LOGE(TAG, "Failed to create log ring buffer. Syslog disabled.");
             return;
         }
 
@@ -47,7 +47,7 @@ namespace daliMQTT {
 
         if (task_created != pdPASS) {
             ESP_LOGE(TAG, "Failed to create syslog task. Syslog disabled.");
-            vMessageBufferDelete(m_log_buffer);
+            vRingbufferDelete(m_log_buffer);
             m_log_buffer = nullptr;
             return;
         }
@@ -109,24 +109,29 @@ namespace daliMQTT {
         if (!g_syslog_instance || !g_syslog_instance->m_log_buffer) {
             return ret;
         }
-        if (xPortInIsrContext()) {
-            return ret;
-        }
         if (xTaskGetCurrentTaskHandle() == g_syslog_instance->m_task_handle) {
             return ret;
         }
 
-        char msg_buffer[192];
-
+        char msg_buffer[MAX_LOG_MSG_SIZE];
         const int len = vsnprintf(msg_buffer, sizeof(msg_buffer), format, args);
 
         if (len > 0) {
             const size_t actual_len = (len < sizeof(msg_buffer)) ? len : (sizeof(msg_buffer) - 1);
-            xMessageBufferSend(g_syslog_instance->m_log_buffer, msg_buffer, actual_len, 0);
-        }
 
+            if (xPortInIsrContext()) {
+                BaseType_t high_task_wakeup = pdFALSE;
+                xRingbufferSendFromISR(g_syslog_instance->m_log_buffer, msg_buffer, actual_len, &high_task_wakeup);
+                if (high_task_wakeup) {
+                    portYIELD_FROM_ISR();
+                }
+            } else {
+                xRingbufferSend(g_syslog_instance->m_log_buffer, msg_buffer, actual_len, 0);
+            }
+        }
         return ret;
     }
+
 
     void SyslogConfig::syslog_task_entry(void* arg) {
         SyslogConfig* self = static_cast<SyslogConfig*>(arg);
@@ -134,19 +139,12 @@ namespace daliMQTT {
     }
 
     void SyslogConfig::syslog_task_runner() {
-        std::array<char, MAX_LOG_MSG_SIZE + 1> recv_buffer;
-
+        size_t item_size = 0;
         while (true) {
-            size_t received_bytes = xMessageBufferReceive(
-                m_log_buffer,
-                recv_buffer.data(),
-                recv_buffer.size() - 1,
-                portMAX_DELAY
-            );
-
-            if (received_bytes > 0) {
-                recv_buffer[received_bytes] = '\0';
-                send_log_udp(recv_buffer.data(), received_bytes);
+            char* item = static_cast<char*>(xRingbufferReceive(m_log_buffer, &item_size, portMAX_DELAY));
+            if (item != nullptr) {
+                send_log_udp(item, item_size);
+                vRingbufferReturnItem(m_log_buffer, item);
             }
         }
     }

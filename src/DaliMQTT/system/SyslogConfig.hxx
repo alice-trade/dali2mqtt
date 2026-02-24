@@ -31,7 +31,7 @@ namespace daliMQTT {
             vprintf_like_t m_original_logger {nullptr};
             std::recursive_mutex m_sock_mutex{};
             bool m_initialized {false};
-            MessageBufferHandle_t m_log_buffer {nullptr};
+            RingbufHandle_t m_log_buffer {nullptr};
             TaskHandle_t m_task_handle {nullptr};
     };
 } // daliMQTT
