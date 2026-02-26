@@ -252,7 +252,7 @@ namespace daliMQTT {
                     }
                 }
             }
-            new_assignments.emplace_back(*long_addr_opt, groups);
+            new_assignments.insert({*long_addr_opt, groups});
         }
 
         DaliGroupManagement::Instance().setAllAssignments(new_assignments);

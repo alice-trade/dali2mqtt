@@ -24,7 +24,10 @@ namespace daliMQTT
 
         void applyBusConfiguration();
 
-        DaliAdapter* getAdapter(uint8_t bus_id) const;
+        DaliAdapter* getAdapter(const uint8_t bus_id) const {
+            if (bus_id < Constants::MaxBuses) return m_adapters[bus_id].get();
+            return nullptr;
+        }
 
         /**
          * @brief Performs full bus initialization (addressing).
@@ -113,8 +116,8 @@ namespace daliMQTT
         mutable std::mutex m_devices_mutex{};
 
         std::vector<DeferredRequest> m_deferred_requests{};
-        std::vector<DaliInternalAddr> m_priority_queue{};
-        std::set<DaliInternalAddr> m_priority_set{};
+        etl::queue<DaliInternalAddr, Constants::MaxBuses * 64> m_priority_queue{};
+        etl::flat_set<DaliInternalAddr, Constants::MaxBuses * 64> m_priority_set{};
         mutable std::mutex m_queue_mutex{};
         uint8_t m_round_robin_index{0};
         bool m_nvs_dirty{false};

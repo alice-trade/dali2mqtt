@@ -27,7 +27,6 @@ namespace daliMQTT {
 
         m_bus_mutex = xSemaphoreCreateRecursiveMutex();
         m_event_queue = xQueueCreate(32, sizeof(AdapterEvent));
-        m_cmd_buffer.reserve(16);
 
         Driver::DaliDriverConfig drv_cfg = {
             .rx_pin = rx_pin,
@@ -180,7 +179,7 @@ namespace daliMQTT {
             state = State::IDLE;
             if (!self->m_cmd_buffer.empty()) {
                 active_cmd = self->m_cmd_buffer.front();
-                self->m_cmd_buffer.erase(self->m_cmd_buffer.begin());
+                self->m_cmd_buffer.pop();
                 retries = 0;
                 self->m_driver.sendAsync(active_cmd.data, active_cmd.bits);
                 state = State::TX_WAIT;
@@ -199,7 +198,7 @@ namespace daliMQTT {
                         self->m_driver.sendAsync(active_cmd.data, active_cmd.bits);
                         state = State::TX_WAIT;
                     } else {
-                        self->m_cmd_buffer.push_back(ev.cmd);
+                        self->m_cmd_buffer.push(ev.cmd);
                     }
                 } else if (ev.type == AdapterEvent::Type::DRIVER_EVENT) {
                     const auto& msg = ev.msg;

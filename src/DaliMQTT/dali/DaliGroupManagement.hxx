@@ -7,7 +7,7 @@
 
 namespace daliMQTT
 {
-    using GroupAssignments = std::vector<std::pair<DaliLongAddress_t, std::bitset<16>>>;
+    using GroupAssignments = etl::flat_map<DaliLongAddress_t, std::bitset<16>, Constants::MaxBuses * 64>;
 
     class DaliGroupManagement {
     public:

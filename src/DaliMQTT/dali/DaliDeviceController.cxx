@@ -43,11 +43,6 @@ namespace daliMQTT
         }
     }
 
-    DaliAdapter* DaliDeviceController::getAdapter(uint8_t bus_id) const {
-        if (bus_id < Constants::MaxBuses) return m_adapters[bus_id].get();
-        return nullptr;
-    }
-
     void DaliDeviceController::start() {
         if (!m_event_handler_task) xTaskCreate(daliEventHandlerTask, "dali_event", 4096, this, 5, &m_event_handler_task);
         if (!m_sync_task_handle) xTaskCreate(daliSyncTask, "dali_sync", 6144, this, 4, &m_sync_task_handle);
@@ -317,7 +312,7 @@ namespace daliMQTT
                     while (it != self->m_deferred_requests.end()) {
                         if (now >= it->execute_at_ts) {
                             if (!self->m_priority_set.contains(it->internal_address)) {
-                                self->m_priority_queue.push_back(it->internal_address);
+                                self->m_priority_queue.push(it->internal_address);
                                 self->m_priority_set.insert(it->internal_address);
                             }
                             it = self->m_deferred_requests.erase(it);
@@ -330,7 +325,7 @@ namespace daliMQTT
                 // Check Priority Queue
                 if (!self->m_priority_queue.empty()) {
                     priority_addr = self->m_priority_queue.front();
-                    self->m_priority_queue.erase(self->m_priority_queue.begin());
+                    self->m_priority_queue.pop();
                     self->m_priority_set.erase(priority_addr);
                     has_priority = true;
                 }
@@ -484,7 +479,7 @@ namespace daliMQTT
         std::lock_guard<std::mutex> lock(m_queue_mutex);
         if (delay_ms == 0) {
             if (!m_priority_set.contains(internalAddress)) {
-                m_priority_queue.push_back(internalAddress);
+                m_priority_queue.push(internalAddress);
                 m_priority_set.insert(internalAddress);
             }
         } else {

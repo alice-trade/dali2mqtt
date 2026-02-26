@@ -8,6 +8,15 @@ FetchContent_Declare(
     FetchContent_MakeAvailable(esp-protocols)
     set(ESP_PROTO_BASEDIR "${esp-protocols_SOURCE_DIR}/components")
 
+# ETL
+FetchContent_Declare(
+        etl
+        GIT_REPOSITORY https://github.com/ETLCPP/etl.git
+        GIT_TAG        20.45.0
+        GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(etl)
+
 # ArduinoJSON
 FetchContent_Declare(
         arduinojson

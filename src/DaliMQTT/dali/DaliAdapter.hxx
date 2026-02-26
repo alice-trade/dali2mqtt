@@ -198,7 +198,7 @@ namespace daliMQTT
         QueueHandle_t m_dali_event_queue{nullptr};
         SemaphoreHandle_t m_bus_mutex{nullptr};
 
-        std::vector<AdapterEvent::CmdData> m_cmd_buffer;
+        etl::queue<AdapterEvent::CmdData, 16> m_cmd_buffer;
         TaskHandle_t m_worker_task_handle{nullptr};
         std::atomic<bool> m_initialized{false};
         std::atomic<bool> m_sniffer_enabled{false};

@@ -3,6 +3,7 @@
 
 #ifndef DALIMQTT_CONFIGMANAGER_HXX
 #define DALIMQTT_CONFIGMANAGER_HXX
+#include <utils/NvsHandle.hxx>
 #include "dali/DaliCommon.hxx"
 
 namespace daliMQTT
@@ -91,14 +92,28 @@ namespace daliMQTT
             ConfigUpdateResult updateConfigFromJson(const char* json_str);
 
         private:
+            static constexpr char  NVS_NAMESPACE[] = CONFIG_DALI2MQTT_NVS_NAMESPACE;
+
             ConfigManager() = default;
             esp_err_t initSpiffs();
             esp_err_t ensureConfiguredAndCommit(nvs_handle_t handle);
-            esp_err_t processConfigUpdate(const std::function<esp_err_t(nvs_handle_t)>& write_action);
+
             esp_err_t writeBasicSettings(nvs_handle_t handle, const AppConfig& cfg);
             static esp_err_t getString(nvs_handle_t handle, const char* key, std::string& out_value, const char* default_value);
             static esp_err_t getU32(nvs_handle_t handle, const char* key, uint32_t& out_value, uint32_t default_value);
             static esp_err_t setString(nvs_handle_t handle, const char* key, const std::string& value);
+
+            template <typename Func>
+            esp_err_t processConfigUpdate(Func&& write_action) {
+                        std::lock_guard<std::mutex> lock(config_mutex);
+                        const NvsHandle nvs_handle(NVS_NAMESPACE, NVS_READWRITE);
+                        if (!nvs_handle) return ESP_FAIL;
+
+                        const esp_err_t err = write_action(nvs_handle.get());
+                        if (err != ESP_OK) return err;
+
+                        return ensureConfiguredAndCommit(nvs_handle.get());
+            }
 
             AppConfig config_cache{};
             mutable std::mutex config_mutex{};

@@ -37,7 +37,7 @@ namespace daliMQTT
                     if (v.is<int>() && v.as<int>() >= 0 && v.as<int>() < 16) groups.set(v.as<int>());
                 }
             }
-            m_assignments.push_back({*long_addr_opt, groups});
+            m_assignments.insert({*long_addr_opt, groups});
         }
     }
 
@@ -68,9 +68,8 @@ namespace daliMQTT
 
     std::optional<std::bitset<16>> DaliGroupManagement::getGroupsForDevice(const DaliLongAddress_t longAddress) const {
         std::lock_guard<std::mutex> lock(m_mutex);
-        for(const auto& p : m_assignments) {
-             if (p.first == longAddress) return p.second;
-        }
+        auto it = m_assignments.find(longAddress);
+        if (it != m_assignments.end()) return it->second;
         return std::nullopt;
     }
 
@@ -85,14 +84,7 @@ namespace daliMQTT
 
         {
             std::lock_guard<std::mutex> lock(m_mutex);
-            bool found = false;
-            for(auto& p : m_assignments) {
-                 if (p.first == longAddress) { p.second.set(group, assigned); found = true; break; }
-            }
-            if(!found) {
-                 std::bitset<16> bs; bs.set(group, assigned);
-                 m_assignments.push_back({longAddress, bs});
-            }
+            m_assignments[longAddress].set(group, assigned);
         }
 
         uint8_t bus_id = int_addr_opt->bus();
@@ -175,7 +167,7 @@ namespace daliMQTT
             if (std::holds_alternative<ControlGear>(device)) {
                 if(auto* adapter = DaliDeviceController::Instance().getAdapter(id.internal_address.bus())) {
                     if (auto groups_opt = adapter->getDeviceGroups(id.internal_address.shortAddr())) {
-                        new_assignments.emplace_back(id.long_address, *groups_opt);
+                        new_assignments.insert({id.long_address, *groups_opt});
                     }
                 }
             }

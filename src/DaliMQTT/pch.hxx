@@ -7,7 +7,6 @@
 // Standard C++ library headers
 #include <algorithm>
 #include <array>
-#include <set>
 #include <atomic>
 #include <bitset>
 #include <charconv>
@@ -19,6 +18,9 @@
 #include <functional>
 #include <mutex>
 #include <optional>
+#include <etl/queue.h>
+#include <etl/flat_set.h>
+#include <etl/flat_map.h>
 #include <ranges>
 #include <string>
 #include <string_view>

@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "system/ConfigManager.hxx"
-#include "utils/NvsHandle.hxx"
 #include <esp_spiffs.h>
 #include <dirent.h>
 #include <esp_mac.h>
@@ -12,7 +11,6 @@
 namespace daliMQTT
 {
     static constexpr char  TAG[] = "Config";
-    static constexpr char  NVS_NAMESPACE[] = CONFIG_DALI2MQTT_NVS_NAMESPACE;
 
     esp_err_t ConfigManager::init() {
         if (initialized) {
@@ -139,18 +137,6 @@ namespace daliMQTT
 
         ESP_LOGI(TAG, "Configuration loaded successfully.");
         return ESP_OK;
-    }
-
-    esp_err_t ConfigManager::processConfigUpdate(const std::function<esp_err_t(nvs_handle_t)>& write_action) {
-        std::lock_guard<std::mutex> lock(config_mutex);
-
-        const NvsHandle nvs_handle(NVS_NAMESPACE, NVS_READWRITE);
-        if (!nvs_handle) return ESP_FAIL;
-
-        const esp_err_t err = write_action(nvs_handle.get());
-        if (err != ESP_OK) return err;
-
-        return ensureConfiguredAndCommit(nvs_handle.get());
     }
 
     esp_err_t ConfigManager::writeBasicSettings(const nvs_handle_t handle, const AppConfig& cfg) {
