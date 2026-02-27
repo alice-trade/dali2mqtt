@@ -10,7 +10,7 @@
 
 namespace daliMQTT {
     static constexpr char TAG[] = "AppUpdate";
-    static constexpr char SPIFFS_PARTITION_LABEL[] = CONFIG_DALI2MQTT_WEBUI_SPIFFS_PARTITION_LABEL;
+    static constexpr char FS_PARTITION_LABEL[] = CONFIG_DALI2MQTT_WEBUI_SPIFFS_PARTITION_LABEL;
 
     bool AppUpdateManager::startUpdateAsync(const std::string& url, int type) {
         if (m_is_updating.exchange(true)) {
@@ -81,11 +81,11 @@ namespace daliMQTT {
     }
 
     void AppUpdateManager::performLFSUpdate(const std::string& url) {
-        ESP_LOGI(TAG, "Starting SPIFFS update from: %s", url.c_str());
+        ESP_LOGI(TAG, "Starting FS update from: %s", url.c_str());
 
-        const esp_partition_t* part = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, SPIFFS_PARTITION_LABEL);
+        const esp_partition_t* part = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, FS_PARTITION_LABEL);
         if (!part) {
-            ESP_LOGE(TAG, "SPIFFS partition not found!");
+            ESP_LOGE(TAG, "FS partition not found!");
             m_is_updating = false;
             return;
         }
@@ -154,14 +154,14 @@ namespace daliMQTT {
             }
         }
 
-        ESP_LOGI(TAG, "SPIFFS Update finished. Total: %d bytes. Result: %s", total_read, esp_err_to_name(err));
+        ESP_LOGI(TAG, "FS Update finished. Total: %d bytes. Result: %s", total_read, esp_err_to_name(err));
 
         free(buffer);
         esp_http_client_close(client);
         esp_http_client_cleanup(client);
 
         if (err == ESP_OK) {
-            ESP_LOGI(TAG, "SPIFFS Updated. Rebooting...");
+            ESP_LOGI(TAG, "FS Updated. Rebooting...");
             vTaskDelay(pdMS_TO_TICKS(1000));
             esp_restart();
         } else {

@@ -1,4 +1,4 @@
-# --- Web UI Build & SPIFFS Image Generation ---
+# --- Web UI Build & LittleFS Image Generation ---
 
 set(WEBUI_SOURCE_DIR ${CMAKE_SOURCE_DIR}/src/DaliMQTT/webui)
 set(WEBUI_BUILD_DIR ${WEBUI_SOURCE_DIR}/dist)
@@ -28,4 +28,4 @@ littlefs_create_partition_image(
 )
 add_dependencies(flash ${LITTLEFS_PARTITION_NAME}-flash)
 
-message(STATUS "Web UI build and SPIFFS image generation configured.")
+message(STATUS "Web UI build and LittleFS image generation configured.")

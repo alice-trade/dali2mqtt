@@ -1,5 +1,5 @@
 # Dependency resolving,
-# auto downloads using git either pass local resolving with cmake definitions: "-D FETCHCONTENT_SOURCE_DIR_<DEPENDENCY>=<PATH>
+# auto downloads using git either pass locally downloaded dependencies with definitions: "-D FETCHCONTENT_SOURCE_DIR_<DEPENDENCY>=<PATH>
 
 # esp-protocols
 FetchContent_Declare(

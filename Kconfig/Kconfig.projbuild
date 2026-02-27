@@ -199,10 +199,10 @@ menu "DALI MQTT Bridge Settings"
     menu "Web UI Configuration"
 
         config DALI2MQTT_WEBUI_SPIFFS_PARTITION_LABEL
-            string "SPIFFS Partition Label"
+            string "LittleFS Partition Label"
             default "web_storage"
             help
-                Label of the SPIFFS partition where the Web UI files are stored.
+                Label of the LittleFS partition where the Web UI files are stored.
 
         config DALI2MQTT_WEBUI_DEFAULT_USER
             string "Default Web UI Username"

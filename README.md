@@ -1,18 +1,15 @@
 # DALI-to-MQTT Bridge for ESP
 
-![ESP-IDF](https://img.shields.io/badge/ESP--IDF-v5.x-blue)
-![Language](https://img.shields.io/badge/language-C++20-purple)
-
-**dali2mqtt** is a bridge between the DALI lighting control bus and the MQTT protocol, designed for the ESP32 platform using the ESP-IDF framework. This project allows you to integrate DALI lighting systems into smart home ecosystems such as Home Assistant, Node-RED, and others.
+A bridge between the DALI lighting control bus and the MQTT for ESP32 platform. This project allows you to integrate DALI lighting systems into smart home ecosystems such as Home Assistant, Node-RED, and others.
 
 ## Architecture
 
-The **dali2mqtt** firmware runs on an ESP32-S3/C6/etc. acting as a bridge between a standard DALI Bus (requires a physical DALI Driver circuit) and your MQTT Broker.
+The **dali2mqtt** firmware runs on an ESP32-S3/C6/etc. as a bridge between a DALI Bus (requires a physical DALI Driver circuit) and MQTT Broker.
 
 ```mermaid
 graph LR
     HA[Home Assistant] <--> MQTT((MQTT Broker))
-    JS[NodeJS / DaliMQX] <--> MQTT
+    JS[NodeJS / Dali2MQX] <--> MQTT
     MQTT <--> ESP[ESP32 DaliMQTT]
     ESP <--> DALI[DALI Bus]
     DALI <--> L1((Light 1))
@@ -20,7 +17,7 @@ graph LR
     DALI <--> S1((Switch))
 ```
 
-## Key Capabilities
+## Capabilities
 
 *   **DALI Control**: Send brightness commands (DACP), ON/OFF, DT8 commands and Scene recall commands to individual devices (short address) and groups (group address).
 *   **Two-Way Communication**: Poll luminaire status (brightness level, lamp status) and publish this data to MQTT.
@@ -40,7 +37,7 @@ graph LR
 
 1.  **ESP-IDF v5.x**: [Installation Guide](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/index.html).
 2.  **GCC** (xtensa/riscv-esp-elf-g++): The C/C++ compiler provided by ESP-IDF.
-3.  **Git**: To clone the repository.
+3.  **Git**: To clone the repository and fetching dependencies.
 4.  **Node.js and npm**: To build the Web UI frontend.
 
 ## Building and Flashing
@@ -198,8 +195,6 @@ The bridge reports its status in the topic:
 *   Payload `offline`: LWT (Last Will and Testament) message, sent by the broker if the bridge disconnects.
 
 ## Development and Testing
-
-The project contains a set of unit and integration tests to ensure code quality.
 
 ### Building Tests
 

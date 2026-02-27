@@ -29,7 +29,7 @@ namespace daliMQTT
 
         if (ret == ESP_OK) {
             initialized = true;
-            ESP_LOGI(TAG, "NVS and SPIFFS initialized successfully.");
+            ESP_LOGI(TAG, "NVS and FS initialized successfully.");
         }
         return ret;
     }

@@ -16,7 +16,7 @@ namespace daliMQTT {
             return ESP_FAIL;
         }
         std::string target_url;
-        int update_type = 0; // 0 = App, 1 = SPIFFS
+        int update_type = 0; // 0 = App, 1 = FS
 
         if (req->content_len > 0 && req->content_len < 512) {
             std::vector<char> buf(req->content_len + 1);
