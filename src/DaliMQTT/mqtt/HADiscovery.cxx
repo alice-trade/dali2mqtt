@@ -48,7 +48,7 @@ namespace daliMQTT
     void MQTTHomeAssistantDiscovery::publishAllDevices() {
         auto devices = DaliDeviceController::Instance().getDevices();
         for (const auto& dev : devices) {
-            if (std::holds_alternative<InputDevice>(dev)) continue;
+            if (etl::holds_alternative<InputDevice>(dev)) continue;
             publishLight(getIdentity(dev).long_address);
         }
 
@@ -95,12 +95,12 @@ namespace daliMQTT
         bool found = false;
         {
             const auto devices = DaliDeviceController::Instance().getDevices();
-            auto dev_it = std::find_if(devices.begin(), devices.end(), [&](const DaliDevice& d) {
+            auto dev_it = std::ranges::find_if(devices, [&](const DaliDevice& d) {
                 return getIdentity(d).long_address == long_addr;
             });
 
             if (dev_it != devices.end()) {
-                if (const auto* gear = std::get_if<ControlGear>(&(*dev_it))) {
+                if (const auto* gear = etl::get_if<ControlGear>(&(*dev_it))) {
                     dev_copy = *gear;
                     found = true;
                 }
@@ -192,11 +192,11 @@ namespace daliMQTT
             auto assignments = DaliGroupManagement::Instance().getAllAssignments();
             for (const auto& pair : assignments) {
                 if (pair.second.test(group_id)) {
-                    auto dev_it = std::find_if(devices.begin(), devices.end(), [&](const DaliDevice& d) {
+                    auto dev_it = std::ranges::find_if(devices, [&](const DaliDevice& d) {
                         return getIdentity(d).long_address == pair.first;
                     });
                     if (dev_it != devices.end()) {
-                        if (auto* gear = std::get_if<ControlGear>(&(*dev_it))) {
+                        if (auto* gear = etl::get_if<ControlGear>(&(*dev_it))) {
                             if (gear->internal_address.bus() == bus_id) {
                                 if (gear->color.has_value()) {
                                     if (gear->color->supports_tc) group_supports_tc = true;

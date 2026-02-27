@@ -14,10 +14,10 @@
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
-#include <variant>
 #include <functional>
 #include <mutex>
 #include <optional>
+#include <etl/variant.h>
 #include <etl/queue.h>
 #include <etl/flat_set.h>
 #include <etl/flat_map.h>

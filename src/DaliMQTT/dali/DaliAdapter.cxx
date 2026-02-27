@@ -183,7 +183,7 @@ namespace daliMQTT {
                 active_cmd = self->m_cmd_buffer.front();
                 self->m_cmd_buffer.pop();
                 retries = 0;
-                self->m_driver.sendAsync(active_cmd.data, active_cmd.bits);
+                static_cast<void>(self->m_driver.sendAsync(active_cmd.data, active_cmd.bits));
                 state = State::TX_WAIT;
             }
         };
@@ -197,7 +197,7 @@ namespace daliMQTT {
                     if (state == State::IDLE) {
                         active_cmd = ev.cmd;
                         retries = 0;
-                        self->m_driver.sendAsync(active_cmd.data, active_cmd.bits);
+                        static_cast<void>(self->m_driver.sendAsync(active_cmd.data, active_cmd.bits));
                         state = State::TX_WAIT;
                     } else {
                         self->m_cmd_buffer.push(ev.cmd);
@@ -214,7 +214,7 @@ namespace daliMQTT {
                             if (active_cmd.send_twice) {
                                 active_cmd.send_twice = false;
                                 vTaskDelay(pdMS_TO_TICKS(10));
-                                self->m_driver.sendAsync(active_cmd.data, active_cmd.bits);
+                                static_cast<void>(self->m_driver.sendAsync(active_cmd.data, active_cmd.bits));
                             } else if (active_cmd.is_query) {
                                 state = State::WAIT_RX;
                                 rx_timeout = esp_timer_get_time();
@@ -226,7 +226,7 @@ namespace daliMQTT {
                             if (retries <= 3) {
                                 self->m_driver.sendSystemFailureSignal();
                                 vTaskDelay(pdMS_TO_TICKS(4 + (esp_random() % 4)));
-                                self->m_driver.sendAsync(active_cmd.data, active_cmd.bits);
+                                static_cast<void>(self->m_driver.sendAsync(active_cmd.data, active_cmd.bits));
                             } else {
                                 finishCmd(ESP_FAIL, 0);
                             }

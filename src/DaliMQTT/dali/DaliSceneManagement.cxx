@@ -60,7 +60,7 @@ namespace daliMQTT
 
         for (const auto& device : devices) {
             const auto& id = getIdentity(device);
-            if (!id.available || !std::holds_alternative<ControlGear>(device)) continue;
+            if (!id.available || !etl::holds_alternative<ControlGear>(device)) continue;
             if ((id.internal_address).bus() != bus_id) continue;
 
             const auto queryCmd = static_cast<Commands::OpCode>(0xB0 + sceneId);

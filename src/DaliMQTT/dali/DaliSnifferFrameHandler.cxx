@@ -65,7 +65,7 @@ namespace daliMQTT {
         etl::vector<DaliInternalAddr, 64> sync_candidates;
 
         for (auto& dev_var : m_devices) {
-            auto* gear = std::get_if<ControlGear>(&dev_var);
+            auto* gear = etl::get_if<ControlGear>(&dev_var);
             if (!gear) continue;
             if (gear->internal_address.bus() != frame.bus_id) continue;
 

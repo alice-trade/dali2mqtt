@@ -35,7 +35,7 @@ namespace daliMQTT
         std::optional<DaliRGB> rgb;
         std::optional<DaliColorMode> active_mode;
     };
-    using DaliDevice = std::variant<ControlGear, InputDevice>;
+    using DaliDevice = etl::variant<ControlGear, InputDevice>;
 
     using DaliLongAddrStr = std::array<char, 7>;
 
@@ -45,11 +45,13 @@ namespace daliMQTT
     };
 
     inline const DeviceIdentity& getIdentity(const DaliDevice& dev) {
-        return std::visit(GetIdentityVisitor{}, dev);
+        if (const auto* gear = etl::get_if<ControlGear>(&dev)) return *gear;
+        return *etl::get_if<InputDevice>(&dev);
     }
 
     inline DeviceIdentity& getIdentity(DaliDevice& dev) {
-        return std::visit(GetIdentityVisitor{}, dev);
+        if (auto* gear = etl::get_if<ControlGear>(&dev)) return *gear;
+        return *etl::get_if<InputDevice>(&dev);
     }
 
     struct DaliGroup {

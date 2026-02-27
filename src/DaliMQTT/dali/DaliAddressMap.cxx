@@ -106,10 +106,10 @@ namespace daliMQTT
                 strncpy(record.gtin, identity.gtin.c_str(), GTIN_STORAGE_SIZE - 1);
             }
 
-            if (std::holds_alternative<InputDevice>(device_var)) {
+            if (etl::holds_alternative<InputDevice>(device_var)) {
                 record.is_input_device = true;
                 record.device_type = 0xFF;
-            } else if (const auto* gear = std::get_if<ControlGear>(&device_var)) {
+            } else if (const auto* gear = etl::get_if<ControlGear>(&device_var)) {
                 record.is_input_device = false;
                 record.device_type = gear->device_type.value_or(0xFF);
                 if (gear->color.has_value()) {

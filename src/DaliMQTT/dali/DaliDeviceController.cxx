@@ -97,7 +97,7 @@ namespace daliMQTT
     void DaliDeviceController::procUpdateDeviceState(const DaliLongAddress_t longAddr, const DaliPublishState& state) {
         for (auto& dev_var : m_devices) {
             if (getIdentity(dev_var).long_address == longAddr) {
-                if (auto* gear = std::get_if<ControlGear>(&dev_var)) {
+                if (auto* gear = etl::get_if<ControlGear>(&dev_var)) {
                     bool state_changed = false;
                     if (state.level.has_value()) {
                         const uint8_t lvl = state.level.value();
@@ -153,7 +153,7 @@ namespace daliMQTT
             std::lock_guard<std::mutex> lock(m_devices_mutex);
             for (const auto& dev_var : m_devices) {
                 if (getIdentity(dev_var).long_address == long_addr) {
-                    if (const auto* gear = std::get_if<ControlGear>(&dev_var)) {
+                    if (const auto* gear = etl::get_if<ControlGear>(&dev_var)) {
                         dev_copy = *gear;
                         found = true;
                     }
@@ -181,7 +181,7 @@ namespace daliMQTT
         std::lock_guard<std::mutex> lock(m_devices_mutex);
         for (const auto& dev_var : m_devices) {
             if (getIdentity(dev_var).long_address == longAddress) {
-                if (const auto* gear = std::get_if<ControlGear>(&dev_var)) {
+                if (const auto* gear = etl::get_if<ControlGear>(&dev_var)) {
                     return gear->last_level;
                 }
                 break;
@@ -228,7 +228,7 @@ namespace daliMQTT
                         for(auto& dev_var : m_devices) {
                              if(getIdentity(dev_var).long_address == long_addr) {
                                  getIdentity(dev_var).available = true;
-                                 if (std::holds_alternative<ControlGear>(dev_var)) {
+                                 if (etl::holds_alternative<ControlGear>(dev_var)) {
                                      publishAvailability(long_addr, true);
                                  }
                                  break;
@@ -370,7 +370,7 @@ namespace daliMQTT
                     for (const auto& [long_addr, groups] : all_assignments) {
                         for (const auto& dev : devices_snapshot) {
                             if (getIdentity(dev).long_address == long_addr) {
-                                if (const auto* gear = std::get_if<ControlGear>(&dev)) {
+                                if (const auto* gear = etl::get_if<ControlGear>(&dev)) {
                                     if (!gear->available) break;
                                     uint8_t bus_id = gear->internal_address.bus();
 
@@ -500,7 +500,7 @@ namespace daliMQTT
         std::lock_guard<std::mutex> lock(m_devices_mutex);
         uint32_t current_delay = base_delay_ms;
         for (const auto &dev_var: m_devices) {
-            if (std::holds_alternative<ControlGear>(dev_var)) {
+            if (etl::holds_alternative<ControlGear>(dev_var)) {
                 requestDeviceSync(getIdentity(dev_var).internal_address, current_delay);
                 current_delay += stagger_ms;
             }
@@ -522,7 +522,7 @@ namespace daliMQTT
                     found = true;
                     if (id.available != is_responding) {
                         id.available = is_responding;
-                        if (std::holds_alternative<ControlGear>(dev_var)) {
+                        if (etl::holds_alternative<ControlGear>(dev_var)) {
                             publishAvailability(longAddr, is_responding);
                         }
                     }
@@ -541,7 +541,7 @@ namespace daliMQTT
             std::lock_guard<std::mutex> lock(m_devices_mutex);
             for(auto& dev : m_devices) {
                 if (getIdentity(dev).long_address == longAddr) {
-                    if (const auto* gear = std::get_if<ControlGear>(&dev)) {
+                    if (const auto* gear = etl::get_if<ControlGear>(&dev)) {
                         if (gear->device_type.value_or(0xFF) == 8 && !gear->static_data_loaded) needs_check = true;
                     }
                     break;
@@ -562,7 +562,7 @@ namespace daliMQTT
             std::lock_guard<std::mutex> lock(m_devices_mutex);
             for(auto& dev : m_devices) {
                 if(getIdentity(dev).long_address == longAddr) {
-                    if (auto* g = std::get_if<ControlGear>(&dev)) {
+                    if (auto* g = etl::get_if<ControlGear>(&dev)) {
                         if (!g->color.has_value()) g->color = ColorFeatures();
                         g->color->supports_tc = tc;
                         g->color->supports_rgb = rgb;
@@ -583,7 +583,7 @@ namespace daliMQTT
             std::lock_guard<std::mutex> lock(m_devices_mutex);
             for(auto& dev : m_devices) {
                 if(getIdentity(dev).long_address == longAddr) {
-                    auto* g = std::get_if<ControlGear>(&dev);
+                    auto* g = etl::get_if<ControlGear>(&dev);
                     if (g && g->color.has_value()) {
                         tc_supp = g->color->supports_tc;
                         rgb_supp = g->color->supports_rgb;
@@ -623,7 +623,7 @@ namespace daliMQTT
             std::lock_guard<std::mutex> lock(m_devices_mutex);
             for(auto& dev : m_devices) {
                 if(getIdentity(dev).long_address == longAddr) {
-                    if (const auto* gear = std::get_if<ControlGear>(&dev)) {
+                    if (const auto* gear = etl::get_if<ControlGear>(&dev)) {
                         is_initial_sync = gear->initial_sync_needed;
                         is_dt8 = gear->color.has_value();
                         bus_id = gear->internal_address.bus();
@@ -660,7 +660,7 @@ namespace daliMQTT
             std::lock_guard<std::mutex> lock(m_devices_mutex);
             for(auto& dev : m_devices) {
                  if (getIdentity(dev).long_address == longAddr) {
-                     if (const auto* g = std::get_if<ControlGear>(&dev)) {
+                     if (const auto* g = etl::get_if<ControlGear>(&dev)) {
                          if (!g->static_data_loaded) needs_load = true;
                      }
                      break;
@@ -684,7 +684,7 @@ namespace daliMQTT
             std::lock_guard<std::mutex> lock(m_devices_mutex);
             for(auto& dev : m_devices) {
                  if (getIdentity(dev).long_address == longAddr) {
-                     if (auto* g = std::get_if<ControlGear>(&dev)) {
+                     if (auto* g = etl::get_if<ControlGear>(&dev)) {
                          bool changed = false;
                          if (gtin_opt.has_value()) { g->gtin = gtin_opt.value(); changed = true; }
                          if (dt_opt.has_value()) { g->device_type = dt_opt; changed = true; }
@@ -718,7 +718,7 @@ namespace daliMQTT
             std::lock_guard<std::mutex> lock(m_devices_mutex);
             for(auto& dev : m_devices) {
                 if (getIdentity(dev).long_address == longAddr) {
-                    isControlGear = std::holds_alternative<ControlGear>(dev);
+                    isControlGear = etl::holds_alternative<ControlGear>(dev);
                     break;
                 }
             }
@@ -853,8 +853,8 @@ namespace daliMQTT
 
         const uint8_t shortAddress = internalAddress.shortAddr();
         auto readBank0Byte = [&](uint8_t offset) -> std::optional<uint8_t> {
-            adapter->sendInputDeviceCommand(shortAddress, static_cast<uint8_t>(Commands::InputDeviceOp::WriteDtr1), 0x00);
-            adapter->sendInputDeviceCommand(shortAddress, static_cast<uint8_t>(Commands::InputDeviceOp::WriteDtr0), offset);
+            if (!adapter->sendInputDeviceCommand(shortAddress, static_cast<uint8_t>(Commands::InputDeviceOp::WriteDtr1), 0x00)) return std::nullopt;
+            if (!adapter->sendInputDeviceCommand(shortAddress, static_cast<uint8_t>(Commands::InputDeviceOp::WriteDtr0), offset)) return std::nullopt;
             return adapter->sendInputDeviceCommand(shortAddress, static_cast<uint8_t>(Commands::InputDeviceOp::ReadMemory), std::nullopt);
         };
 

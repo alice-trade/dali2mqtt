@@ -142,10 +142,11 @@ namespace daliMQTT
         }
 
         for (const auto& c : commands) {
-            auto* adapter = DaliDeviceController::Instance().getAdapter(c.bus_id);
-            if(adapter) {
-                if (c.assign) adapter->assignToGroup(c.sa, c.grp);
-                else adapter->removeFromGroup(c.sa, c.grp);
+            if(auto* adapter = DaliDeviceController::Instance().getAdapter(c.bus_id)) {
+                esp_err_t err = c.assign ? adapter->assignToGroup(c.sa, c.grp) : adapter->removeFromGroup(c.sa, c.grp);
+                if (err != ESP_OK) {
+                    ESP_LOGW(TAG, "Failed to %s device %d to group %d", c.assign ? "assign" : "remove", c.sa, c.grp);
+                }
             }
             vTaskDelay(pdMS_TO_TICKS(15));
         }
@@ -164,7 +165,7 @@ namespace daliMQTT
         for (const auto& device : devices) {
             const auto& id = getIdentity(device);
             if (!id.available) continue;
-            if (std::holds_alternative<ControlGear>(device)) {
+            if (etl::holds_alternative<ControlGear>(device)) {
                 if(auto* adapter = DaliDeviceController::Instance().getAdapter(id.internal_address.bus())) {
                     if (auto groups_opt = adapter->getDeviceGroups(id.internal_address.shortAddr())) {
                         new_assignments.insert({id.long_address, *groups_opt});

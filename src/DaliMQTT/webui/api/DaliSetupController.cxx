@@ -43,7 +43,7 @@ namespace daliMQTT {
                 device_obj["gtin"] = identity.gtin.c_str();
             }
 
-            if (const auto* gear = std::get_if<ControlGear>(&dev)) {
+            if (const auto* gear = etl::get_if<ControlGear>(&dev)) {
                 device_obj["type"] = "gear";
                 device_obj["driverId"] = (gear->internal_address).bus();
                 device_obj["short_address"] = (gear->internal_address).shortAddr();
@@ -63,7 +63,7 @@ namespace daliMQTT {
                     device_obj["fail_level"] = gear->system_failure_level;
                 }
             }
-            else if (const auto* id = std::get_if<InputDevice>(&dev)) {
+            else if (const auto* id = etl::get_if<InputDevice>(&dev)) {
                 device_obj["type"] = "input";
                 device_obj["driverId"] = (id->internal_address).bus();
                 device_obj["short_address"] = (id->internal_address).shortAddr();
