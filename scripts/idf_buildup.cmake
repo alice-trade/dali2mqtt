@@ -17,14 +17,17 @@ message("Uses Sdkconfig: " ${CMAKE_CURRENT_SOURCE_DIR} "/" ${CMAKE_BUILD_TYPE} "
 set(PLATFORM_MODULES
         freertos
         esptool_py
-        mqtt
+        esp-mqtt-src
         log
         esp_event
         esp_wifi
         mdns
         esp_http_server
         esp_http_client
-        driver
+        esp_driver_gpio
+        esp_driver_rmt
+        esp_ringbuf
+        hal
         esp_netif
         esp_https_ota
         app_update
@@ -42,6 +45,7 @@ endif()
 idf_build_component(${ESP_BUILD_UTILS_PATH}/../../Kconfig)
 idf_build_component(${ESP_PROTO_BASEDIR}/mdns)
 idf_build_component(${esp-littlefs_SOURCE_DIR})
+idf_build_component(${esp-mqtt_SOURCE_DIR})
 
 idf_build_process(${TARGET}
         COMPONENTS

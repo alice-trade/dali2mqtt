@@ -40,16 +40,18 @@ target_include_directories(DaliMQTT-Core PUBLIC
 )
 target_link_libraries(DaliMQTT-Core PUBLIC
         idf::nvs_flash
-        idf::mqtt
         idf::log
         idf::esp_event
         ArduinoJson
         etl::etl
-        idf::driver
+        idf::esp_ringbuf
+        idf::esp_driver_gpio
+        idf::esp_driver_rmt
         idf::esp_netif
         idf::freertos
         idf::esp_timer
         idf::esp-littlefs-src
+        idf::esp-mqtt-src
         idf::mdns
         idf::esp_wifi
         idf::cxx
