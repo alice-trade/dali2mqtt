@@ -25,7 +25,7 @@ namespace daliMQTT
             std::string url;
             int type;
         };
-        void performSpiffsUpdate(const std::string& url);
+        void performLFSUpdate(const std::string& url);
         AppUpdateManager() = default;
 
         static void otaTask(void* pvParameter);

@@ -2,4 +2,4 @@
 nvs,      data, nvs,     ,        24K,
 phy_init, data, phy,     ,        4K,
 factory,  app,  factory, ,        2M,
-web_storage, data, spiffs, ,      1536K,
+web_storage, data, littlefs, ,      1536K,

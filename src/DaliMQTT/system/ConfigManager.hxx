@@ -95,7 +95,7 @@ namespace daliMQTT
             static constexpr char  NVS_NAMESPACE[] = CONFIG_DALI2MQTT_NVS_NAMESPACE;
 
             ConfigManager() = default;
-            esp_err_t initSpiffs();
+            esp_err_t initLittleFs();
             esp_err_t ensureConfiguredAndCommit(nvs_handle_t handle);
 
             esp_err_t writeBasicSettings(nvs_handle_t handle, const AppConfig& cfg);

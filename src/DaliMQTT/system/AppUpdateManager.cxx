@@ -46,7 +46,7 @@ namespace daliMQTT {
         const auto* params = static_cast<TaskParams*>(pvParameter);
 
         if (params->type == 1) {
-            AppUpdateManager::Instance().performSpiffsUpdate(params->url);
+            AppUpdateManager::Instance().performLFSUpdate(params->url);
         } else {
             AppUpdateManager::Instance().performUpdate(params->url);
         }
@@ -80,10 +80,10 @@ namespace daliMQTT {
         m_is_updating = false;
     }
 
-    void AppUpdateManager::performSpiffsUpdate(const std::string& url) {
+    void AppUpdateManager::performLFSUpdate(const std::string& url) {
         ESP_LOGI(TAG, "Starting SPIFFS update from: %s", url.c_str());
 
-        const esp_partition_t* part = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_SPIFFS, SPIFFS_PARTITION_LABEL);
+        const esp_partition_t* part = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, SPIFFS_PARTITION_LABEL);
         if (!part) {
             ESP_LOGE(TAG, "SPIFFS partition not found!");
             m_is_updating = false;

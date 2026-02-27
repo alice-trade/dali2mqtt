@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "system/ConfigManager.hxx"
-#include <esp_spiffs.h>
+#include <esp_littlefs.h>
 #include <dirent.h>
 #include <esp_mac.h>
 #include <utils/StringUtils.hxx>
@@ -24,7 +24,7 @@ namespace daliMQTT
         }
         ESP_ERROR_CHECK(ret);
 
-        ret = initSpiffs();
+        ret = initLittleFs();
         ESP_ERROR_CHECK(ret);
 
         if (ret == ESP_OK) {
@@ -34,29 +34,28 @@ namespace daliMQTT
         return ret;
     }
 
-    esp_err_t ConfigManager::initSpiffs() {
-        ESP_LOGI(TAG, "Initializing SPIFFS");
-        esp_vfs_spiffs_conf_t conf = {
-          .base_path = "/spiffs",
-          .partition_label = CONFIG_DALI2MQTT_WEBUI_SPIFFS_PARTITION_LABEL,
-          .max_files = 10,
-          .format_if_mount_failed = false
+    esp_err_t ConfigManager::initLittleFs() {
+        ESP_LOGI(TAG, "Initializing LittleFS");
+
+        esp_vfs_littlefs_conf_t conf = {
+            .base_path = "/littlefs",
+            .partition_label = CONFIG_DALI2MQTT_WEBUI_SPIFFS_PARTITION_LABEL,
+            .format_if_mount_failed = false,
+            .dont_mount = false,
         };
 
-        esp_err_t ret = esp_vfs_spiffs_register(&conf);
+        esp_err_t ret = esp_vfs_littlefs_register(&conf);
 
         if (ret != ESP_OK) {
-            const char* error_msg = esp_err_to_name(ret);
             if (ret == ESP_FAIL) {
                 ESP_LOGE(TAG, "Failed to mount or format filesystem");
             } else if (ret == ESP_ERR_NOT_FOUND) {
-                ESP_LOGE(TAG, "Failed to find SPIFFS partition");
+                ESP_LOGE(TAG, "Failed to find LittleFS partition");
             } else {
-                ESP_LOGE(TAG, "Failed to initialize SPIFFS (%s)", error_msg);
+                ESP_LOGE(TAG, "Failed to initialize LittleFS (%s)", esp_err_to_name(ret));
             }
             return ret;
         }
-
         return ESP_OK;
     }
 

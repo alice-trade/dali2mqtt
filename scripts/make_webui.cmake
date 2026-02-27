@@ -2,7 +2,7 @@
 
 set(WEBUI_SOURCE_DIR ${CMAKE_SOURCE_DIR}/src/DaliMQTT/webui)
 set(WEBUI_BUILD_DIR ${WEBUI_SOURCE_DIR}/dist)
-set(SPIFFS_PARTITION_NAME "web_storage")
+set(LITTLEFS_PARTITION_NAME "web_storage")
 
 add_custom_command(
         OUTPUT ${WEBUI_SOURCE_DIR}/node_modules/.uptodate_placeholder
@@ -21,11 +21,11 @@ add_custom_target(webui
         COMMENT "Building Web UI..."
 )
 
-spiffs_create_partition_image(
-        ${SPIFFS_PARTITION_NAME}
+littlefs_create_partition_image(
+        ${LITTLEFS_PARTITION_NAME}
         ${WEBUI_BUILD_DIR}
         DEPENDS webui
 )
-add_dependencies(flash ${SPIFFS_PARTITION_NAME}-flash)
+add_dependencies(flash ${LITTLEFS_PARTITION_NAME}-flash)
 
 message(STATUS "Web UI build and SPIFFS image generation configured.")

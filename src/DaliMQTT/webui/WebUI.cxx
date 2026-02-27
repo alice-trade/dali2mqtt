@@ -13,7 +13,7 @@
 namespace daliMQTT
 {
     static constexpr char  TAG[] = "WebUIService";
-    constexpr std::string_view WEB_MOUNT_POINT = "/spiffs";
+    constexpr std::string_view WEB_MOUNT_POINT = "/littlefs";
     constexpr size_t SCRATCH_BUFSIZE = 4096;
 
 

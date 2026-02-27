@@ -28,7 +28,8 @@ namespace daliMQTT {
                     if (doc["url"].is<const char*>()) {
                         target_url = doc["url"].as<const char*>();
                     }
-                    if (doc["type"].is<const char*>() && strcmp(doc["type"].as<const char*>(), "spiffs") == 0) {
+                    if (doc["type"].is<const char*>() &&
+                        (strcmp(doc["type"].as<const char*>(), "littlefs") == 0 || strcmp(doc["type"].as<const char*>(), "spiffs") == 0)) {
                         update_type = 1;
                     }
                 }

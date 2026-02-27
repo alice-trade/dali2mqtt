@@ -1,3 +1,6 @@
+# Dependency resolving,
+# auto downloads using git either pass local resolving with cmake definitions: "-D FETCHCONTENT_SOURCE_DIR_<DEPENDENCY>=<PATH>
+
 # esp-protocols
 FetchContent_Declare(
         esp-protocols
@@ -7,6 +10,16 @@ FetchContent_Declare(
 )
     FetchContent_MakeAvailable(esp-protocols)
     set(ESP_PROTO_BASEDIR "${esp-protocols_SOURCE_DIR}/components")
+
+# esp-littlefs
+FetchContent_Declare(
+        esp-littlefs
+        GIT_REPOSITORY https://github.com/joltwallet/esp_littlefs.git
+        GIT_TAG        v1.20.4
+        GIT_SHALLOW    TRUE
+        SOURCE_SUBDIR  "N/A"
+)
+FetchContent_MakeAvailable(esp-littlefs)
 
 # ETL
 FetchContent_Declare(

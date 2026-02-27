@@ -49,7 +49,7 @@ target_link_libraries(DaliMQTT-Core PUBLIC
         idf::esp_netif
         idf::freertos
         idf::esp_timer
-        idf::spiffs
+        idf::esp-littlefs-src
         idf::mdns
         idf::esp_wifi
         idf::cxx

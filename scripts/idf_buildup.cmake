@@ -17,7 +17,6 @@ message("Uses Sdkconfig: " ${CMAKE_CURRENT_SOURCE_DIR} "/" ${CMAKE_BUILD_TYPE} "
 set(PLATFORM_MODULES
         freertos
         esptool_py
-        spiffs
         mqtt
         log
         esp_event
@@ -32,6 +31,7 @@ set(PLATFORM_MODULES
         nvs_flash
         esp_timer
         Kconfig
+        esp-littlefs-src
 )
 
 if(BUILD_UNITY)
@@ -41,6 +41,7 @@ endif()
 
 idf_build_component(${ESP_BUILD_UTILS_PATH}/../../Kconfig)
 idf_build_component(${ESP_PROTO_BASEDIR}/mdns)
+idf_build_component(${esp-littlefs_SOURCE_DIR})
 
 idf_build_process(${TARGET}
         COMPONENTS
