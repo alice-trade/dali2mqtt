@@ -21,6 +21,8 @@
 #include <etl/queue.h>
 #include <etl/flat_set.h>
 #include <etl/flat_map.h>
+#include <etl/vector.h>
+#include <etl/string.h>
 #include <ranges>
 #include <string>
 #include <string_view>

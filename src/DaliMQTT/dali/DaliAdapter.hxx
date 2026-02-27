@@ -126,6 +126,7 @@ namespace daliMQTT
         [[nodiscard]] std::optional<std::bitset<16>> getDeviceGroups(uint8_t shortAddress);
 
         [[nodiscard]] std::optional<uint8_t> getDT8Features(uint8_t shortAddress);
+
         [[nodiscard]] std::optional<uint8_t> getDeviceType(const uint8_t shortAddress) {
             return sendQuery(DaliAddressType::Short, shortAddress, Commands::OpCode::QueryDeviceType);
         }
@@ -134,7 +135,7 @@ namespace daliMQTT
             return sendQuery(DaliAddressType::Short, shortAddress, Commands::OpCode::QueryStatus);
         }
 
-        [[nodiscard]] std::optional<std::string> getGTIN(uint8_t shortAddress);
+        [[nodiscard]] std::optional<etl::string<16>> getGTIN(uint8_t shortAddress);
 
         /**
          * @brief Reads one byte from Memory Bank.

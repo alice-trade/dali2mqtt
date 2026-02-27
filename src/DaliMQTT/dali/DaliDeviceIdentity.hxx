@@ -13,7 +13,7 @@ namespace daliMQTT {
     struct DeviceIdentity {
         DaliLongAddress_t long_address{0};          // 24-bit DALI Long (random) Address
         DaliInternalAddr internal_address{};        // Short addr
-        std::string gtin;                           // GTIN
+        etl::string<16> gtin;                       // GTIN
         bool available{false};                      // Runtime Availability flag
 
         [[nodiscard]] bool is_assigned() const { return (internal_address).shortAddr() < 64; }

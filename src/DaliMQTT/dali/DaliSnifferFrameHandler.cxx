@@ -7,6 +7,7 @@
 #include "utils/DaliLongAddrConversions.hxx"
 
 namespace daliMQTT {
+
     static constexpr char TAG[] = "DaliSnifferFrameHandler";
     void DaliDeviceController::SnifferProcessFrame(const dali_frame_t& frame) {
         if (frame.is_backward_frame) {
@@ -61,7 +62,7 @@ namespace daliMQTT {
         }
 
         bool needs_sync = false;
-        std::vector<DaliInternalAddr> sync_candidates;
+        etl::vector<DaliInternalAddr, 64> sync_candidates;
 
         for (auto& dev_var : m_devices) {
             auto* gear = std::get_if<ControlGear>(&dev_var);
@@ -103,7 +104,7 @@ namespace daliMQTT {
             if (next_level.has_value()) {
                 procUpdateDeviceState(gear->long_address, {.level = *next_level});
             }
-            if (needs_sync) sync_candidates.push_back(gear->internal_address);
+            if (needs_sync && !sync_candidates.full()) sync_candidates.push_back(gear->internal_address);
         }
 
         if (needs_sync && !sync_candidates.empty()) {

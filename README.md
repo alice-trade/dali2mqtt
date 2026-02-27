@@ -3,7 +3,7 @@
 ![ESP-IDF](https://img.shields.io/badge/ESP--IDF-v5.x-blue)
 ![Language](https://img.shields.io/badge/language-C++20-purple)
 
-**dali2mqtt** is a bridge between the DALI lighting control bus and the MQTT protocol, designed for the ESP32 platform using the ESP-IDF framework. This project allows you to integrate professional DALI lighting systems into modern smart home ecosystems such as Home Assistant, Node-RED, and others.
+**dali2mqtt** is a bridge between the DALI lighting control bus and the MQTT protocol, designed for the ESP32 platform using the ESP-IDF framework. This project allows you to integrate DALI lighting systems into smart home ecosystems such as Home Assistant, Node-RED, and others.
 
 ## Architecture
 
@@ -24,11 +24,10 @@ graph LR
 
 *   **DALI Control**: Send brightness commands (DACP), ON/OFF, DT8 commands and Scene recall commands to individual devices (short address) and groups (group address).
 *   **Two-Way Communication**: Poll luminaire status (brightness level, lamp status) and publish this data to MQTT.
-*   **Passive Monitoring**: The bridge constantly "listens" to the DALI bus. If a command is sent from another device (e.g., a wall-mounted DALI controller), the bridge detects this change and sends the updated state to MQTT, ensuring full synchronization.
+*   **Passive Monitoring**: The bridge constantly "listens" to the DALI bus. If a command is sent from another controller (e.g., a wall-mounted DALI controller), the bridge detects this change and sends the updated state to MQTT, ensuring full synchronization.
 *   **DALI Bus Management**:
     *   **Automatic Addressing (Commissioning)**: Launch the initialization process to discover new devices on the bus and automatically assign them short addresses.
     *   **Bus Scanning**: Ability to scan for all active, already addressed devices at any time.
-*   **DALI Group Management**: Visually assign devices to any of the 16 DALI groups via the Web Interface. Group control is also available via MQTT.
 *   **Web UI**: Built-in web server for easy WiFi/MQTT setup, as well as DALI bus management (scanning, initialization, groups, scenes).
 *   **Home Assistant Auto-Discovery**: Option which automatically publishes configuration messages to integrate DALI lights and groups into Home Assistant without manual configuration.
 
@@ -222,9 +221,7 @@ cmake --build build --target test-monitor
 .
 ├── support/              # ESP-IDF configuration for ESP chip targets
 ├── scripts/              # Helper CMake scripts
-├── examples/             # Examples
 ├── Kconfig/              # Project compile-time configuration
-├── src/DaliMQX           # JS Library source code
 ├── src/DaliMQTT          # Firmware source code
 │   ├── system/           # System control flow
 │   ├── dali/             # High-level DALI API

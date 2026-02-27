@@ -12,6 +12,7 @@
 #include "utils/DaliLongAddrConversions.hxx"
 
 namespace daliMQTT {
+
     static constexpr char TAG[] = "MQTTCommandHandler";
     static std::atomic<bool> g_mqtt_bus_busy{false};
 
@@ -318,8 +319,6 @@ namespace daliMQTT {
         }
     }
 
-    // ... [handleConfigGet, handleConfigSet, backgroundScanTask, backgroundInitTask, backgroundInputInitTask - без изменений] ...
-
     void MQTTCommandHandler::handleConfigGet() {
         std::string json_string = ConfigManager::Instance().getSerializedConfig(true);
         char reply_topic[128];
@@ -428,15 +427,15 @@ namespace daliMQTT {
         if (!topic_sv.starts_with(config.mqtt_base_topic)) return;
         topic_sv.remove_prefix(config.mqtt_base_topic.length());
 
-        std::vector<std::string_view> parts;
+        etl::vector<std::string_view, 16> parts;
         for (const auto part: std::views::split(topic_sv, '/')) {
-            if (!part.empty()) parts.emplace_back(part.begin(), part.end());
+            if (!part.empty() && !parts.full()) parts.emplace_back(part.begin(), part.end());
         }
 
         if (parts.empty()) return;
 
         if (parts[0] == "light") {
-            handleLightCommand(parts, data);
+            handleLightCommand({parts.begin(), parts.end()}, data);
         } else if (parts[0] == "config") {
             if (parts.size() == 2) {
                 if (parts[1] == "get") handleConfigGet();

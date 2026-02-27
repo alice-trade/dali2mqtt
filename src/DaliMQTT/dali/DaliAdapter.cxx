@@ -4,6 +4,7 @@
 #include "dali/DaliAdapter.hxx"
 
 namespace daliMQTT {
+
     static constexpr char TAG[] = "DaliAdapter";
     using namespace Commands;
 
@@ -118,6 +119,7 @@ namespace daliMQTT {
     esp_err_t DaliAdapter::sendCommand(const SpecialOpCode command, const uint8_t data, const bool send_twice) const {
         AdapterLock lock(this);
         auto [payload, bits] = Factory::Special(command, data);
+
         AdapterEvent ev;
         ev.type = AdapterEvent::Type::CMD;
         ev.cmd = { payload, 16, false, send_twice, xTaskGetCurrentTaskHandle() };
@@ -397,15 +399,15 @@ namespace daliMQTT {
         return std::nullopt;
     }
 
-    std::optional<std::string> DaliAdapter::getGTIN(const uint8_t shortAddress) {
+    std::optional<etl::string<16>> DaliAdapter::getGTIN(const uint8_t shortAddress) {
         AdapterLock lock(this);
-        std::string gtin;
+        etl::string<16> gtin;
         for(uint8_t i=0; i<6; i++) {
             auto byte = readMemoryLocation(shortAddress, 0, 3 + i);
             if(byte) {
                 char hex[3];
                 snprintf(hex, sizeof(hex), "%02X", *byte);
-                gtin += hex;
+                gtin.append(hex);
             } else {
                 return std::nullopt;
             }

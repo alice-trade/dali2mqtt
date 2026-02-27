@@ -114,6 +114,7 @@ namespace daliMQTT
                             state_changed = true;
                         }
                     }
+
                     if (state.color_temp.has_value() || state.rgb.has_value() || state.active_mode.has_value()) {
                         if (!gear->color.has_value()) gear->color = ColorFeatures();
                         auto& c = gear->color.value();
@@ -164,7 +165,7 @@ namespace daliMQTT
 
         JsonDocument doc;
         if (dev_copy.device_type.has_value()) doc["device_type"] = dev_copy.device_type.value();
-        if (!dev_copy.gtin.empty()) doc["gtin"] = dev_copy.gtin;
+        if (!dev_copy.gtin.empty()) doc["gtin"] = dev_copy.gtin.c_str();
         doc["dev_min_level"] = dev_copy.min_level;
         doc["dev_max_level"] = dev_copy.max_level;
         doc["dev_power_on_level"] = dev_copy.power_on_level;
@@ -247,22 +248,22 @@ namespace daliMQTT
 
         while (true) {
             if (xQueueReceive(self->m_central_event_queue, &frame, portMAX_DELAY) == pdPASS) {
-#ifdef CONFIG_DALI2MQTT_SNIFFER_DEBUG_PUBLISH_MQTT
-                auto const& mqtt = MQTTClient::Instance();
-                if (mqtt.getStatus() == MqttStatus::CONNECTED) {
-                    char topic[128];
-                    snprintf(topic, sizeof(topic), "%s/debug/sniffer_raw", ConfigManager::Instance().getConfig().mqtt_base_topic.c_str());
+                #ifdef CONFIG_DALI2MQTT_SNIFFER_DEBUG_PUBLISH_MQTT
+                                auto const& mqtt = MQTTClient::Instance();
+                                if (mqtt.getStatus() == MqttStatus::CONNECTED) {
+                                    char topic[128];
+                                    snprintf(topic, sizeof(topic), "%s/debug/sniffer_raw", ConfigManager::Instance().getConfig().mqtt_base_topic.c_str());
 
-                    char payload[128];
-                    uint32_t ts = esp_log_timestamp();
-                    if (frame.length == 8) {
-                        snprintf(payload, sizeof(payload), R"({"type":"backward","len":8,"data":%lu,"bus":%d,"ts":%lu})", frame.data, frame.bus_id, ts);
-                    } else {
-                        snprintf(payload, sizeof(payload), R"({"type":"forward","len":%u,"data":%lu,"bus":%d,"ts":%lu})", frame.length, frame.data, frame.bus_id, ts);
-                    }
-                    mqtt.publish(topic, payload, 0, false);
-                }
-#endif
+                                    char payload[128];
+                                    uint32_t ts = esp_log_timestamp();
+                                    if (frame.length == 8) {
+                                        snprintf(payload, sizeof(payload), R"({"type":"backward","len":8,"data":%lu,"bus":%d,"ts":%lu})", frame.data, frame.bus_id, ts);
+                                    } else {
+                                        snprintf(payload, sizeof(payload), R"({"type":"forward","len":%u,"data":%lu,"bus":%d,"ts":%lu})", frame.length, frame.data, frame.bus_id, ts);
+                                    }
+                                    mqtt.publish(topic, payload, 0, false);
+                                }
+                #endif
 
                 if (frame.length == 24) {
                     self->ProcessInputDeviceFrame(frame);
@@ -280,7 +281,6 @@ namespace daliMQTT
 
         ESP_LOGI(TAG, "Dali Adaptive Sync Task Started.");
         const auto config = ConfigManager::Instance().getConfig();
-
         const uint32_t safe_cycle_time = std::max<uint32_t>(1000, config.dali_poll_interval_ms);
         const uint32_t calc_delay_ms = safe_cycle_time >> 6;
         const TickType_t rr_delay_ticks = pdMS_TO_TICKS(std::max<uint32_t>(20, calc_delay_ms));
@@ -296,7 +296,7 @@ namespace daliMQTT
                     std::vector<DaliDevice> copy_devs;
                     {
                         std::lock_guard<std::mutex> lock(self->m_devices_mutex);
-                        copy_devs = self->m_devices;
+                        copy_devs = std::vector<DaliDevice>(self->m_devices.begin(), self->m_devices.end());
                         self->m_nvs_dirty = false;
                     }
                     DaliAddressMap::save(copy_devs);
@@ -312,8 +312,10 @@ namespace daliMQTT
                     while (it != self->m_deferred_requests.end()) {
                         if (now >= it->execute_at_ts) {
                             if (!self->m_priority_set.contains(it->internal_address)) {
-                                self->m_priority_queue.push(it->internal_address);
-                                self->m_priority_set.insert(it->internal_address);
+                                if (!self->m_priority_queue.full()) {
+                                    self->m_priority_queue.push(it->internal_address);
+                                    self->m_priority_set.insert(it->internal_address);
+                                }
                             }
                             it = self->m_deferred_requests.erase(it);
                         } else {
@@ -361,7 +363,7 @@ namespace daliMQTT
                     std::vector<DaliDevice> devices_snapshot;
                     {
                         std::lock_guard<std::mutex> lock(self->m_devices_mutex);
-                        devices_snapshot = self->m_devices;
+                        devices_snapshot = std::vector<DaliDevice>(self->m_devices.begin(), self->m_devices.end());
                     }
                     std::array<std::array<std::optional<DaliPublishState>, 16>, Constants::MaxBuses> group_sync_states;
 
@@ -415,6 +417,7 @@ namespace daliMQTT
             }
         }
     }
+
     void DaliDeviceController::ProcessInputDeviceFrame(const dali_frame_t& frame) const {
             const uint32_t data = frame.data;
             const uint8_t addr_byte = (data >> 16) & 0xFF;
@@ -476,15 +479,20 @@ namespace daliMQTT
     void DaliDeviceController::requestDeviceSync(const DaliInternalAddr internalAddress, const uint32_t delay_ms) {
         if (internalAddress.shortAddr() >= 64)
             return;
+
         std::lock_guard<std::mutex> lock(m_queue_mutex);
         if (delay_ms == 0) {
             if (!m_priority_set.contains(internalAddress)) {
-                m_priority_queue.push(internalAddress);
-                m_priority_set.insert(internalAddress);
+                if (!m_priority_queue.full()) {
+                    m_priority_queue.push(internalAddress);
+                    m_priority_set.insert(internalAddress);
+                }
             }
         } else {
             int64_t now = esp_timer_get_time() / 1000;
-            m_deferred_requests.push_back({internalAddress, now + delay_ms});
+            if (!m_deferred_requests.full()) {
+                m_deferred_requests.push_back({internalAddress, now + delay_ms});
+            }
         }
     }
 
@@ -550,6 +558,7 @@ namespace daliMQTT
         if (colour_type.has_value()) {
             const bool tc = (*colour_type & 0x02);
             const bool rgb = (*colour_type & 0x08);
+
             std::lock_guard<std::mutex> lock(m_devices_mutex);
             for(auto& dev : m_devices) {
                 if(getIdentity(dev).long_address == longAddr) {
@@ -568,6 +577,7 @@ namespace daliMQTT
     DaliDeviceController::ColorPollResult DaliDeviceController::pollColorDataCyclic(const DaliInternalAddr internalAddr, const DaliLongAddress_t longAddr, const uint8_t current_level) {
         ColorPollResult result;
         if (current_level == 0) return result;
+
         bool tc_supp = false, rgb_supp = false;
         {
             std::lock_guard<std::mutex> lock(m_devices_mutex);
@@ -586,27 +596,29 @@ namespace daliMQTT
 
         auto* adapter = DaliDeviceController::getAdapter(internalAddr.bus());
         if (!adapter) return result;
-
         const uint8_t shortAddr = internalAddr.shortAddr();
+
         if (tc_supp) {
             auto h = adapter->readMemoryLocation(shortAddr, 205, Commands::MemBank205::ColourValueTcH);
             auto l = adapter->readMemoryLocation(shortAddr, 205, Commands::MemBank205::ColourValueTcL);
             if (h && l) result.tc = (*h << 8) | *l;
         }
+
         if (rgb_supp) {
             auto r = adapter->readMemoryLocation(shortAddr, 205, Commands::MemBank205::RgbR);
             auto g = adapter->readMemoryLocation(shortAddr, 205, Commands::MemBank205::RgbG);
             auto b = adapter->readMemoryLocation(shortAddr, 205, Commands::MemBank205::RgbB);
             if (r && g && b) result.rgb = DaliRGB{*r, *g, *b};
         }
+
         return result;
     }
-
 
     void DaliDeviceController::performInitialGroupSync(const DaliLongAddress_t longAddr, const uint8_t level, const ColorPollResult& colorData) {
         bool is_initial_sync = false;
         bool is_dt8 = false;
         uint8_t bus_id = 0;
+
         {
             std::lock_guard<std::mutex> lock(m_devices_mutex);
             for(auto& dev : m_devices) {
@@ -620,6 +632,7 @@ namespace daliMQTT
                 }
             }
         }
+
         if (is_initial_sync) {
             if (const auto groups_opt = DaliGroupManagement::Instance().getGroupsForDevice(longAddr)) {
                 for (uint8_t i = 0; i < 16; ++i) {
@@ -627,6 +640,7 @@ namespace daliMQTT
                         const auto current_grp = DaliGroupManagement::Instance().getGroupState(bus_id, i);
                         DaliPublishState groupUpdate;
                         if (level > current_grp.current_level) groupUpdate.level = level;
+
                         if (is_dt8) {
                             groupUpdate.color_temp = colorData.tc;
                             groupUpdate.rgb = colorData.rgb;
@@ -808,7 +822,11 @@ namespace daliMQTT
 
         {
             std::lock_guard<std::mutex> lock(m_devices_mutex);
-            for(auto& d : new_devices) m_devices.push_back(d);
+            for(auto& d : new_devices) {
+                 if (!m_devices.full()) {
+                     m_devices.push_back(d);
+                 }
+            }
             m_nvs_dirty = true;
         }
 
@@ -854,7 +872,7 @@ namespace daliMQTT
 
     std::vector<DaliDevice> DaliDeviceController::getDevices() const {
         std::lock_guard<std::mutex> lock(m_devices_mutex);
-        return m_devices;
+        return std::vector<DaliDevice>(m_devices.begin(), m_devices.end());
     }
 
     std::optional<DaliInternalAddr> DaliDeviceController::getInternalAddress(const DaliLongAddress_t longAddress) const {

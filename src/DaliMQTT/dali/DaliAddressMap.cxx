@@ -8,7 +8,7 @@ namespace daliMQTT
 {
     static constexpr char TAG[] = "DaliAddrMapLoader";
 
-    bool DaliAddressMap::load(std::vector<DaliDevice>& devices, std::array<DaliLongAddress_t, Constants::MaxBuses * 256>& int_to_long) {
+    bool DaliAddressMap::load(etl::vector<DaliDevice, Constants::MaxBuses * 64>& devices, std::array<DaliLongAddress_t, Constants::MaxBuses * 256>& int_to_long) {
         NvsHandle nvs_handle(NVS_NAMESPACE, NVS_READONLY);
         if (!nvs_handle) {
             ESP_LOGE(TAG, "Failed to open NVS for reading address map.");
@@ -39,25 +39,29 @@ namespace daliMQTT
         }
 
         devices.clear();
-        devices.reserve(mappings.size());
         int_to_long.fill(InvalidLongAddr);
 
         for (const auto& record : mappings) {
+            if (devices.full()) {
+                ESP_LOGW(TAG, "Device map exceeds maximum allowed capacity, truncating.");
+                break;
+            }
+
             DaliInternalAddr internalAddrObject(record.internal_address);
             size_t map_idx = (internalAddrObject.bus() * 256) + internalAddrObject.shortAddr();
             if (record.is_input_device) {
                 InputDevice dev;
                 dev.long_address = record.long_address;
                 dev.internal_address = internalAddrObject;
-                dev.gtin = std::string(record.gtin, strnlen(record.gtin, GTIN_STORAGE_SIZE));
+                dev.gtin.assign(record.gtin, strnlen(record.gtin, GTIN_STORAGE_SIZE));
                 dev.available = false;
-                devices.emplace_back(dev);
+                devices.push_back(dev);
                 int_to_long[map_idx | 0x80] = record.long_address;
             } else {
                 ControlGear dev;
                 dev.long_address = record.long_address;
                 dev.internal_address = internalAddrObject;
-                dev.gtin = std::string(record.gtin, strnlen(record.gtin, GTIN_STORAGE_SIZE));
+                dev.gtin.assign(record.gtin, strnlen(record.gtin, GTIN_STORAGE_SIZE));
                 if (record.device_type != 0xFF) dev.device_type = record.device_type;
 
                 if (record.supports_rgb || record.supports_tc) {
@@ -75,7 +79,7 @@ namespace daliMQTT
                     dev.static_data_loaded = true;
                 }
                 dev.available = false;
-                devices.emplace_back(dev);
+                devices.push_back(dev);
                 int_to_long[map_idx] = record.long_address;
             }
         }
@@ -122,7 +126,6 @@ namespace daliMQTT
             }
             mappings.push_back(record);
         }
-
 
         esp_err_t err = nvs_set_blob(nvs_handle.get(), MAP_KEY, mappings.data(), mappings.size() * sizeof(AddressMapping));
         if (err != ESP_OK) {

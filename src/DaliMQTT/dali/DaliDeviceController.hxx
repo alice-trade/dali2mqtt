@@ -80,11 +80,13 @@ namespace daliMQTT
 
     private:
         DaliDeviceController() = default;
+
         std::array<std::unique_ptr<DaliAdapter>, Constants::MaxBuses> m_adapters{};
         QueueHandle_t m_central_event_queue{};
 
         void SnifferProcessFrame(const dali_frame_t& frame);
         void ProcessInputDeviceFrame(const dali_frame_t& frame) const;
+
         bool validateAddressMap();
         std::bitset<64> discoverAndMapDevices(uint8_t bus_id);
         void pollSingleDevice(DaliInternalAddr internalAddr);
@@ -111,11 +113,11 @@ namespace daliMQTT
         TaskHandle_t m_event_handler_task{nullptr};
         TaskHandle_t m_sync_task_handle{nullptr};
 
-        std::vector<DaliDevice> m_devices{};
+        etl::vector<DaliDevice, Constants::MaxBuses * 64> m_devices{};
         std::array<DaliLongAddress_t, Constants::MaxBuses * 256> m_internal_to_long_map{};
         mutable std::mutex m_devices_mutex{};
 
-        std::vector<DeferredRequest> m_deferred_requests{};
+        etl::vector<DeferredRequest, Constants::MaxBuses * 64> m_deferred_requests{};
         etl::queue<DaliInternalAddr, Constants::MaxBuses * 64> m_priority_queue{};
         etl::flat_set<DaliInternalAddr, Constants::MaxBuses * 64> m_priority_set{};
         mutable std::mutex m_queue_mutex{};
