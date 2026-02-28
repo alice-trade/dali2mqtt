@@ -44,8 +44,8 @@ namespace daliMQTT
     }
 
     void DaliDeviceController::start() {
-        if (!m_event_handler_task) xTaskCreate(daliEventHandlerTask, "dali_event", 4096, this, 5, &m_event_handler_task);
-        if (!m_sync_task_handle) xTaskCreate(daliSyncTask, "dali_sync", 6144, this, 4, &m_sync_task_handle);
+        if (!m_event_handler_task) xTaskCreate(daliEventHandlerTask, "dali_event", 8192, this, 5, &m_event_handler_task);
+        if (!m_sync_task_handle) xTaskCreate(daliSyncTask, "dali_sync", 8192, this, 4, &m_sync_task_handle);
         for(auto& adapter : m_adapters) { if (adapter) adapter->startSniffer(); }
     }
 
