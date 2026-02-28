@@ -47,6 +47,7 @@ extern "C" {
 #include <freertos/ringbuf.h>
 #include <freertos/queue.h>
 #include <freertos/timers.h>
+#include <freertos/semphr.h>
 #include <driver/gpio.h>
 
 #ifdef __cplusplus

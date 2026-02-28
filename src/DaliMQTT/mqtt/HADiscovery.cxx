@@ -14,18 +14,18 @@ namespace daliMQTT
     MQTTHomeAssistantDiscovery::MQTTHomeAssistantDiscovery() {
         const auto config = ConfigManager::Instance().getConfig();
 
-        base_topic = config.mqtt_base_topic;
+        base_topic = config->mqtt_base_topic;
 
         char av_topic[128];
         snprintf(av_topic, sizeof(av_topic), "%s%s", base_topic.c_str(), CONFIG_DALI2MQTT_MQTT_AVAILABILITY_TOPIC);
         availability_topic = av_topic;
 
         char bridge_name[128];
-        snprintf(bridge_name, sizeof(bridge_name), "DALI-MQTT Bridge (%s)", config.client_id.c_str());
+        snprintf(bridge_name, sizeof(bridge_name), "DALI-MQTT Bridge (%s)", config->client_id.c_str());
         bridge_public_name = bridge_name;
 
         JsonDocument names_root;
-        if (!deserializeJson(names_root, config.dali_device_identificators)) {
+        if (!deserializeJson(names_root, config->dali_device_identificators)) {
             if (names_root.is<JsonObject>()) {
                 auto obj = names_root.as<JsonObject>();
                 device_names.reserve(obj.size());
@@ -164,7 +164,7 @@ namespace daliMQTT
         const auto config = ConfigManager::Instance().getConfig();
 
         char object_id[64];
-        snprintf(object_id, sizeof(object_id), "dali_b%d_group_%s_%d", bus_id, config.client_id.c_str(), group_id);
+        snprintf(object_id, sizeof(object_id), "dali_b%d_group_%s_%d", bus_id, config->client_id.c_str(), group_id);
 
         char discovery_topic[128];
         snprintf(discovery_topic, sizeof(discovery_topic), "homeassistant/light/%s/config", object_id);
@@ -242,7 +242,7 @@ namespace daliMQTT
         const auto config = ConfigManager::Instance().getConfig();
 
         char object_id[64];
-        snprintf(object_id, sizeof(object_id), "dali_b%d_scenes_%s", bus_id, config.client_id.c_str());
+        snprintf(object_id, sizeof(object_id), "dali_b%d_scenes_%s", bus_id, config->client_id.c_str());
 
         char discovery_topic[128];
         snprintf(discovery_topic, sizeof(discovery_topic), "homeassistant/select/%s/config", object_id);

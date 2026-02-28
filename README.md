@@ -35,7 +35,7 @@ graph LR
 
 ## Software Requirements
 
-1.  **ESP-IDF v5.x**: [Installation Guide](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/index.html).
+1.  **ESP-IDF v5.x**: [Installation Guide](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/index.html). (IDF v6 at moment is experimental)
 2.  **GCC** (xtensa/riscv-esp-elf-g++): The C/C++ compiler provided by ESP-IDF.
 3.  **Git**: To clone the repository and fetching dependencies.
 4.  **Node.js and npm**: To build the Web UI frontend.

@@ -213,7 +213,7 @@ namespace daliMQTT {
 
         const auto config = ConfigManager::Instance().getConfig();
         auto const &mqtt = MQTTClient::Instance();
-        std::string result_topic = utils::stringFormat("%s%s", config.mqtt_base_topic.c_str(), CONFIG_DALI2MQTT_MQTT_GROUP_RES_SUBTOPIC);
+        std::string result_topic = utils::stringFormat("%s%s", config->mqtt_base_topic.c_str(), CONFIG_DALI2MQTT_MQTT_GROUP_RES_SUBTOPIC);
         std::string payload = utils::stringFormat(R"({"status":"success","device":"%s","group":%d,"action":"%s"})",
                                                   doc["long_address"].as<const char*>(), group, (assign ? "added" : "removed"));
         mqtt.publish(result_topic.c_str(), payload.c_str());
@@ -358,7 +358,7 @@ namespace daliMQTT {
     void MQTTCommandHandler::backgroundScanTask(void* arg) {
         auto config = ConfigManager::Instance().getConfig();
         char status_topic[128];
-        snprintf(status_topic, sizeof(status_topic), "%s/config/bus/sync_status", config.mqtt_base_topic.c_str());
+        snprintf(status_topic, sizeof(status_topic), "%s/config/bus/sync_status", config->mqtt_base_topic.c_str());
 
         MQTTClient::Instance().publish(status_topic, R"({"status":"scanning"})", 0, false);
         DaliDeviceController::Instance().performScan();
@@ -376,7 +376,7 @@ namespace daliMQTT {
         auto const& mqtt = MQTTClient::Instance();
         auto config = ConfigManager::Instance().getConfig();
         char status_topic[128];
-        snprintf(status_topic, sizeof(status_topic), "%s/config/bus/sync_status", config.mqtt_base_topic.c_str());
+        snprintf(status_topic, sizeof(status_topic), "%s/config/bus/sync_status", config->mqtt_base_topic.c_str());
 
         mqtt.publish(status_topic, R"({"status":"initializing"})", 0, false);
 
@@ -394,7 +394,7 @@ namespace daliMQTT {
         auto const& mqtt = MQTTClient::Instance();
         auto config = ConfigManager::Instance().getConfig();
         char status_topic[128];
-        snprintf(status_topic, sizeof(status_topic), "%s/config/input_device/sync_status", config.mqtt_base_topic.c_str());
+        snprintf(status_topic, sizeof(status_topic), "%s/config/input_device/sync_status", config->mqtt_base_topic.c_str());
 
         mqtt.publish(status_topic, R"({"status":"initializing"})", 0, false);
 
@@ -424,8 +424,8 @@ namespace daliMQTT {
         const auto config = ConfigManager::Instance().getConfig();
         std::string_view topic_sv(topic);
 
-        if (!topic_sv.starts_with(config.mqtt_base_topic)) return;
-        topic_sv.remove_prefix(config.mqtt_base_topic.length());
+        if (!topic_sv.starts_with(config->mqtt_base_topic)) return;
+        topic_sv.remove_prefix(config->mqtt_base_topic.length());
 
         etl::vector<std::string_view, 16> parts;
         for (const auto part: std::views::split(topic_sv, '/')) {

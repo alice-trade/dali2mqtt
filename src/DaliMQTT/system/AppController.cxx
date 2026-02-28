@@ -65,7 +65,7 @@ namespace daliMQTT
         wifi.onConnected = [this]() { this->onNetworkConnected(); };
         wifi.onDisconnected = [this]() { this->onNetworkDisconnected(); };
 
-        wifi.connectToAP(config.wifi_ssid, config.wifi_password);
+        wifi.connectToAP(config->wifi_ssid, config->wifi_password);
     }
 
     void AppController::onNetworkConnected() {
@@ -74,19 +74,19 @@ namespace daliMQTT
 
         const auto config = ConfigManager::Instance().getConfig();
 
-        if (config.syslog_enabled && !config.syslog_server.empty()) {
-            SyslogConfig::Instance().init(config.syslog_server);
+        if (config->syslog_enabled && !config->syslog_server.empty()) {
+            SyslogConfig::Instance().init(config->syslog_server);
         }
 
         auto& mqtt = MQTTClient::Instance();
-        const std::string availability_topic = utils::stringFormat("%s%s", config.mqtt_base_topic.c_str(), CONFIG_DALI2MQTT_MQTT_AVAILABILITY_TOPIC);
+        const std::string availability_topic = utils::stringFormat("%s%s", config->mqtt_base_topic.c_str(), CONFIG_DALI2MQTT_MQTT_AVAILABILITY_TOPIC);
 
-        mqtt.init(config.mqtt_uri,
-                      config.client_id,
+        mqtt.init(config->mqtt_uri,
+                      config->client_id,
                       availability_topic,
-                      config.mqtt_user,
-                      config.mqtt_pass,
-                      config.mqtt_ca_cert);
+                      config->mqtt_user,
+                      config->mqtt_pass,
+                      config->mqtt_ca_cert);
         mqtt.onConnected = [this]() { this->onMqttConnected(); };
         mqtt.onDisconnected = [this]() { this->onMqttDisconnected(); };
         mqtt.connect();
@@ -103,70 +103,70 @@ namespace daliMQTT
         auto config = ConfigManager::Instance().getConfig();
         auto const& mqtt = MQTTClient::Instance();
 
-        std::string availability_topic = utils::stringFormat("%s%s", config.mqtt_base_topic.c_str(), CONFIG_DALI2MQTT_MQTT_AVAILABILITY_TOPIC);
+        std::string availability_topic = utils::stringFormat("%s%s", config->mqtt_base_topic.c_str(), CONFIG_DALI2MQTT_MQTT_AVAILABILITY_TOPIC);
         mqtt.publish(availability_topic.c_str(), CONFIG_DALI2MQTT_MQTT_PAYLOAD_ONLINE, 1, true);
 
-        std::string ip_topic = utils::stringFormat("%s/ip_addr", config.mqtt_base_topic.c_str());
+        std::string ip_topic = utils::stringFormat("%s/ip_addr", config->mqtt_base_topic.c_str());
         std::string ip_addr = Wifi::Instance().getIpAddress();
         mqtt.publish(ip_topic.c_str(), ip_addr.c_str(), 1, true);
 
-        std::string version_topic = utils::stringFormat("%s/version", config.mqtt_base_topic.c_str());
+        std::string version_topic = utils::stringFormat("%s/version", config->mqtt_base_topic.c_str());
         mqtt.publish(version_topic.c_str(), DALIMQTT_VERSION, 1, true);
 
         // base/light/LONG_ADDR/set
-        std::string light_single_topic = utils::stringFormat("%s/light/+/set", config.mqtt_base_topic.c_str());
+        std::string light_single_topic = utils::stringFormat("%s/light/+/set", config->mqtt_base_topic.c_str());
         mqtt.subscribe(light_single_topic.c_str());
         ESP_LOGI(TAG, "Subscribed to lights: %s", light_single_topic.c_str());
 
         // base/light/bus/BUS_ID/group/GROUP_ID/set
-        std::string light_group_topic = utils::stringFormat("%s/light/bus/+/group/+/set", config.mqtt_base_topic.c_str());
+        std::string light_group_topic = utils::stringFormat("%s/light/bus/+/group/+/set", config->mqtt_base_topic.c_str());
         mqtt.subscribe(light_group_topic.c_str());
         ESP_LOGI(TAG, "Subscribed to light groups: %s", light_group_topic.c_str());
 
         // base/light/broadcast/set
-        std::string light_broadcast_topic = utils::stringFormat("%s/light/broadcast/set", config.mqtt_base_topic.c_str());
+        std::string light_broadcast_topic = utils::stringFormat("%s/light/broadcast/set", config->mqtt_base_topic.c_str());
         mqtt.subscribe(light_broadcast_topic.c_str());
         ESP_LOGI(TAG, "Subscribed to broadcast: %s", light_broadcast_topic.c_str());
 
         // base/scene/bus/BUS_ID/set
-        std::string scene_bus_cmd_topic = utils::stringFormat("%s/scene/bus/+/set", config.mqtt_base_topic.c_str());
+        std::string scene_bus_cmd_topic = utils::stringFormat("%s/scene/bus/+/set", config->mqtt_base_topic.c_str());
         mqtt.subscribe(scene_bus_cmd_topic.c_str());
         ESP_LOGI(TAG, "Subscribed to bus scenes: %s", scene_bus_cmd_topic.c_str());
 
         // base/config/group/set
-        std::string config_group_topic = utils::stringFormat("%s%s", config.mqtt_base_topic.c_str(), CONFIG_DALI2MQTT_MQTT_GROUP_SET_SUBTOPIC);
+        std::string config_group_topic = utils::stringFormat("%s%s", config->mqtt_base_topic.c_str(), CONFIG_DALI2MQTT_MQTT_GROUP_SET_SUBTOPIC);
         mqtt.subscribe(config_group_topic.c_str());
         ESP_LOGI(TAG, "Subscribed to group config: %s", config_group_topic.c_str());
 
         // base/cmd/send
-        std::string cmd_topic = utils::stringFormat("%s/cmd/send", config.mqtt_base_topic.c_str());
+        std::string cmd_topic = utils::stringFormat("%s/cmd/send", config->mqtt_base_topic.c_str());
         mqtt.subscribe(cmd_topic.c_str());
         ESP_LOGW(TAG, "DEBUG INTERFACE ENABLED. Subscribed to: %s", cmd_topic.c_str());
 
         // base/cmd/sync
-        std::string sync_topic = utils::stringFormat("%s/cmd/sync", config.mqtt_base_topic.c_str());
+        std::string sync_topic = utils::stringFormat("%s/cmd/sync", config->mqtt_base_topic.c_str());
         mqtt.subscribe(sync_topic.c_str());
         ESP_LOGI(TAG, "Subscribed to sync: %s", sync_topic.c_str());
 
         // base/config/bus/scan
-        std::string bus_scan_topic = utils::stringFormat("%s/config/bus/scan", config.mqtt_base_topic.c_str());
+        std::string bus_scan_topic = utils::stringFormat("%s/config/bus/scan", config->mqtt_base_topic.c_str());
         mqtt.subscribe(bus_scan_topic.c_str());
 
         // base/config/bus/initialize
-        std::string bus_init_topic = utils::stringFormat("%s/config/bus/initialize", config.mqtt_base_topic.c_str());
+        std::string bus_init_topic = utils::stringFormat("%s/config/bus/initialize", config->mqtt_base_topic.c_str());
         mqtt.subscribe(bus_init_topic.c_str());
         ESP_LOGI(TAG, "Subscribed to bus management: %s, %s", bus_scan_topic.c_str(), bus_init_topic.c_str());
 
         // base/config/get
-        std::string config_get_topic = utils::stringFormat("%s/config/get", config.mqtt_base_topic.c_str());
+        std::string config_get_topic = utils::stringFormat("%s/config/get", config->mqtt_base_topic.c_str());
         mqtt.subscribe(config_get_topic.c_str());
 
         // base/config/set
-        std::string config_set_topic = utils::stringFormat("%s/config/set", config.mqtt_base_topic.c_str());
+        std::string config_set_topic = utils::stringFormat("%s/config/set", config->mqtt_base_topic.c_str());
         mqtt.subscribe(config_set_topic.c_str());
         ESP_LOGI(TAG, "Subscribed to system config management: %s, %s", config_get_topic.c_str(), config_set_topic.c_str());
 
-        if (config.hass_discovery_enabled) {
+        if (config->hass_discovery_enabled) {
             publishHAMqttDiscovery();
         }
 
@@ -192,15 +192,15 @@ namespace daliMQTT
     void AppController::onConfigReloadRequest() {
         ESP_LOGI(TAG, "Hot-reloading MQTT Configuration...");
         const auto config = ConfigManager::Instance().getConfig();
-        const std::string availability_topic = utils::stringFormat("%s%s", config.mqtt_base_topic.c_str(), CONFIG_DALI2MQTT_MQTT_AVAILABILITY_TOPIC);
+        const std::string availability_topic = utils::stringFormat("%s%s", config->mqtt_base_topic.c_str(), CONFIG_DALI2MQTT_MQTT_AVAILABILITY_TOPIC);
 
         MQTTClient::Instance().reloadConfig(
-            config.mqtt_uri,
-            config.client_id,
-            config.mqtt_user,
-            config.mqtt_pass,
+            config->mqtt_uri,
+            config->client_id,
+            config->mqtt_user,
+            config->mqtt_pass,
             availability_topic,
-            config.mqtt_ca_cert
+            config->mqtt_ca_cert
         );
     }
 } // daliMQTT

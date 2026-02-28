@@ -159,7 +159,7 @@ namespace daliMQTT {
         if (checkAuth(req) != ESP_OK) return ESP_FAIL;
         const auto cfg = ConfigManager::Instance().getConfig();
         httpd_resp_set_type(req, "application/json");
-        httpd_resp_send(req, cfg.dali_device_identificators.c_str(), HTTPD_RESP_USE_STRLEN);
+        httpd_resp_send(req, cfg->dali_device_identificators.c_str(), HTTPD_RESP_USE_STRLEN);
         return ESP_OK;
     }
 

@@ -116,14 +116,14 @@ namespace daliMQTT
         }
         auto config = ConfigManager::Instance().getConfig();
 
-        std::string hostname = config.http_domain;
+        std::string hostname = config->http_domain;
         ESP_ERROR_CHECK(mdns_hostname_set(hostname.c_str()));
 
         static std::array<mdns_txt_item_t, 1> serviceTxtData = {{
             {"path", "/"}
         }};
 
-        std::string instance_name = utils::stringFormat("DALI Bridge (%s)", config.client_id.c_str());
+        std::string instance_name = utils::stringFormat("DALI Bridge (%s)", config->client_id.c_str());
         ESP_ERROR_CHECK(mdns_instance_name_set(instance_name.c_str()));
 
         ESP_ERROR_CHECK(mdns_service_add(nullptr, "_http", "_tcp", 80, serviceTxtData.data(), serviceTxtData.size()));

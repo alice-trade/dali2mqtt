@@ -37,7 +37,7 @@ namespace daliMQTT {
         }
 
         if (target_url.empty()) {
-            target_url = ConfigManager::Instance().getConfig().app_ota_url;
+            target_url = ConfigManager::Instance().getConfig()->app_ota_url;
         }
 
         if (target_url.empty()) {

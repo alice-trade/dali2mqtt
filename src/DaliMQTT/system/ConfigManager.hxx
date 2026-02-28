@@ -79,7 +79,7 @@ namespace daliMQTT
 
             esp_err_t resetConfiguredFlag();
 
-            [[nodiscard]] AppConfig getConfig() const;
+            [[nodiscard]] std::shared_ptr<const AppConfig> getConfig() const;
 
             [[nodiscard]] std::string getMqttBaseTopic() const;
 
@@ -115,7 +115,7 @@ namespace daliMQTT
                         return ensureConfiguredAndCommit(nvs_handle.get());
             }
 
-            AppConfig config_cache{};
+            std::shared_ptr<const AppConfig> config_cache;
             mutable std::mutex config_mutex{};
             bool initialized{false};
     };

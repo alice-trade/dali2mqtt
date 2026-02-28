@@ -32,10 +32,10 @@ namespace daliMQTT
     void DaliDeviceController::applyBusConfiguration() {
         auto cfg = ConfigManager::Instance().getConfig();
         for (uint8_t i = 0; i < Constants::MaxBuses; ++i) {
-            if (cfg.buses[i].enabled) {
+            if (cfg->buses[i].enabled) {
                 if (!m_adapters[i]) {
                     m_adapters[i] = std::make_unique<DaliAdapter>(i, m_central_event_queue);
-                    m_adapters[i]->init(static_cast<gpio_num_t>(cfg.buses[i].rx_pin), static_cast<gpio_num_t>(cfg.buses[i].tx_pin));
+                    m_adapters[i]->init(static_cast<gpio_num_t>(cfg->buses[i].rx_pin), static_cast<gpio_num_t>(cfg->buses[i].tx_pin));
                 }
             } else {
                 if (m_adapters[i]) m_adapters[i].reset();
@@ -55,7 +55,7 @@ namespace daliMQTT
 
         const auto addr_str = utils::longAddressToString(long_addr);
         char topic[128];
-        snprintf(topic, sizeof(topic), "%s/light/%s/state", config.mqtt_base_topic.c_str(), addr_str.data());
+        snprintf(topic, sizeof(topic), "%s/light/%s/state", config->mqtt_base_topic.c_str(), addr_str.data());
 
         if (device.current_level == 255) return;
 
@@ -88,7 +88,7 @@ namespace daliMQTT
 
         const auto addr_str = utils::longAddressToString(long_addr);
         char topic[128];
-        snprintf(topic, sizeof(topic), "%s/light/%s/status", config.mqtt_base_topic.c_str(), addr_str.data());
+        snprintf(topic, sizeof(topic), "%s/light/%s/status", config->mqtt_base_topic.c_str(), addr_str.data());
 
         const char* payload = is_available ? CONFIG_DALI2MQTT_MQTT_PAYLOAD_ONLINE : CONFIG_DALI2MQTT_MQTT_PAYLOAD_OFFLINE;
         mqtt.publish(topic, payload, 1, true);
@@ -145,7 +145,7 @@ namespace daliMQTT
         const auto config = ConfigManager::Instance().getConfig();
         const auto addr_str = utils::longAddressToString(long_addr);
         char topic[128];
-        snprintf(topic, sizeof(topic), "%s/light/%s/attributes", config.mqtt_base_topic.c_str(), addr_str.data());
+        snprintf(topic, sizeof(topic), "%s/light/%s/attributes", config->mqtt_base_topic.c_str(), addr_str.data());
 
         ControlGear dev_copy;
         bool found = false;
@@ -281,7 +281,7 @@ namespace daliMQTT
 
         ESP_LOGI(TAG, "Dali Adaptive Sync Task Started.");
         const auto config = ConfigManager::Instance().getConfig();
-        const uint32_t safe_cycle_time = std::max<uint32_t>(1000, config.dali_poll_interval_ms);
+        const uint32_t safe_cycle_time = std::max<uint32_t>(1000, config->dali_poll_interval_ms);
         const uint32_t calc_delay_ms = safe_cycle_time >> 6;
         const TickType_t rr_delay_ticks = pdMS_TO_TICKS(std::max<uint32_t>(20, calc_delay_ms));
         constexpr TickType_t priority_delay_ticks = pdMS_TO_TICKS(10);
@@ -469,7 +469,7 @@ namespace daliMQTT
 
             char topic[128];
             snprintf(topic, sizeof(topic), "%s/event/%s/%s",
-                     ConfigManager::Instance().getConfig().mqtt_base_topic.c_str(),
+                     ConfigManager::Instance().getConfig()->mqtt_base_topic.c_str(),
                      addr_type_str.c_str(),
                      topic_addr_val);
 

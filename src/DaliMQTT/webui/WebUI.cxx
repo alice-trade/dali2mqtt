@@ -157,7 +157,7 @@ namespace daliMQTT
         }
 
         const auto cfg = ConfigManager::Instance().getConfig();
-        if (decoded_sv.substr(0, colon_pos) == cfg.http_user && decoded_sv.substr(colon_pos + 1) == cfg.http_pass) {
+        if (decoded_sv.substr(0, colon_pos) == cfg->http_user && decoded_sv.substr(colon_pos + 1) == cfg->http_pass) {
             return ESP_OK;
         }
 

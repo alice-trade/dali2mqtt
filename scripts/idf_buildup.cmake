@@ -5,11 +5,11 @@ include($ENV{IDF_PATH}/tools/cmake/idf.cmake)
 message(NOTICE "IDF framework at: " $ENV{IDF_PATH})
 message(NOTICE "IDF Version: ${IDF_VERSION_MAJOR}.${IDF_VERSION_MINOR}.${IDF_VERSION_PATCH}")
 
-if(NOT (IDF_VERSION_MAJOR EQUAL 5))
-    message(FATAL_ERROR "Build requires ESP-IDF v5.x. Current version is not supported")
+if((IDF_VERSION_MAJOR LESS 5))
+    message(FATAL_ERROR "Build requires ESP-IDF v5.x minimum. Current version is not supported")
 endif()
 
-include(${PROJDIR}/scripts/fetch_3rdparties.cmake)
+include(${PROJDIR}/scripts/dependencies.cmake)
 
 
 message("Build for: " ${CMAKE_BUILD_TYPE})

@@ -23,7 +23,7 @@ namespace daliMQTT
         m_assignments.clear();
 
         JsonDocument doc;
-        if (deserializeJson(doc, config.dali_group_assignments)) return;
+        if (deserializeJson(doc, config->dali_group_assignments)) return;
 
         for (JsonPair kv : doc.as<JsonObject>()) {
             auto long_addr_opt = utils::stringToLongAddress(kv.key().c_str());
@@ -196,7 +196,7 @@ namespace daliMQTT
         const auto addr_str = utils::longAddressToString(longAddr);
 
         char topic[128];
-        snprintf(topic, sizeof(topic), "%s/light/%s/groups", config.mqtt_base_topic.c_str(), addr_str.data());
+        snprintf(topic, sizeof(topic), "%s/light/%s/groups", config->mqtt_base_topic.c_str(), addr_str.data());
 
         JsonDocument doc;
         JsonArray groups_array = doc["groups"].to<JsonArray>();
@@ -293,7 +293,7 @@ namespace daliMQTT
         const auto config = ConfigManager::Instance().getConfig();
 
         char topic[128];
-        snprintf(topic, sizeof(topic), "%s/light/bus/%d/group/%d/state", config.mqtt_base_topic.c_str(), bus_id, group_id);
+        snprintf(topic, sizeof(topic), "%s/light/bus/%d/group/%d/state", config->mqtt_base_topic.c_str(), bus_id, group_id);
 
         JsonDocument doc;
         doc["state"] = (level > 0 ? "ON" : "OFF");
