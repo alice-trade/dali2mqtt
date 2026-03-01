@@ -27,7 +27,7 @@ namespace daliMQTT {
         if (m_initialized) return ESP_OK;
 
         m_bus_mutex = xSemaphoreCreateRecursiveMutex();
-        m_event_queue = xQueueCreate(32, sizeof(AdapterEvent));
+        m_event_queue = xQueueCreate(64, sizeof(AdapterEvent));
 
         Driver::DaliDriverConfig drv_cfg = {
             .rx_pin = rx_pin,
@@ -45,7 +45,7 @@ namespace daliMQTT {
         }
 
         m_dali_event_queue = xQueueCreate(32, sizeof(dali_frame_t));
-        xTaskCreate(busWorkerTask, "dali_bus_worker", 4096, this, 10, &m_worker_task_handle);
+        xTaskCreate(busWorkerTask, "dali_bus_worker", 4096, this, 5, &m_worker_task_handle);
 
         m_initialized = true;
         ESP_LOGI(TAG, "Adapter initialized with DALI Driver (RMT).");
@@ -172,6 +172,7 @@ namespace daliMQTT {
         AdapterEvent::CmdData active_cmd{};
         uint8_t retries = 0;
         int64_t rx_timeout = 0;
+        int64_t tx_timeout = 0;
 
         auto finishCmd = [&](const esp_err_t res, const uint8_t resp) {
             if (active_cmd.caller) {
@@ -185,6 +186,7 @@ namespace daliMQTT {
                 retries = 0;
                 static_cast<void>(self->m_driver.sendAsync(active_cmd.data, active_cmd.bits));
                 state = State::TX_WAIT;
+                tx_timeout = esp_timer_get_time();
             }
         };
 
@@ -199,6 +201,7 @@ namespace daliMQTT {
                         retries = 0;
                         static_cast<void>(self->m_driver.sendAsync(active_cmd.data, active_cmd.bits));
                         state = State::TX_WAIT;
+                        tx_timeout = esp_timer_get_time();
                     } else {
                         self->m_cmd_buffer.push(ev.cmd);
                     }
@@ -227,6 +230,7 @@ namespace daliMQTT {
                                 self->m_driver.sendSystemFailureSignal();
                                 vTaskDelay(pdMS_TO_TICKS(4 + (esp_random() % 4)));
                                 static_cast<void>(self->m_driver.sendAsync(active_cmd.data, active_cmd.bits));
+                                tx_timeout = esp_timer_get_time();
                             } else {
                                 finishCmd(ESP_FAIL, 0);
                             }
@@ -240,7 +244,12 @@ namespace daliMQTT {
                     }
                 }
             }
-            if (state == State::WAIT_RX && (esp_timer_get_time() - rx_timeout) > 15000) finishCmd(ESP_ERR_TIMEOUT, 0);
+            int64_t now = esp_timer_get_time();
+            if (state == State::WAIT_RX && (now - rx_timeout) > 15000) finishCmd(ESP_ERR_TIMEOUT, 0);
+            if (state == State::TX_WAIT && (now - tx_timeout) > 100000) {
+                ESP_LOGD(TAG, "TX Timeout! Resetting state.");
+                finishCmd(ESP_FAIL, 0);
+            }
         }
     }
 
@@ -271,7 +280,7 @@ namespace daliMQTT {
             if (devices_found >= 64) {
                 ESP_LOGW(TAG, "More than 64 devices found. Skipping assignment.");
                 sendRaw(Factory::Special(Withdraw, 0).data, 16);
-                continue;
+                break;
             }
 
             sendRaw(Factory::Special(ProgramShortAddr, prog_byte).data, 16);
@@ -358,7 +367,7 @@ namespace daliMQTT {
             if (devices_found >= 64) {
                 // Withdraw (0x03)
                 sendRaw(Factory::InputDeviceCmd(0xFF, 0xFF, 0x03).data, 24);
-                continue;
+                break;
             }
             uint8_t progData = (devices_found << 1) | 1;
             sendRaw(Factory::InputDeviceCmd(0xFF, progData, 0x07).data, 24);

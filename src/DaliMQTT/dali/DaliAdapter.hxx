@@ -204,7 +204,7 @@ namespace daliMQTT
         std::atomic<bool> m_initialized{false};
         std::atomic<bool> m_sniffer_enabled{false};
 
-        static constexpr UBaseType_t NOTIFY_IDX = 1;
+        static constexpr UBaseType_t NOTIFY_IDX = 0; // Use idx 1 ??
     };
 } // daliMQTT
 

@@ -135,10 +135,7 @@ namespace daliMQTT
         ESP_LOGI(TAG, "Configured flag value: %d", configured_flag);
         temp_cfg.configured = (configured_flag == 1);
 
-        {
-            std::lock_guard<std::mutex> lock(config_mutex);
-            config_cache = std::make_shared<const AppConfig>(std::move(temp_cfg));
-        }
+        config_cache = std::make_shared<const AppConfig>(std::move(temp_cfg));
 
         ESP_LOGI(TAG, "Configuration loaded successfully.");
         return ESP_OK;

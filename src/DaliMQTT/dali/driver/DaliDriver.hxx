@@ -86,7 +86,7 @@ namespace daliMQTT::Driver {
                 static constexpr uint8_t RMT_LEVEL_IDLE = 0;
                 static constexpr uint8_t RMT_LEVEL_ACTIVE = 1;
 
-                static constexpr uint32_t RX_MIN_NOISE_FILTER_NS = 100000;
+                static constexpr uint32_t RX_MIN_NOISE_FILTER_NS = 1000;
                 static constexpr uint32_t RX_IDLE_THRESH_NS = 1800000;
                 static constexpr uint32_t TX_WATCHDOG_TIMEOUT_US = 50'000;
 

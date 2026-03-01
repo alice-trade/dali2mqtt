@@ -97,9 +97,8 @@ namespace daliMQTT
         m_network_connected = false;
     }
 
-    void AppController::onMqttConnected() {
-        ESP_LOGI(TAG, "MQTT connected successfully.");
-        m_mqtt_connected = true;
+    static void mqttSetupTask(void* arg) {
+      auto* self = static_cast<AppController*>(arg);
         auto config = ConfigManager::Instance().getConfig();
         auto const& mqtt = MQTTClient::Instance();
 
@@ -166,11 +165,20 @@ namespace daliMQTT
         mqtt.subscribe(config_set_topic.c_str());
         ESP_LOGI(TAG, "Subscribed to system config management: %s, %s", config_get_topic.c_str(), config_set_topic.c_str());
 
+
         if (config->hass_discovery_enabled) {
-            publishHAMqttDiscovery();
+            self->publishHAMqttDiscovery();
         }
 
         DaliGroupManagement::Instance().publishAllGroups();
+
+        vTaskDelete(nullptr);
+    }
+
+    void AppController::onMqttConnected() {
+        ESP_LOGI(TAG, "MQTT connected successfully.");
+        m_mqtt_connected = true;
+        xTaskCreate(mqttSetupTask, "mqtt_setup_task", 8192, this, 5, nullptr);
     }
 
     void AppController::onMqttDisconnected() {

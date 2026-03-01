@@ -23,6 +23,7 @@ namespace daliMQTT
         config.lru_purge_enable = true;
         config.uri_match_fn = httpd_uri_match_wildcard;
         config.max_uri_handlers = 17;
+        config.stack_size = 10240;
         config.max_open_sockets = 4;
         config.backlog_conn = 4;
         ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);

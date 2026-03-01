@@ -16,6 +16,15 @@ namespace daliMQTT
 
     void DaliDeviceController::init() {
         ESP_LOGI(TAG, "Initializing DALI Device Controller...");
+
+        if (m_central_event_queue == nullptr) {
+            m_central_event_queue = xQueueCreate(64, sizeof(dali_frame_t));
+            if (m_central_event_queue == nullptr) {
+                ESP_LOGE(TAG, "Failed to create central DALI event queue!");
+                return;
+            }
+        }
+
         applyBusConfiguration();
         m_internal_to_long_map.fill(InvalidLongAddr);
 
