@@ -245,7 +245,7 @@ namespace daliMQTT {
                 }
             }
             int64_t now = esp_timer_get_time();
-            if (state == State::WAIT_RX && (now - rx_timeout) > 15000) finishCmd(ESP_ERR_TIMEOUT, 0);
+            if (state == State::WAIT_RX && (now - rx_timeout) > 40000) finishCmd(ESP_ERR_TIMEOUT, 0);
             if (state == State::TX_WAIT && (now - tx_timeout) > 100000) {
                 ESP_LOGD(TAG, "TX Timeout! Resetting state.");
                 finishCmd(ESP_FAIL, 0);
