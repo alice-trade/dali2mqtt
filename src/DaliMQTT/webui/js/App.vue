@@ -7,11 +7,13 @@
   import { ref, onMounted } from 'vue';
   import { api, setAuth, setAuthToken, clearAuth } from './api';
   import SettingsPage from './components/SettingsPage.vue';
-  import DaliSetup from './components/DaliSetup.vue';
+  import DaliBus from './components/DaliBus.vue';
+  import DaliAssignments from './components/DaliAssignments.vue';
   import StatusPage from './components/StatusPage.vue';
   import DevicesPage from './components/DevicesPage.vue';
 
   const loggedIn = ref(false);
+  const configured = ref(true);
   const username = ref('admin');
   const password = ref('');
   const error = ref('');
@@ -27,7 +29,15 @@
     loading.value = true;
     try {
       const token = setAuth(username.value, password.value);
-      await api.getInfo();
+      const res = await api.getInfo();
+      configured.value = res.data.configured;
+
+      if (!configured.value) {
+        currentView.value = 'settings';
+      } else {
+        currentView.value = 'status';
+      }
+
       localStorage.setItem('auth', token);
       loggedIn.value = true;
     } catch (e: any) {
@@ -55,7 +65,11 @@
     if (token) {
       try {
         setAuthToken(token);
-        await api.getInfo();
+        const res = await api.getInfo();
+        configured.value = res.data.configured;
+        if (!configured.value) {
+          currentView.value = 'settings';
+        }
         loggedIn.value = true;
       } catch (e) {
         console.log("Session token expired or invalid");
@@ -87,7 +101,7 @@
     </div>
 
     <div v-else>
-      <header>
+      <header v-if="configured">
         <nav>
           <ul>
             <li><strong>DALI-MQTT Bridge</strong></li>
@@ -95,17 +109,38 @@
           <ul>
             <li><a href="#" :class="{ 'secondary': currentView !== 'status' }" @click.prevent="currentView = 'status'">Status</a></li>
             <li><a href="#" :class="{ 'secondary': currentView !== 'devices' }" @click.prevent="currentView = 'devices'">Devices</a></li>
+            <li><a href="#" :class="{ 'secondary': currentView !== 'bus' }" @click.prevent="currentView = 'bus'">Bus</a></li>
+            <li><a href="#" :class="{ 'secondary': currentView !== 'assignments' }" @click.prevent="currentView = 'assignments'">Assignments</a></li>
             <li><a href="#" :class="{ 'secondary': currentView !== 'settings' }" @click.prevent="currentView = 'settings'">Settings</a></li>
-            <li><a href="#" :class="{ 'secondary': currentView !== 'dali' }" @click.prevent="currentView = 'dali'">DALI Control</a></li>
             <li><a href="#" role="button" class="contrast outline" @click.prevent="handleLogout">Logout</a></li>
           </ul>
         </nav>
       </header>
 
-      <StatusPage v-if="currentView === 'status'" />
-      <DevicesPage v-if="currentView === 'devices'" />
-      <SettingsPage v-if="currentView === 'settings'" />
-      <DaliSetup v-if="currentView === 'dali'" />
+      <div v-else class="provisioning-header">
+        <h2>Configuration</h2>
+        <p>Please configure your WiFi, MQTT, and System settings to start using the bridge.</p>
+      </div>
+
+      <StatusPage v-if="currentView === 'status' && configured" />
+      <DevicesPage v-if="currentView === 'devices' && configured" />
+      <SettingsPage v-if="currentView === 'settings'" :is-provisioning="!configured" />
+      <DaliBus v-if="currentView === 'bus' && configured" />
+      <DaliAssignments v-if="currentView === 'assignments' && configured" />
     </div>
   </main>
 </template>
+
+<style scoped>
+  .provisioning-header {
+    text-align: center;
+    margin-top: 2rem;
+    margin-bottom: 2rem;
+  }
+  .provisioning-header h2 {
+    margin-bottom: 0.5rem;
+  }
+  .provisioning-header p {
+    color: var(--pico-muted-color);
+  }
+</style>

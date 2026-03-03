@@ -4,6 +4,7 @@
 #include <esp_chip_info.h>
 #include <esp_system.h>
 #include <esp_timer.h>
+#include <system/ConfigManager.hxx>
 #include <utils/StringUtils.hxx>
 #include "dali/DaliDeviceController.hxx"
 #include "webui/WebUI.hxx"
@@ -95,6 +96,7 @@ namespace daliMQTT {
         doc["dali_status"] = dali_status;
         doc["mqtt_status"] = mqtt_status_str;
         doc["wifi_status"] = wifi_status_str;
+        doc["configured"] = ConfigManager::Instance().isConfigured();
 
         std::string json_string;
         serializeJson(doc, json_string);

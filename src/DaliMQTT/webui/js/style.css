@@ -1,1 +1,29 @@
+.tabs {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    border-bottom: 1px solid var(--pico-muted-border-color);
+    overflow-x: auto;
+}
 
+.tab-button {
+    background: none;
+    border: none;
+    border-bottom: 3px solid transparent;
+    padding: 0.5rem 1rem;
+    cursor: pointer;
+    color: var(--pico-muted-color);
+    font-weight: bold;
+    border-radius: 0;
+    white-space: nowrap;
+}
+
+.tab-button:hover {
+    background: none;
+    color: var(--pico-primary-hover);
+}
+
+.tab-button.active {
+    border-bottom-color: var(--pico-primary);
+    color: var(--pico-primary);
+}
