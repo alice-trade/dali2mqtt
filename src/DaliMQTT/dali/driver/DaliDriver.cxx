@@ -150,20 +150,25 @@ namespace daliMQTT::Driver {
         DaliMessage tx_msg;
         uint32_t notify_val = 0;
         bool last_rx_was_backward = false;
+        rmt_symbol_word_t local_rx_buffer[RX_BUFFER_SIZE];
 
         while (true) {
             if (xTaskNotifyWait(0, 0xFFFFFFFF, &notify_val, pdMS_TO_TICKS(5)) == pdTRUE) {
                 if (notify_val > 0) {
-                    size_t decoded_bits = processRxSymbols(m_rx_buffer, notify_val);
-                    if (decoded_bits > 0) {
-                        m_last_bus_activity_us = esp_timer_get_time();
-                        last_rx_was_backward = (decoded_bits == 8);
-                    }
+                    size_t copy_count = etl::min(static_cast<size_t>(notify_val), RX_BUFFER_SIZE);
+                    memcpy(local_rx_buffer, m_rx_buffer, copy_count * sizeof(rmt_symbol_word_t));
+
                     rmt_receive_config_t rx_config = {
                         .signal_range_min_ns = Constants::RX_MIN_NOISE_FILTER_NS,
                         .signal_range_max_ns = Constants::RX_IDLE_THRESH_NS,
                     };
                     ESP_ERROR_CHECK(rmt_receive(m_rx_channel, m_rx_buffer, RX_BUFFER_SIZE * sizeof(rmt_symbol_word_t), &rx_config));
+
+                    size_t decoded_bits = processRxSymbols(local_rx_buffer, copy_count);
+                    if (decoded_bits > 0) {
+                        m_last_bus_activity_us = esp_timer_get_time();
+                        last_rx_was_backward = (decoded_bits == 8);
+                    }
                 }
             }
 
@@ -238,7 +243,7 @@ namespace daliMQTT::Driver {
         }
 
         // Stop Bit
-        m_tx_static_buffer[count++] = make_symbol(Constants::T_TE * 4, Constants::RMT_LEVEL_IDLE, 0, Constants::RMT_LEVEL_IDLE);
+        m_tx_static_buffer[count++] = make_symbol(Constants::T_TE * 2, Constants::RMT_LEVEL_IDLE, Constants::T_TE * 2, Constants::RMT_LEVEL_IDLE);
         return count;
     }
 
@@ -266,7 +271,10 @@ namespace daliMQTT::Driver {
             const int num_te1 = (symbols[i].duration1 + Constants::T_TE / 2) / Constants::T_TE;
             for(int j = 0; j < num_te1 && te_count < sizeof(m_te_buffer); ++j) m_te_buffer[te_count++] = symbols[i].level1;
         }
-
+        if (te_count < sizeof(m_te_buffer) - 2) {
+            m_te_buffer[te_count++] = Constants::RMT_LEVEL_IDLE;
+            m_te_buffer[te_count++] = Constants::RMT_LEVEL_IDLE;
+        }
         int idx = 0;
         size_t total_bits_decoded = 0;
 
@@ -300,8 +308,8 @@ namespace daliMQTT::Driver {
                     bits_decoded++;
                     idx += 2;
                 } else {
-                    if (m_tx_state.active) { // debug
-                        ESP_LOGE(TAG, "Manchester ERR at bit %d! h1=%d, h2=%d", bits_decoded, half1, half2);
+                    if (m_tx_state.active && bits_decoded != 8 && bits_decoded != 16 && bits_decoded != 24) {
+                        ESP_LOGD(TAG, "Manchester ERR at bit %d! h1=%d, h2=%d", bits_decoded, half1, half2);
                     }
                     break;
                 }
