@@ -142,11 +142,11 @@ namespace daliMQTT::Driver {
     }
 
     void DaliDriver::driverTaskWrapper(void* arg) {
-        static_cast<DaliDriver*>(arg)->driverTaskLoop();
+        static_cast<DaliDriver*>(arg)->driverTask();
         vTaskDelete(nullptr);
     }
 
-    void DaliDriver::driverTaskLoop() {
+    void DaliDriver::driverTask() {
         DaliMessage tx_msg;
         uint32_t notify_val = 0;
         bool last_rx_was_backward = false;
@@ -166,6 +166,9 @@ namespace daliMQTT::Driver {
                     ESP_ERROR_CHECK(rmt_receive(m_rx_channel, m_rx_buffer, RX_BUFFER_SIZE * sizeof(rmt_symbol_word_t), &rx_config));
                 }
             }
+
+            TickType_t delay_ticks = pdMS_TO_TICKS(1);
+            vTaskDelay(delay_ticks > 0 ? delay_ticks : 1);
 
             bool is_tx_active;
             {
@@ -315,6 +318,15 @@ namespace daliMQTT::Driver {
 
                 if (m_event_cb) m_event_cb(msg, m_event_cb_ctx);
                 total_bits_decoded += bits_decoded;
+            } else
+            {
+                std::lock_guard<std::mutex> lock(m_state_mutex);
+                if (m_tx_state.active) {
+                    DaliMessage err_msg;
+                    err_msg.type = DaliEventType::CollisionDetected;
+                    m_tx_state.active = false;
+                    if (m_event_cb) m_event_cb(err_msg, m_event_cb_ctx);
+                }
             }
             while (idx < te_count && m_te_buffer[idx] == Constants::RMT_LEVEL_ACTIVE) idx++;
         }

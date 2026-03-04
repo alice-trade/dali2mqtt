@@ -87,8 +87,8 @@ namespace daliMQTT::Driver {
                 static constexpr uint8_t RMT_LEVEL_ACTIVE = 1;
 
                 static constexpr uint32_t RX_MIN_NOISE_FILTER_NS = 2000;
-                static constexpr uint32_t RX_IDLE_THRESH_NS = 12000000;
-                static constexpr uint32_t TX_WATCHDOG_TIMEOUT_US = 50'000;
+                static constexpr uint32_t RX_IDLE_THRESH_NS = 2000000;
+                static constexpr uint32_t TX_WATCHDOG_TIMEOUT_US = 150'000;
 
                 static constexpr int64_t DELAY_FORWARD_TO_FORWARD = 9200;
                 static constexpr int64_t DELAY_BACKWARD_TO_FORWARD = 11500;
@@ -140,7 +140,7 @@ namespace daliMQTT::Driver {
             esp_err_t setupRx();
 
             static void driverTaskWrapper(void* arg);
-            [[noreturn]] void driverTaskLoop();
+            [[noreturn]] void driverTask();
             static rmt_symbol_word_t make_symbol(uint32_t dur0, uint8_t lvl0, uint32_t dur1, uint8_t lvl1);
 
             /**

@@ -228,7 +228,7 @@ namespace daliMQTT {
                             retries++;
                             if (retries <= 3) {
                                 self->m_driver.sendSystemFailureSignal();
-                                vTaskDelay(pdMS_TO_TICKS(4 + (esp_random() % 4)));
+                                vTaskDelay(pdMS_TO_TICKS(15 + (esp_random() % 5)));
                                 static_cast<void>(self->m_driver.sendAsync(active_cmd.data, active_cmd.bits));
                                 tx_timeout = esp_timer_get_time();
                             } else {
