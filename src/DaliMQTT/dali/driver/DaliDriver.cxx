@@ -246,6 +246,17 @@ namespace daliMQTT::Driver {
         if (!symbols || count == 0) return 0;
         int te_count = 0;
 
+        if (m_tx_state.active) { // debug
+            char dbg[256] = {0};
+            int pos = snprintf(dbg, sizeof(dbg), "RAW RMT (cnt=%d): ", count);
+            for(size_t i = 0; i < count && i < 10; i++) {
+                pos += snprintf(dbg + pos, sizeof(dbg) - pos, "[%d:%d %d:%d] ",
+                    symbols[i].level0, symbols[i].duration0,
+                    symbols[i].level1, symbols[i].duration1);
+            }
+            ESP_LOGW(TAG, "%s", dbg);
+        }
+
         for(size_t i = 0; i < count; ++i) {
             if (symbols[i].duration0 == 0 && symbols[i].duration1 == 0) break;
 
@@ -289,12 +300,18 @@ namespace daliMQTT::Driver {
                     bits_decoded++;
                     idx += 2;
                 } else {
+                    if (m_tx_state.active) { // debug
+                        ESP_LOGE(TAG, "Manchester ERR at bit %d! h1=%d, h2=%d", bits_decoded, half1, half2);
+                    }
                     break;
                 }
 
                 if (bits_decoded == 24) break;
             }
-
+            if (m_tx_state.active) { // debug
+                ESP_LOGW(TAG, "DECODED: %d bits. RX: 0x%06X, Expected TX: 0x%06X",
+                         bits_decoded, (unsigned int)rx_data, (unsigned int)m_tx_state.data);
+            }
             if (bits_decoded >= 8) {
                 DaliMessage msg;
                 msg.data = rx_data;
