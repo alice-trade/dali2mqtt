@@ -35,7 +35,7 @@ FetchContent_Declare(
 FetchContent_Declare(
         etl
         GIT_REPOSITORY https://github.com/ETLCPP/etl.git
-        GIT_TAG        20.45.0
+        GIT_TAG        20.46.2
         GIT_SHALLOW    TRUE
 )
     FetchContent_MakeAvailable(etl)
@@ -44,7 +44,7 @@ FetchContent_Declare(
 FetchContent_Declare(
         arduinojson
         GIT_REPOSITORY https://github.com/bblanchon/ArduinoJson.git
-        GIT_TAG        v7.4.2
+        GIT_TAG        v7.4.3
         GIT_SHALLOW    TRUE
         SOURCE_SUBDIR  "N/A"
 )
