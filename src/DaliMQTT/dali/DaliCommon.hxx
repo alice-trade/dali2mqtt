@@ -64,7 +64,7 @@ namespace daliMQTT
     using DaliLongAddrStr = std::array<char, 7>; // DALI Long Str: 6 hex chars + null
     struct DeferredRequest {
         DaliInternalAddr internal_address;
-        int64_t execute_at_ts; // Timestamp (ms)
+        int64_t execute_at_ts{}; // Timestamp (ms)
     };
 } // daliMQTT
 

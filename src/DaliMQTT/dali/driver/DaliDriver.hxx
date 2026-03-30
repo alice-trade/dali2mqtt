@@ -77,21 +77,15 @@ namespace daliMQTT::Driver {
         private:
             struct Constants {
                 static constexpr uint32_t T_TE = 417;        // Half bit time (1/2400 s)
-                static constexpr uint32_t T_TE_MIN = 300;
-                static constexpr uint32_t T_TE_MAX = 525;
-                static constexpr uint32_t T_2TE_MIN = 700;
-                static constexpr uint32_t T_2TE_MAX = 960;
-                static constexpr uint32_t T_SYSTEM_FAILURE_MIN = 1300;
 
                 static constexpr uint8_t RMT_LEVEL_IDLE = 0;
                 static constexpr uint8_t RMT_LEVEL_ACTIVE = 1;
 
-                static constexpr uint32_t RX_MIN_NOISE_FILTER_NS = 2000;
-                static constexpr uint32_t RX_IDLE_THRESH_NS = 2000000;
+                static constexpr uint32_t RX_MIN_NOISE_FILTER_NS = 20000;
+                static constexpr uint32_t RX_IDLE_THRESH_NS = 3000000;
                 static constexpr uint32_t TX_WATCHDOG_TIMEOUT_US = 150'000;
 
                 static constexpr int64_t DELAY_FORWARD_TO_FORWARD = 9200;
-                static constexpr int64_t DELAY_BACKWARD_TO_FORWARD = 11500;
             };
 
             bool m_initialized{false};
@@ -118,7 +112,7 @@ namespace daliMQTT::Driver {
             int64_t m_last_bus_activity_us{0};
             static constexpr size_t RX_BUFFER_SIZE = 128;
             rmt_symbol_word_t* m_rx_buffer{nullptr};
-            rmt_symbol_word_t m_tx_static_buffer[64]{};
+            rmt_symbol_word_t m_tx_static_buffer[128]{};
             uint8_t m_te_buffer[1024]{};
             static bool rmt_rx_done_callback(rmt_channel_handle_t rx_chan, const rmt_rx_done_event_data_t *edata, void *user_ctx);
             static bool rmt_tx_done_callback(rmt_channel_handle_t tx_chan, const rmt_tx_done_event_data_t *edata, void *user_ctx);
@@ -141,12 +135,20 @@ namespace daliMQTT::Driver {
 
             static void driverTaskWrapper(void* arg);
             [[noreturn]] void driverTask();
-            static rmt_symbol_word_t make_symbol(uint32_t dur0, uint8_t lvl0, uint32_t dur1, uint8_t lvl1);
 
             /**
              * @brief Helper to encode DALI frame to RMT symbols
              */
             size_t encodeFrame(uint32_t data, uint8_t bits);
+
+            static rmt_symbol_word_t make_symbol(uint32_t dur0, uint8_t lvl0, uint32_t dur1, uint8_t lvl1) {
+                rmt_symbol_word_t sym;
+                sym.duration0 = dur0;
+                sym.level0 = lvl0;
+                sym.duration1 = dur1;
+                sym.level1 = lvl1;
+                return sym;
+            }
     };
 } // namespace daliMQTT::Driver
 

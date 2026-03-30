@@ -30,8 +30,7 @@ namespace daliMQTT::Driver {
         ESP_RETURN_ON_ERROR(setupTx(), TAG, "TX Setup failed");
         ESP_RETURN_ON_ERROR(setupRx(), TAG, "RX Setup failed");
 
-        xTaskCreate(driverTaskWrapper, "dali_rmt_task", 4096, this, 5, &m_driver_task);
-
+        xTaskCreate(driverTaskWrapper, "dali_rmt_task", 4096, this, 10, &m_driver_task);
         rmt_receive_config_t rx_config = {
             .signal_range_min_ns = Constants::RX_MIN_NOISE_FILTER_NS,
             .signal_range_max_ns = Constants::RX_IDLE_THRESH_NS,
@@ -43,15 +42,6 @@ namespace daliMQTT::Driver {
     }
 
     esp_err_t DaliDriver::setupTx() {
-        gpio_config_t io_conf = {};
-        io_conf.pin_bit_mask = (1ULL << m_config.tx_pin);
-        io_conf.mode = GPIO_MODE_OUTPUT;
-        io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
-        io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
-        io_conf.intr_type = GPIO_INTR_DISABLE;
-        gpio_config(&io_conf);
-        gpio_set_level(m_config.tx_pin, Constants::RMT_LEVEL_IDLE);
-
         rmt_tx_channel_config_t tx_cfg = {
             .gpio_num = m_config.tx_pin,
             .clk_src = RMT_CLK_SRC_DEFAULT,
@@ -65,21 +55,11 @@ namespace daliMQTT::Driver {
         rmt_copy_encoder_config_t enc_cfg = {};
         ESP_RETURN_ON_ERROR(rmt_new_copy_encoder(&enc_cfg, &m_dali_encoder), TAG, "Encoder failed");
 
-        rmt_tx_event_callbacks_t cbs = { .on_trans_done = rmt_tx_done_callback };
-        ESP_RETURN_ON_ERROR(rmt_tx_register_event_callbacks(m_tx_channel, &cbs, this), TAG, "TX CB failed");
-
         ESP_RETURN_ON_ERROR(rmt_enable(m_tx_channel), TAG, "TX Enable failed");
         return ESP_OK;
     }
 
     esp_err_t DaliDriver::setupRx() {
-        gpio_config_t io_conf = {};
-        io_conf.pin_bit_mask = (1ULL << m_config.rx_pin);
-        io_conf.mode = GPIO_MODE_INPUT;
-        io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
-        io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
-        gpio_config(&io_conf);
-
         rmt_rx_channel_config_t rx_cfg = {
             .gpio_num = m_config.rx_pin,
             .clk_src = RMT_CLK_SRC_DEFAULT,
@@ -106,32 +86,19 @@ namespace daliMQTT::Driver {
         if (xQueueSend(m_tx_queue, &msg, pdMS_TO_TICKS(10)) != pdTRUE) {
             return ESP_FAIL;
         }
-        if (m_driver_task) xTaskNotify(m_driver_task, 0, eNoAction);
         return ESP_OK;
     }
 
     esp_err_t DaliDriver::sendSystemFailureSignal() {
         m_tx_static_buffer[0] = make_symbol(1500, Constants::RMT_LEVEL_ACTIVE, Constants::T_TE, Constants::RMT_LEVEL_IDLE);
 
-        constexpr rmt_transmit_config_t tx_conf = { .loop_count = 0, .flags = { .eot_level = Constants::RMT_LEVEL_IDLE } };
-        ESP_ERROR_CHECK(rmt_transmit(m_tx_channel, m_dali_encoder, m_tx_static_buffer, sizeof(rmt_symbol_word_t), &tx_conf));
-        rmt_tx_wait_all_done(m_tx_channel, -1);
-
-        m_last_bus_activity_us = esp_timer_get_time();
-        return ESP_OK;
-    }
-
-    rmt_symbol_word_t DaliDriver::make_symbol(const uint32_t dur0, const uint8_t lvl0, const uint32_t dur1, const uint8_t lvl1) {
-        rmt_symbol_word_t sym;
-        sym.duration0 = dur0;
-        sym.level0 = lvl0;
-        sym.duration1 = dur1;
-        sym.level1 = lvl1;
-        return sym;
-    }
-
-    bool IRAM_ATTR DaliDriver::rmt_tx_done_callback(rmt_channel_handle_t tx_chan, const rmt_tx_done_event_data_t *edata, void *user_ctx) {
-        return false;
+        const rmt_transmit_config_t tx_conf = { .loop_count = 0 };
+        esp_err_t err = rmt_transmit(m_tx_channel, m_dali_encoder, m_tx_static_buffer, 1 * sizeof(rmt_symbol_word_t), &tx_conf);
+        if(err == ESP_OK) {
+            rmt_tx_wait_all_done(m_tx_channel, -1);
+            m_last_bus_activity_us = esp_timer_get_time();
+        }
+        return err;
     }
 
     bool IRAM_ATTR DaliDriver::rmt_rx_done_callback(rmt_channel_handle_t rx_chan, const rmt_rx_done_event_data_t *edata, void *user_ctx) {
@@ -148,62 +115,45 @@ namespace daliMQTT::Driver {
 
     void DaliDriver::driverTask() {
         DaliMessage tx_msg;
-        uint32_t notify_val = 0;
-        bool last_rx_was_backward = false;
+        uint32_t notified_symbols = 0;
 
         while (true) {
-            if (xTaskNotifyWait(0, 0xFFFFFFFF, &notify_val, pdMS_TO_TICKS(5)) == pdTRUE) {
-                if (notify_val > 0) {
-                    size_t decoded_bits = processRxSymbols(m_rx_buffer, notify_val);
-                    if (decoded_bits > 0) {
-                        m_last_bus_activity_us = esp_timer_get_time();
-                        last_rx_was_backward = (decoded_bits == 8);
-                    }
+            if (xTaskNotifyWait(0, 0xFFFFFFFF, &notified_symbols, pdMS_TO_TICKS(1)) == pdTRUE) {
+                if (notified_symbols > 0) {
+                    processRxSymbols(m_rx_buffer, notified_symbols);
+
                     rmt_receive_config_t rx_config = {
                         .signal_range_min_ns = Constants::RX_MIN_NOISE_FILTER_NS,
                         .signal_range_max_ns = Constants::RX_IDLE_THRESH_NS,
                     };
-                    ESP_ERROR_CHECK(rmt_receive(m_rx_channel, m_rx_buffer, RX_BUFFER_SIZE * sizeof(rmt_symbol_word_t), &rx_config));
+                    rmt_receive(m_rx_channel, m_rx_buffer, RX_BUFFER_SIZE * sizeof(rmt_symbol_word_t), &rx_config);
                 }
             }
 
-            TickType_t delay_ticks = pdMS_TO_TICKS(1);
-            vTaskDelay(delay_ticks > 0 ? delay_ticks : 1);
-
-            bool is_tx_active;
+            bool is_tx_active = false;
             {
                 std::lock_guard<std::mutex> lock(m_state_mutex);
                 is_tx_active = m_tx_state.active;
-            }
-
-            if (is_tx_active) {
-                if ((esp_timer_get_time() - m_tx_state.start_ts) > Constants::TX_WATCHDOG_TIMEOUT_US ) {
-                    DaliMessage err_msg;
-                    err_msg.type = DaliEventType::CollisionDetected;
-                    err_msg.timestamp = esp_timer_get_time();
-                    if (m_event_cb) m_event_cb(err_msg, m_event_cb_ctx);
-
-                    std::lock_guard<std::mutex> lock(m_state_mutex);
+                if (is_tx_active && (esp_timer_get_time() - m_tx_state.start_ts > Constants::TX_WATCHDOG_TIMEOUT_US)) {
                     m_tx_state.active = false;
                     is_tx_active = false;
-                    ESP_LOGD(TAG, "TX Timeout (No Echo)");
+
+                    DaliMessage err_msg;
+                    err_msg.type = DaliEventType::CollisionDetected;
+                    if (m_event_cb) m_event_cb(err_msg, m_event_cb_ctx);
+                    ESP_LOGD(TAG, "TX Watchdog Timeout (No Echo received)");
                 }
             }
 
             if (!is_tx_active && xQueueReceive(m_tx_queue, &tx_msg, 0) == pdTRUE) {
-                int64_t required_delay_us = last_rx_was_backward ?
-                                           Constants::DELAY_BACKWARD_TO_FORWARD :
-                                           Constants::DELAY_FORWARD_TO_FORWARD;
                 int64_t now_us = esp_timer_get_time();
-                int64_t time_since_last_activity = now_us - m_last_bus_activity_us;
+                int64_t silence_duration = now_us - m_last_bus_activity_us;
 
-                if (time_since_last_activity < required_delay_us) {
-                    int64_t wait_us = required_delay_us - time_since_last_activity;
-                    if (wait_us > 2000) {
-                        vTaskDelay(pdMS_TO_TICKS(wait_us / 1000));
-                    }
-                    while ((esp_timer_get_time() - m_last_bus_activity_us) < required_delay_us) {
-                        esp_rom_delay_us(10);
+                if (silence_duration < Constants::DELAY_FORWARD_TO_FORWARD) {
+                    int64_t wait_us = Constants::DELAY_FORWARD_TO_FORWARD - silence_duration;
+                    if (wait_us > 2000) vTaskDelay(pdMS_TO_TICKS(wait_us / 1000));
+                    while ((esp_timer_get_time() - m_last_bus_activity_us) < Constants::DELAY_FORWARD_TO_FORWARD) {
+                        esp_rom_delay_us(50);
                     }
                 }
 
@@ -215,122 +165,150 @@ namespace daliMQTT::Driver {
                     m_tx_state.start_ts = esp_timer_get_time();
                 }
 
-                size_t symbols = encodeFrame(tx_msg.data, tx_msg.length);
-                rmt_transmit_config_t tx_conf = { .loop_count = 0, .flags = { .eot_level = Constants::RMT_LEVEL_IDLE } };
-                ESP_ERROR_CHECK(rmt_transmit(m_tx_channel, m_dali_encoder, m_tx_static_buffer, symbols * sizeof(rmt_symbol_word_t), &tx_conf));
+                size_t symbols_count = encodeFrame(tx_msg.data, tx_msg.length);
+                rmt_transmit_config_t tx_conf = { .loop_count = 0 };
+                ESP_ERROR_CHECK(rmt_transmit(m_tx_channel, m_dali_encoder, m_tx_static_buffer, symbols_count * sizeof(rmt_symbol_word_t), &tx_conf));
             }
         }
     }
 
     size_t DaliDriver::encodeFrame(const uint32_t data, const uint8_t bits) {
-        size_t count = 0;
-        m_tx_static_buffer[count++] = make_symbol(Constants::T_TE, Constants::RMT_LEVEL_ACTIVE, Constants::T_TE, Constants::RMT_LEVEL_IDLE);
+        std::vector<uint8_t> half_bits;
+
+        half_bits.push_back(Constants::RMT_LEVEL_ACTIVE);
+        half_bits.push_back(Constants::RMT_LEVEL_IDLE);
 
         for (int i = bits - 1; i >= 0; --i) {
-            const bool bit = (data >> i) & 1;
-            if (bit) {
-                // 1 active 1 TE > idle 1 TE
-                m_tx_static_buffer[count++] = make_symbol(Constants::T_TE, Constants::RMT_LEVEL_ACTIVE, Constants::T_TE, Constants::RMT_LEVEL_IDLE);
+            if ((data >> i) & 1) {
+                half_bits.push_back(Constants::RMT_LEVEL_ACTIVE);
+                half_bits.push_back(Constants::RMT_LEVEL_IDLE);
             } else {
-                // 0 idle 1 TE > active 1 TE
-                m_tx_static_buffer[count++] = make_symbol(Constants::T_TE, Constants::RMT_LEVEL_IDLE, Constants::T_TE, Constants::RMT_LEVEL_ACTIVE);
+                half_bits.push_back(Constants::RMT_LEVEL_IDLE);
+                half_bits.push_back(Constants::RMT_LEVEL_ACTIVE);
             }
         }
 
-        // Stop Bit
-        m_tx_static_buffer[count++] = make_symbol(Constants::T_TE * 4, Constants::RMT_LEVEL_IDLE, 0, Constants::RMT_LEVEL_IDLE);
+        half_bits.push_back(Constants::RMT_LEVEL_IDLE);
+        half_bits.push_back(Constants::RMT_LEVEL_IDLE);
+        half_bits.push_back(Constants::RMT_LEVEL_IDLE);
+        half_bits.push_back(Constants::RMT_LEVEL_IDLE);
+
+        size_t count = 0;
+        uint8_t current_lvl = half_bits[0];
+        uint32_t current_dur = Constants::T_TE;
+
+        bool is_first_part = true;
+        uint32_t dur0 = 0, dur1 = 0;
+        uint8_t lvl0 = 0, lvl1 = 0;
+
+        for (size_t i = 1; i < half_bits.size(); i++) {
+            if (half_bits[i] == current_lvl) {
+                current_dur += Constants::T_TE;
+            } else {
+                if (is_first_part) {
+                    dur0 = current_dur; lvl0 = current_lvl;
+                    is_first_part = false;
+                } else {
+                    dur1 = current_dur; lvl1 = current_lvl;
+                    m_tx_static_buffer[count++] = make_symbol(dur0, lvl0, dur1, lvl1);
+                    is_first_part = true;
+                }
+                current_lvl = half_bits[i];
+                current_dur = Constants::T_TE;
+            }
+        }
+
+        if (is_first_part) {
+            m_tx_static_buffer[count++] = make_symbol(current_dur, current_lvl, 0, 0);
+        } else {
+            m_tx_static_buffer[count++] = make_symbol(dur0, lvl0, current_dur, current_lvl);
+        }
+
         return count;
     }
 
-   size_t DaliDriver::processRxSymbols(const rmt_symbol_word_t* symbols, size_t count) {
+    size_t DaliDriver::processRxSymbols(const rmt_symbol_word_t* symbols, size_t count) {
         if (!symbols || count == 0) return 0;
-        int te_count = 0;
+
+        auto report_collision = [&]() -> size_t {
+            std::lock_guard<std::mutex> lock(m_state_mutex);
+            if (m_tx_state.active) {
+                m_tx_state.active = false;
+                DaliMessage err_msg;
+                err_msg.type = DaliEventType::CollisionDetected;
+                if (m_event_cb) m_event_cb(err_msg, m_event_cb_ctx);
+            }
+            return 0;
+        };
+
+        m_last_bus_activity_us = esp_timer_get_time() - (Constants::RX_IDLE_THRESH_NS / 1000);
+
+        std::vector<uint8_t> half_bits;
+        half_bits.reserve(count * 4);
 
         for(size_t i = 0; i < count; ++i) {
-            if (symbols[i].duration0 == 0 && symbols[i].duration1 == 0) break;
-
-            const int num_te0 = (symbols[i].duration0 + Constants::T_TE / 2) / Constants::T_TE;
-            for(int j = 0; j < num_te0 && te_count < sizeof(m_te_buffer); ++j) m_te_buffer[te_count++] = symbols[i].level0;
-
-            const int num_te1 = (symbols[i].duration1 + Constants::T_TE / 2) / Constants::T_TE;
-            for(int j = 0; j < num_te1 && te_count < sizeof(m_te_buffer); ++j) m_te_buffer[te_count++] = symbols[i].level1;
+            if (symbols[i].duration0 > 0) {
+                int te = std::round(static_cast<float>(symbols[i].duration0) / Constants::T_TE);
+                te = std::clamp(te, 1, 4); // Игнорируем шумы > 4TE
+                for(int j=0; j<te; j++) half_bits.push_back(symbols[i].level0);
+            }
+            if (symbols[i].duration1 > 0) {
+                int te = std::round(static_cast<float>(symbols[i].duration1) / Constants::T_TE);
+                te = std::clamp(te, 1, 4);
+                for(int j=0; j<te; j++) half_bits.push_back(symbols[i].level1);
+            }
         }
 
-        int idx = 0;
-        size_t total_bits_decoded = 0;
+        size_t idx = 0;
+        while(idx < half_bits.size() && half_bits[idx] == Constants::RMT_LEVEL_IDLE) {
+            idx++;
+        }
 
-        while (idx < te_count) {
-            while(idx < te_count && m_te_buffer[idx] == Constants::RMT_LEVEL_IDLE) {
-                idx++;
-            }
+        if (idx + 1 >= half_bits.size() || half_bits[idx] != Constants::RMT_LEVEL_ACTIVE || half_bits[idx+1] != Constants::RMT_LEVEL_IDLE) {
+            return report_collision();
+        }
+        idx += 2;
 
-            if (idx >= te_count - 2) break;
+        uint32_t rx_data = 0;
+        int bits_decoded = 0;
 
-            uint32_t rx_data = 0;
-            int bits_decoded = 0;
-
-            if (m_te_buffer[idx] == Constants::RMT_LEVEL_ACTIVE && m_te_buffer[idx+1] == Constants::RMT_LEVEL_IDLE) {
+        while (idx + 1 < half_bits.size()) {
+            if (half_bits[idx] == Constants::RMT_LEVEL_ACTIVE && half_bits[idx+1] == Constants::RMT_LEVEL_IDLE) {
+                rx_data = (rx_data << 1) | 1;
+                bits_decoded++;
+                idx += 2;
+            } else if (half_bits[idx] == Constants::RMT_LEVEL_IDLE && half_bits[idx+1] == Constants::RMT_LEVEL_ACTIVE) {
+                rx_data = (rx_data << 1) | 0;
+                bits_decoded++;
                 idx += 2;
             } else {
-                idx++;
-                continue;
+                break;
             }
-
-            while (idx < te_count - 1) {
-                const uint8_t half1 = m_te_buffer[idx];
-                const uint8_t half2 = m_te_buffer[idx+1];
-
-                if (half1 == Constants::RMT_LEVEL_ACTIVE && half2 == Constants::RMT_LEVEL_IDLE) {
-                    rx_data = (rx_data << 1) | 1;
-                    bits_decoded++;
-                    idx += 2;
-                } else if (half1 == Constants::RMT_LEVEL_IDLE && half2 == Constants::RMT_LEVEL_ACTIVE) {
-                    rx_data = (rx_data << 1) | 0;
-                    bits_decoded++;
-                    idx += 2;
-                } else {
-                    break;
-                }
-
-                if (bits_decoded == 24) break;
-            }
-
-            if (bits_decoded >= 8) {
-                DaliMessage msg;
-                msg.data = rx_data;
-                msg.length = bits_decoded;
-                msg.timestamp = esp_timer_get_time();
-                msg.is_backward = (bits_decoded <= 8);
-
-                std::lock_guard<std::mutex> lock(m_state_mutex);
-
-                if (m_tx_state.active && bits_decoded == m_tx_state.bits) {
-                    if (m_tx_state.data == rx_data) {
-                        msg.type = DaliEventType::TxCompleted;
-                        m_tx_state.active = false;
-                    } else {
-                        msg.type = DaliEventType::CollisionDetected;
-                        m_tx_state.active = false;
-                    }
-                } else {
-                    msg.type = DaliEventType::FrameReceived;
-                }
-
-                if (m_event_cb) m_event_cb(msg, m_event_cb_ctx);
-                total_bits_decoded += bits_decoded;
-            } else
-            {
-                std::lock_guard<std::mutex> lock(m_state_mutex);
-                if (m_tx_state.active) {
-                    DaliMessage err_msg;
-                    err_msg.type = DaliEventType::CollisionDetected;
-                    m_tx_state.active = false;
-                    if (m_event_cb) m_event_cb(err_msg, m_event_cb_ctx);
-                }
-            }
-            while (idx < te_count && m_te_buffer[idx] == Constants::RMT_LEVEL_ACTIVE) idx++;
         }
-        return total_bits_decoded;
-    }
 
-} // namespace daliMQTT::Driver
+        if (bits_decoded == 8 || bits_decoded == 16 || bits_decoded == 24) {
+            DaliMessage msg;
+            msg.data = rx_data;
+            msg.length = bits_decoded;
+            msg.timestamp = esp_timer_get_time();
+            msg.is_backward = (bits_decoded <= 8);
+
+            std::lock_guard<std::mutex> lock(m_state_mutex);
+            if (m_tx_state.active) {
+                if (m_tx_state.bits == bits_decoded && m_tx_state.data == rx_data) {
+                    msg.type = DaliEventType::TxCompleted;
+                } else {
+                    msg.type = DaliEventType::CollisionDetected;
+                    ESP_LOGW(TAG, "Collision: TX 0x%04lX, RX 0x%04lX", m_tx_state.data, rx_data);
+                }
+                m_tx_state.active = false;
+            } else {
+                msg.type = DaliEventType::FrameReceived;
+            }
+
+            if (m_event_cb) m_event_cb(msg, m_event_cb_ctx);
+            return bits_decoded;
+        }
+
+        return report_collision();
+    }} // namespace daliMQTT::Driver

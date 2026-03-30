@@ -104,7 +104,7 @@ namespace daliMQTT
 
         uint8_t initializeBus(bool provision_all = true);
 
-        uint8_t initialize24BitDevicesBus();
+        uint8_t initialize24BitDevicesBus() const;
 
         /**
          * @brief Adds a device to a group.
@@ -125,7 +125,7 @@ namespace daliMQTT
          */
         [[nodiscard]] std::optional<std::bitset<16>> getDeviceGroups(uint8_t shortAddress);
 
-        [[nodiscard]] std::optional<uint8_t> getDT8Features(uint8_t shortAddress);
+        [[nodiscard]] std::optional<uint8_t> getDT8Features(uint8_t shortAddress) const;
 
         [[nodiscard]] std::optional<uint8_t> getDeviceType(const uint8_t shortAddress) {
             return sendQuery(DaliAddressType::Short, shortAddress, Commands::OpCode::QueryDeviceType);

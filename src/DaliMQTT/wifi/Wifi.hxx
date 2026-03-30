@@ -46,7 +46,7 @@ namespace daliMQTT
         static void wifiEventHandler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data);
         void startMdns();
 
-        uint8_t s_retry_count;
+        uint8_t s_retry_count{};
         std::atomic<Status> status{Status::DISCONNECTED};
         bool initialized{false};
         bool mdns_started{false};
