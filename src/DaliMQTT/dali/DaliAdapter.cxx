@@ -386,7 +386,7 @@ namespace daliMQTT {
         return devices_found;
     }
 
-    std::optional<DaliLongAddress_t> DaliAdapter::getLongAddress(const uint8_t shortAddress) {
+    std::optional<DaliLongAddress_t> DaliAdapter::getLongAddress(const uint8_t shortAddress) const {
         AdapterLock lock(this);
         const auto h = sendQuery(DaliAddressType::Short, shortAddress, OpCode::QueryRandomAddrH);
         if (!h) return std::nullopt;
@@ -398,7 +398,7 @@ namespace daliMQTT {
         return (static_cast<uint32_t>(*h) << 16) | (static_cast<uint32_t>(*m) << 8) | (*l);
     }
 
-    std::optional<std::bitset<16> > DaliAdapter::getDeviceGroups(const uint8_t shortAddress) {
+    std::optional<std::bitset<16> > DaliAdapter::getDeviceGroups(const uint8_t shortAddress) const {
         AdapterLock lock(this);
         const auto g0_7 = sendQuery(DaliAddressType::Short, shortAddress, OpCode::QueryGroups0_7);
         const auto g8_15 = sendQuery(DaliAddressType::Short, shortAddress, OpCode::QueryGroups8_15);
@@ -427,7 +427,7 @@ namespace daliMQTT {
     }
 
     std::optional<uint8_t> DaliAdapter::readMemoryLocation(const uint8_t shortAddress, const uint8_t bank,
-                                                           const uint8_t offset) {
+                                                           const uint8_t offset) const {
         AdapterLock lock(this);
         setDtr1(bank);
         setDtr0(offset);
@@ -440,14 +440,14 @@ namespace daliMQTT {
         return sendQuery(DaliAddressType::Short, shortAddress, DT8OpCode::QueryColourType);
     }
 
-    std::optional<uint8_t> DaliAdapter::queryDT8Value(const uint8_t shortAddress, const uint8_t dtr0_selector) {
+    std::optional<uint8_t> DaliAdapter::queryDT8Value(const uint8_t shortAddress, const uint8_t dtr0_selector) const {
         AdapterLock lock(this);
         setDtr0(dtr0_selector);
         sendRaw(Factory::Special(SpecialOpCode::EnableDeviceTypeX, 8).data, 16);
         return sendQuery(DaliAddressType::Short, shortAddress, DT8OpCode::QueryColourValue);
     }
 
-    std::optional<uint16_t> DaliAdapter::getDT8ColorTemp(const uint8_t shortAddress) {
+    std::optional<uint16_t> DaliAdapter::getDT8ColorTemp(const uint8_t shortAddress) const {
         AdapterLock lock(this);
         setDtr0(2);
 
@@ -460,7 +460,7 @@ namespace daliMQTT {
         return (static_cast<uint16_t>(*msb) << 8) | *lsb;
     }
 
-    std::optional<DaliRGB> DaliAdapter::getDT8RGB(const uint8_t shortAddress) {
+    std::optional<DaliRGB> DaliAdapter::getDT8RGB(const uint8_t shortAddress) const {
         AdapterLock lock(this);
         const auto r = queryDT8Value(shortAddress, 9);
         const auto g = queryDT8Value(shortAddress, 10);

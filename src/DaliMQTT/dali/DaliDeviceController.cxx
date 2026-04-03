@@ -283,9 +283,121 @@ namespace daliMQTT
         }
     }
 
+    void DaliDeviceController::handleDeferredNvsSave(const int64_t now) {
+        constexpr int64_t NVS_SAVE_DEBOUNCE_MS = 180000;
+        if (!m_nvs_dirty || (now - m_last_nvs_change_ts) <= NVS_SAVE_DEBOUNCE_MS) return;
+
+        std::vector<DaliDevice> copy_devs;
+        {
+            std::lock_guard<std::mutex> lock(m_devices_mutex);
+            copy_devs = std::vector<DaliDevice>(m_devices.begin(), m_devices.end());
+            m_nvs_dirty = false;
+        }
+        DaliAddressMap::save(copy_devs);
+    }
+
+    std::optional<DaliInternalAddr> DaliDeviceController::popPriorityRequest(const int64_t now) {
+        std::lock_guard<std::mutex> lock(m_queue_mutex);
+
+        if (!m_deferred_requests.empty()) {
+            auto it = m_deferred_requests.begin();
+            while (it != m_deferred_requests.end()) {
+                if (now >= it->execute_at_ts) {
+                    if (!m_priority_set.contains(it->internal_address) && !m_priority_queue.full()) {
+                        m_priority_queue.push(it->internal_address);
+                        m_priority_set.insert(it->internal_address);
+                    }
+                    it = m_deferred_requests.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+        }
+
+        if (!m_priority_queue.empty()) {
+            DaliInternalAddr addr = m_priority_queue.front();
+            m_priority_queue.pop();
+            m_priority_set.erase(addr);
+            return addr;
+        }
+
+        return std::nullopt;
+    }
+
+    std::optional<DaliInternalAddr> DaliDeviceController::getNextRoundRobinTarget(bool& do_group_sync) {
+        std::lock_guard<std::mutex> lock(m_devices_mutex);
+        do_group_sync = false;
+        const size_t dev_count = m_devices.size();
+
+        if (dev_count == 0) return std::nullopt;
+
+        if (m_round_robin_index >= dev_count) {
+            m_round_robin_index = 0;
+            do_group_sync = true;
+        }
+
+        if (m_round_robin_index < dev_count) {
+            const auto& dev = m_devices[m_round_robin_index++];
+            return getIdentity(dev).internal_address;
+        }
+
+        return std::nullopt;
+    }
+
+    void DaliDeviceController::performGroupSync() {
+        auto all_assignments = DaliGroupManagement::Instance().getAllAssignments();
+        std::vector<DaliDevice> devices_snapshot;
+        {
+            std::lock_guard<std::mutex> lock(m_devices_mutex);
+            devices_snapshot = std::vector<DaliDevice>(m_devices.begin(), m_devices.end());
+        }
+
+        std::array<std::array<std::optional<DaliPublishState>, 16>, Constants::MaxBuses> group_sync_states;
+
+        for (const auto& [long_addr, groups] : all_assignments) {
+            for (const auto& dev : devices_snapshot) {
+                if (getIdentity(dev).long_address != long_addr) continue;
+
+                const auto* gear = etl::get_if<ControlGear>(&dev);
+                if (!gear || !gear->available) break;
+
+                const uint8_t bus_id = gear->internal_address.bus();
+
+                for (uint8_t group = 0; group < 16; ++group) {
+                    if (!groups.test(group)) continue;
+
+                    auto& g_state = group_sync_states[bus_id][group];
+                    if (!g_state.has_value()) {
+                        g_state = DaliPublishState{ .level = 0 };
+                    }
+
+                    if (gear->current_level > g_state->level.value_or(0)) {
+                        g_state->level = gear->current_level;
+                    }
+                    if (gear->color.has_value()) {
+                        if (gear->color->supports_rgb && gear->color->current_rgb.has_value()) {
+                            g_state->rgb = gear->color->current_rgb;
+                        }
+                        if (gear->color->supports_tc && gear->color->current_tc.has_value()) {
+                            g_state->color_temp = gear->color->current_tc;
+                        }
+                    }
+                }
+                break;
+            }
+        }
+
+        for (uint8_t b = 0; b < Constants::MaxBuses; ++b) {
+            for (uint8_t g = 0; g < 16; ++g) {
+                if (group_sync_states[b][g].has_value()) {
+                    DaliGroupManagement::Instance().updateGroupState(b, g, group_sync_states[b][g].value());
+                }
+            }
+        }
+    }
+
     [[noreturn]] void DaliDeviceController::daliSyncTask(void* pvParameters) {
         auto* self = static_cast<DaliDeviceController*>(pvParameters);
-        constexpr int64_t NVS_SAVE_DEBOUNCE_MS = 180000;
         self->requestBroadcastSync(200, 150);
 
         ESP_LOGI(TAG, "Dali Adaptive Sync Task Started.");
@@ -296,134 +408,30 @@ namespace daliMQTT
         constexpr TickType_t priority_delay_ticks = pdMS_TO_TICKS(10);
 
         while (true) {
-            DaliInternalAddr priority_addr;
-            bool has_priority = false;
             int64_t now = esp_timer_get_time() / 1000;
+            self->handleDeferredNvsSave(now);
 
-            if (self->m_nvs_dirty) {
-                if ((now - self->m_last_nvs_change_ts) > NVS_SAVE_DEBOUNCE_MS) {
-                    std::vector<DaliDevice> copy_devs;
-                    {
-                        std::lock_guard<std::mutex> lock(self->m_devices_mutex);
-                        copy_devs = std::vector<DaliDevice>(self->m_devices.begin(), self->m_devices.end());
-                        self->m_nvs_dirty = false;
-                    }
-                    DaliAddressMap::save(copy_devs);
+            if (auto priority_addr = self->popPriorityRequest(now)) {
+                if (priority_addr->value != 0xFFFF) {
+                    self->pollSingleDevice(*priority_addr);
                 }
-            }
-
-            // Check Deferred Requests
-            {
-                std::lock_guard<std::mutex> lock(self->m_queue_mutex);
-
-                if (!self->m_deferred_requests.empty()) {
-                    auto it = self->m_deferred_requests.begin();
-                    while (it != self->m_deferred_requests.end()) {
-                        if (now >= it->execute_at_ts) {
-                            if (!self->m_priority_set.contains(it->internal_address)) {
-                                if (!self->m_priority_queue.full()) {
-                                    self->m_priority_queue.push(it->internal_address);
-                                    self->m_priority_set.insert(it->internal_address);
-                                }
-                            }
-                            it = self->m_deferred_requests.erase(it);
-                        } else {
-                            ++it;
-                        }
-                    }
-                }
-
-                // Check Priority Queue
-                if (!self->m_priority_queue.empty()) {
-                    priority_addr = self->m_priority_queue.front();
-                    self->m_priority_queue.pop();
-                    self->m_priority_set.erase(priority_addr);
-                    has_priority = true;
-                }
-            }
-
-            if (has_priority && priority_addr.value != 0xFFFF) {
-                self->pollSingleDevice(DaliInternalAddr(priority_addr));
                 vTaskDelay(priority_delay_ticks);
-            } else {
-                // Round Robin Logic
-                DaliInternalAddr target_internal_addr;
-                bool do_group_sync = false;
-                {
-                    std::lock_guard<std::mutex> lock(self->m_devices_mutex);
-                    size_t dev_count = self->m_devices.size();
-
-                    if (dev_count > 0) {
-                        if (self->m_round_robin_index >= dev_count) {
-                            self->m_round_robin_index = 0;
-                            do_group_sync = true;
-                        }
-
-                        if (self->m_round_robin_index < dev_count) {
-                            const auto& dev = self->m_devices[self->m_round_robin_index];
-                            target_internal_addr = getIdentity(dev).internal_address;
-                            self->m_round_robin_index++;
-                        }
-                    }
-                }
-
-                if (do_group_sync) {
-                    auto all_assignments = DaliGroupManagement::Instance().getAllAssignments();
-                    std::vector<DaliDevice> devices_snapshot;
-                    {
-                        std::lock_guard<std::mutex> lock(self->m_devices_mutex);
-                        devices_snapshot = std::vector<DaliDevice>(self->m_devices.begin(), self->m_devices.end());
-                    }
-                    std::array<std::array<std::optional<DaliPublishState>, 16>, Constants::MaxBuses> group_sync_states;
-
-                    for (const auto& [long_addr, groups] : all_assignments) {
-                        for (const auto& dev : devices_snapshot) {
-                            if (getIdentity(dev).long_address == long_addr) {
-                                if (const auto* gear = etl::get_if<ControlGear>(&dev)) {
-                                    if (!gear->available) break;
-                                    uint8_t bus_id = gear->internal_address.bus();
-
-                                    for (uint8_t group = 0; group < 16; ++group) {
-                                        if (groups.test(group)) {
-                                            if (!group_sync_states[bus_id][group].has_value()) {
-                                                group_sync_states[bus_id][group] = DaliPublishState{ .level = 0 };
-                                            }
-                                            auto& g_state = group_sync_states[bus_id][group].value();
-
-                                            if (gear->current_level > g_state.level.value_or(0)) {
-                                                g_state.level = gear->current_level;
-                                            }
-                                            if (gear->color.has_value()) {
-                                                if (gear->color->supports_rgb && gear->color->current_rgb.has_value()) {
-                                                    g_state.rgb = gear->color->current_rgb;
-                                                }
-                                                if (gear->color->supports_tc && gear->color->current_tc.has_value()) {
-                                                    g_state.color_temp = gear->color->current_tc;
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                                break;
-                            }
-                        }
-                    }
-
-                    for (uint8_t b = 0; b < Constants::MaxBuses; ++b) {
-                        for (uint8_t g = 0; g < 16; ++g) {
-                            if (group_sync_states[b][g].has_value()) {
-                                DaliGroupManagement::Instance().updateGroupState(b, g, group_sync_states[b][g].value());
-                            }
-                        }
-                    }
-                } else if (target_internal_addr.value != 0xFFFF) {
-                    auto* adapter = self->getAdapter(target_internal_addr.bus());
-                    if (adapter && adapter->isInitialized()) {
-                        self->pollSingleDevice(target_internal_addr);
-                    }
-                }
-                vTaskDelay(rr_delay_ticks);
+                continue;
             }
+
+            bool do_group_sync = false;
+            auto target_internal_addr = self->getNextRoundRobinTarget(do_group_sync);
+
+            if (do_group_sync) {
+                self->performGroupSync();
+            } else if (target_internal_addr && target_internal_addr->value != 0xFFFF) {
+                auto* adapter = self->getAdapter(target_internal_addr->bus());
+                if (adapter && adapter->isInitialized()) {
+                    self->pollSingleDevice(*target_internal_addr);
+                }
+            }
+
+            vTaskDelay(rr_delay_ticks);
         }
     }
 

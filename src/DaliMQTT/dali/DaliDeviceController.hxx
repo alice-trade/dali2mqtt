@@ -103,10 +103,15 @@ namespace daliMQTT
         void initialStaticDataFetch(DaliInternalAddr internalAddr, DaliLongAddress_t longAddr);
         void procUpdateDeviceState(DaliLongAddress_t longAddr, const DaliPublishState& state);
 
+        void handleDeferredNvsSave(int64_t now);
+        std::optional<DaliInternalAddr> popPriorityRequest(int64_t now);
+        std::optional<DaliInternalAddr> getNextRoundRobinTarget(bool& do_group_sync);
+        void performGroupSync();
+
         [[noreturn]] static void daliEventHandlerTask(void* pvParameters);
         [[noreturn]] static void daliSyncTask(void* pvParameters);
 
-        void publishState(const DaliLongAddress_t long_addr, const ControlGear& device) const;
+        void publishState(DaliLongAddress_t long_addr, const ControlGear& device) const;
         static void publishAvailability(DaliLongAddress_t long_addr, bool is_available);
         [[nodiscard]] std::optional<DaliLongAddress_t> getInputDeviceLongAddress(DaliInternalAddr internalAddress) const;
 

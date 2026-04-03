@@ -123,7 +123,7 @@ namespace daliMQTT
         /**
          * @brief Gets the group mask for a device.
          */
-        [[nodiscard]] std::optional<std::bitset<16>> getDeviceGroups(uint8_t shortAddress);
+        [[nodiscard]] std::optional<std::bitset<16>> getDeviceGroups(uint8_t shortAddress) const;
 
         [[nodiscard]] std::optional<uint8_t> getDT8Features(uint8_t shortAddress) const;
 
@@ -140,22 +140,22 @@ namespace daliMQTT
         /**
          * @brief Reads one byte from Memory Bank.
          */
-        [[nodiscard]] std::optional<uint8_t> readMemoryLocation(uint8_t shortAddress, uint8_t bank, uint8_t offset);
+        [[nodiscard]] std::optional<uint8_t> readMemoryLocation(uint8_t shortAddress, uint8_t bank, uint8_t offset) const;
 
         /**
          * @brief Gets current Color Temperature (Tc) from Memory Bank 205.
          */
-        [[nodiscard]] std::optional<uint16_t> getDT8ColorTemp(uint8_t shortAddress);
+        [[nodiscard]] std::optional<uint16_t> getDT8ColorTemp(uint8_t shortAddress) const;
 
         /**
          * @brief Gets current RGB from Memory Bank 205.
          */
-        [[nodiscard]] std::optional<DaliRGB> getDT8RGB(uint8_t shortAddress);
+        [[nodiscard]] std::optional<DaliRGB> getDT8RGB(uint8_t shortAddress) const;
 
         /**
          * @brief Gets the long address of a device by short address.
          */
-        [[nodiscard]] std::optional<DaliLongAddress_t> getLongAddress(uint8_t shortAddress);
+        [[nodiscard]] std::optional<DaliLongAddress_t> getLongAddress(uint8_t shortAddress) const;
 
         /**
          * @brief Sets DT8 Color Temperature (Tc).
@@ -183,16 +183,15 @@ namespace daliMQTT
     private:
         uint8_t m_bus_id{};
 
-        // Internal helper task to process Driver events
         [[noreturn]] static void busWorkerTask(void* arg);
 
         [[nodiscard]] uint32_t findAddressBinarySearch(bool input_devices) const;
 
-        void setDtr0(const uint8_t val) { sendRaw(Commands::Factory::Special(Commands::SpecialOpCode::Dtr0, val).data, 16); }
-        void setDtr1(const uint8_t val) { sendRaw(Commands::Factory::Special(Commands::SpecialOpCode::Dtr1, val).data, 16); }
+        void setDtr0(const uint8_t val) const { sendRaw(Commands::Factory::Special(Commands::SpecialOpCode::Dtr0, val).data, 16); }
+        void setDtr1(const uint8_t val) const { sendRaw(Commands::Factory::Special(Commands::SpecialOpCode::Dtr1, val).data, 16); }
 
         esp_err_t sendDT8Cmd(uint8_t shortAddr, Commands::DT8OpCode cmd);
-        std::optional<uint8_t> queryDT8Value(uint8_t shortAddress, uint8_t dtr0_selector);
+        std::optional<uint8_t> queryDT8Value(uint8_t shortAddress, uint8_t dtr0_selector) const;
 
         Driver::DaliDriver m_driver{};
         QueueHandle_t m_event_queue{nullptr};
