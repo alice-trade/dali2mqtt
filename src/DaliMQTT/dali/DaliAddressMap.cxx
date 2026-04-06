@@ -8,7 +8,7 @@ namespace daliMQTT
 {
     static constexpr char TAG[] = "DaliAddrMapLoader";
 
-    bool DaliAddressMap::load(etl::vector<DaliDevice, Constants::MaxBuses * 64>& devices, std::array<DaliLongAddress_t, Constants::MaxBuses * 256>& int_to_long) {
+    bool DaliAddressMap::load(etl::vector<DaliDevice, FirmwareConfig::BusLimit * 128>& devices, std::array<DaliLongAddress_t, FirmwareConfig::BusLimit * 256>& int_to_long) {
         NvsHandle nvs_handle(NVS_NAMESPACE, NVS_READONLY);
         if (!nvs_handle) {
             ESP_LOGE(TAG, "Failed to open NVS for reading address map.");
@@ -31,7 +31,10 @@ namespace daliMQTT
             return false;
         }
 
-        std::vector<AddressMapping> mappings(required_size / sizeof(AddressMapping));
+        etl::vector<AddressMapping, FirmwareConfig::BusLimit * 64> mappings;
+        size_t count = required_size / sizeof(AddressMapping);
+        if (count > mappings.max_size()) count = mappings.max_size();
+        mappings.resize(count);
         err = nvs_get_blob(nvs_handle.get(), MAP_KEY, mappings.data(), &required_size);
         if (err != ESP_OK) {
             ESP_LOGE(TAG, "Error reading address map blob: %s", esp_err_to_name(err));
@@ -88,12 +91,11 @@ namespace daliMQTT
         return true;
     }
 
-    esp_err_t DaliAddressMap::save(const std::vector<DaliDevice>& devices) {
+    esp_err_t DaliAddressMap::save(const etl::vector<DaliDevice, FirmwareConfig::BusLimit * 128>& devices) {
         NvsHandle nvs_handle(NVS_NAMESPACE, NVS_READWRITE);
         if (!nvs_handle) return ESP_FAIL;
 
-        std::vector<AddressMapping> mappings;
-        mappings.reserve(devices.size());
+        etl::vector<AddressMapping, FirmwareConfig::BusLimit * 64> mappings;
 
         for (const auto& device_var : devices) {
             AddressMapping record{};

@@ -173,7 +173,7 @@ namespace daliMQTT::Driver {
     }
 
     size_t DaliDriver::encodeFrame(const uint32_t data, const uint8_t bits) {
-        std::vector<uint8_t> half_bits;
+        etl::vector<uint8_t, 64> half_bits;
 
         half_bits.push_back(Constants::RMT_LEVEL_ACTIVE);
         half_bits.push_back(Constants::RMT_LEVEL_IDLE);
@@ -243,7 +243,7 @@ namespace daliMQTT::Driver {
 
         m_last_bus_activity_us = esp_timer_get_time() - (Constants::RX_IDLE_THRESH_NS / 1000);
 
-        std::vector<uint8_t> half_bits;
+        etl::vector<uint8_t, 256> half_bits;
         half_bits.reserve(count * 4);
 
         for(size_t i = 0; i < count; ++i) {

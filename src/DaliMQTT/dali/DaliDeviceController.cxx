@@ -40,7 +40,7 @@ namespace daliMQTT
 
     void DaliDeviceController::applyBusConfiguration() {
         auto cfg = ConfigManager::Instance().getConfig();
-        for (uint8_t i = 0; i < Constants::MaxBuses; ++i) {
+        for (uint8_t i = 0; i < FirmwareConfig::BusLimit; ++i) {
             if (cfg->buses[i].enabled) {
                 if (!m_adapters[i]) {
                     m_adapters[i] = std::make_unique<DaliAdapter>(i, m_central_event_queue);
@@ -206,7 +206,7 @@ namespace daliMQTT
             DaliLongAddress_t long_addr;
             DaliInternalAddr internal_addr;
         };
-        std::vector<ValidationItem> devices_to_validate;
+        etl::vector<ValidationItem, FirmwareConfig::BusLimit * 64> devices_to_validate;
 
         {
             std::lock_guard<std::mutex> lock(m_devices_mutex);
@@ -287,10 +287,10 @@ namespace daliMQTT
         constexpr int64_t NVS_SAVE_DEBOUNCE_MS = 180000;
         if (!m_nvs_dirty || (now - m_last_nvs_change_ts) <= NVS_SAVE_DEBOUNCE_MS) return;
 
-        std::vector<DaliDevice> copy_devs;
+        etl::vector<DaliDevice, FirmwareConfig::BusLimit * 128> copy_devs;
         {
             std::lock_guard<std::mutex> lock(m_devices_mutex);
-            copy_devs = std::vector<DaliDevice>(m_devices.begin(), m_devices.end());
+            copy_devs = m_devices;
             m_nvs_dirty = false;
         }
         DaliAddressMap::save(copy_devs);
@@ -344,15 +344,15 @@ namespace daliMQTT
         return std::nullopt;
     }
 
-    void DaliDeviceController::performGroupSync() {
+    void DaliDeviceController::performGroupSync() const {
         auto all_assignments = DaliGroupManagement::Instance().getAllAssignments();
-        std::vector<DaliDevice> devices_snapshot;
+        etl::vector<DaliDevice, FirmwareConfig::BusLimit * 128> devices_snapshot;
         {
             std::lock_guard<std::mutex> lock(m_devices_mutex);
-            devices_snapshot = std::vector<DaliDevice>(m_devices.begin(), m_devices.end());
+            devices_snapshot = m_devices;
         }
 
-        std::array<std::array<std::optional<DaliPublishState>, 16>, Constants::MaxBuses> group_sync_states;
+        std::array<std::array<std::optional<DaliPublishState>, 16>, FirmwareConfig::BusLimit> group_sync_states;
 
         for (const auto& [long_addr, groups] : all_assignments) {
             for (const auto& dev : devices_snapshot) {
@@ -387,7 +387,7 @@ namespace daliMQTT
             }
         }
 
-        for (uint8_t b = 0; b < Constants::MaxBuses; ++b) {
+        for (uint8_t b = 0; b < FirmwareConfig::BusLimit; ++b) {
             for (uint8_t g = 0; g < 16; ++g) {
                 if (group_sync_states[b][g].has_value()) {
                     DaliGroupManagement::Instance().updateGroupState(b, g, group_sync_states[b][g].value());
@@ -770,7 +770,7 @@ namespace daliMQTT
 
     std::bitset<64> DaliDeviceController::performFullInitialization() {
         std::bitset<64> overall_devices;
-        for(uint8_t i=0; i < Constants::MaxBuses; ++i) {
+        for(uint8_t i=0; i < FirmwareConfig::BusLimit; ++i) {
             auto* adapter = getAdapter(i);
             if (adapter && adapter->isInitialized()) {
                 adapter->initializeBus();
@@ -782,7 +782,7 @@ namespace daliMQTT
 
     std::bitset<64> DaliDeviceController::perform24BitDeviceInitialization() {
         std::bitset<64> overall_devices;
-        for(uint8_t i=0; i < Constants::MaxBuses; ++i) {
+        for(uint8_t i=0; i < FirmwareConfig::BusLimit; ++i) {
             auto* adapter = getAdapter(i);
             if (adapter && adapter->isInitialized()) {
                 adapter->initialize24BitDevicesBus();
@@ -802,8 +802,7 @@ namespace daliMQTT
         if(!adapter || !adapter->isInitialized()) return {};
         ESP_LOGI(TAG, "Discovering on Bus %d...", bus_id);
 
-        std::vector<DaliDevice> new_devices;
-        new_devices.reserve(64);
+        etl::vector<DaliDevice, 64> new_devices;
         std::bitset<64> found_devices;
 
         for (uint8_t sa = 0; sa < 64; ++sa) {
@@ -815,7 +814,7 @@ namespace daliMQTT
                     dev.long_address = long_addr;
                     dev.internal_address  = DaliInternalAddr(bus_id, sa);
                     dev.available = true;
-                    new_devices.emplace_back(dev);
+                    new_devices.push_back(dev);
                     m_internal_to_long_map[(bus_id * 256) + sa] = *long_addr_opt;
                     ESP_LOGI(TAG, "Gear found at SA %d (LA: 0x%06lX)", sa, long_addr);
                 }
@@ -829,7 +828,7 @@ namespace daliMQTT
                 dev.long_address = long_addr;
                 dev.internal_address = DaliInternalAddr(bus_id, sa);;
                 dev.available = true;
-                new_devices.emplace_back(dev);
+                new_devices.push_back(dev);
                 m_internal_to_long_map[((bus_id * 256) + sa) | 0x80] = long_addr;
 
                 ESP_LOGI(TAG, "Input Device found at SA (CD) %d (LA: 0x%06lX)", sa, long_addr);
@@ -855,7 +854,7 @@ namespace daliMQTT
             std::lock_guard<std::mutex> lock(m_devices_mutex);
             m_devices.clear();
         }
-        for (uint8_t i = 0; i < Constants::MaxBuses; ++i) {
+        for (uint8_t i = 0; i < FirmwareConfig::BusLimit; ++i) {
             if (m_adapters[i] && m_adapters[i]->isInitialized()) {
                 discoverAndMapDevices(i);
             }
@@ -887,9 +886,9 @@ namespace daliMQTT
                (*l_opt);
     }
 
-    std::vector<DaliDevice> DaliDeviceController::getDevices() const {
+    etl::vector<DaliDevice, FirmwareConfig::BusLimit * 128> DaliDeviceController::getDevices() const {
         std::lock_guard<std::mutex> lock(m_devices_mutex);
-        return std::vector<DaliDevice>(m_devices.begin(), m_devices.end());
+        return m_devices;
     }
 
     std::optional<DaliInternalAddr> DaliDeviceController::getInternalAddress(const DaliLongAddress_t longAddress) const {

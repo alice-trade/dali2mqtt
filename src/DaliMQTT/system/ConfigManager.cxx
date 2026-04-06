@@ -89,7 +89,7 @@ namespace daliMQTT
         }
         #endif
 
-        for (uint8_t i = 0; i < Constants::MaxBuses; ++i) {
+        for (uint8_t i = 0; i < FirmwareConfig::BusLimit; ++i) {
             uint8_t en = 0;
             int32_t rx = -1, tx = -1;
 
@@ -161,7 +161,7 @@ namespace daliMQTT
         SetNVS(setString, "ota_url",     cfg.app_ota_url);
         SetNVS(nvs_set_u32, "dali_poll", cfg.dali_poll_interval_ms);
         SetNVS(nvs_set_u8, "hass_disc",  cfg.hass_discovery_enabled ? 1 : 0);
-        for (uint8_t i = 0; i < Constants::MaxBuses; ++i) {
+        for (uint8_t i = 0; i < FirmwareConfig::BusLimit; ++i) {
             SetNVS(nvs_set_u8, utils::stringFormat("b%d_en", i).c_str(), cfg.buses[i].enabled ? 1 : 0);
             SetNVS(nvs_set_i32, utils::stringFormat("b%d_rx", i).c_str(), cfg.buses[i].rx_pin);
             SetNVS(nvs_set_i32, utils::stringFormat("b%d_tx", i).c_str(), cfg.buses[i].tx_pin);
@@ -416,7 +416,7 @@ namespace daliMQTT
 
         if (doc["buses"].is<JsonArray>()) {
             auto arr = doc["buses"].as<JsonArray>();
-            for (uint8_t i = 0; i < Constants::MaxBuses && i < arr.size(); ++i) {
+            for (uint8_t i = 0; i < FirmwareConfig::BusLimit && i < arr.size(); ++i) {
                 auto bus = arr[i].as<JsonObject>();
                 if (bus["enabled"].is<bool>() && new_cfg.buses[i].enabled != bus["enabled"].as<bool>()) {
                     new_cfg.buses[i].enabled = bus["enabled"].as<bool>(); changed = true;

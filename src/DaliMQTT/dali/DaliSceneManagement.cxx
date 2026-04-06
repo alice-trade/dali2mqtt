@@ -9,11 +9,7 @@ namespace daliMQTT
 {
     static constexpr char TAG[] = "DaliSceneManagement";
 
-    void DaliSceneManagement::init() {
-        ESP_LOGI(TAG, "DALI Scene Manager initialized.");
-    }
-
-    esp_err_t DaliSceneManagement::activateScene(uint8_t bus_id, const uint8_t sceneId) const
+    esp_err_t DaliSceneManagement::activateScene(uint8_t bus_id, const uint8_t sceneId)
     {
         if (sceneId >= 16) return ESP_ERR_INVALID_ARG;
         ESP_LOGI(TAG, "Activating DALI Scene %d on bus %d", sceneId, bus_id);
@@ -26,7 +22,7 @@ namespace daliMQTT
             );
     }
 
-    esp_err_t DaliSceneManagement::saveScene(uint8_t bus_id, uint8_t sceneId, const SceneDeviceLevels& levels) const {
+    esp_err_t DaliSceneManagement::saveScene(uint8_t bus_id, uint8_t sceneId, const SceneDeviceLevels& levels) {
         if (sceneId >= 16) return ESP_ERR_INVALID_ARG;
         ESP_LOGI(TAG, "Saving configuration for DALI Scene %d on bus %d", sceneId, bus_id);
 
@@ -47,7 +43,7 @@ namespace daliMQTT
         return ESP_OK;
     }
 
-    SceneDeviceLevels DaliSceneManagement::getSceneLevels(uint8_t bus_id, uint8_t sceneId) const {
+    SceneDeviceLevels DaliSceneManagement::getSceneLevels(uint8_t bus_id, uint8_t sceneId) {
         SceneDeviceLevels results;
         results.fill(255);
         if (sceneId >= 16) return results;

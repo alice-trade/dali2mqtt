@@ -52,7 +52,7 @@ namespace daliMQTT
             publishLight(getIdentity(dev).long_address);
         }
 
-        for (uint8_t b = 0; b < Constants::MaxBuses; ++b) {
+        for (uint8_t b = 0; b < FirmwareConfig::BusLimit; ++b) {
             auto* adapter = DaliDeviceController::Instance().getAdapter(b);
             if (adapter && adapter->isInitialized()) {
                 for (uint8_t i = 0; i < 16; ++i) {

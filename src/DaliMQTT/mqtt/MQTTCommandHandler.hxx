@@ -19,7 +19,7 @@ namespace daliMQTT {
         static void handle(const std::string& topic, const std::string& data);
     private:
         /** MQTT command handlers */
-        static void handleLightCommand(const std::vector<std::string_view>& parts, const std::string& data);
+        static void handleLightCommand(const etl::vector<std::string_view, 16>& parts, const std::string& data);
         static void handleGroupCommand(const std::string& data);
         static void handleSceneCommand(uint8_t bus_id, const std::string& data);
         static void processSendDALICommand(const std::string& data);

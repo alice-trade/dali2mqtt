@@ -78,7 +78,7 @@ namespace daliMQTT {
         }
     }
 
-    void MQTTCommandHandler::handleLightCommand(const std::vector<std::string_view> &parts, const std::string &data) {
+    void MQTTCommandHandler::handleLightCommand(const etl::vector<std::string_view, 16> &parts, const std::string &data) {
         if (parts[0] != "light" || parts.back() != "set") return;
 
         DaliAddressType addr_type = DaliAddressType::Short;
@@ -180,7 +180,7 @@ namespace daliMQTT {
         };
 
         if (addr_type == DaliAddressType::Broadcast) {
-            for (uint8_t i = 0; i < Constants::MaxBuses; ++i) executeCommand(DaliDeviceController::Instance().getAdapter(i), 0);
+            for (uint8_t i = 0; i < FirmwareConfig::BusLimit; ++i) executeCommand(DaliDeviceController::Instance().getAdapter(i), 0);
         } else {
             executeCommand(controller.getAdapter(target_bus), target_id);
         }
@@ -224,7 +224,7 @@ namespace daliMQTT {
         if (scene_str.starts_with("Scene ")) {
             scene_str.erase(0, 6);
             int scene_id = std::stoi(scene_str);
-            DaliSceneManagement::Instance().activateScene(bus_id, scene_id);
+            DaliSceneManagement::activateScene(bus_id, scene_id);
             return;
         }
 
@@ -235,7 +235,7 @@ namespace daliMQTT {
         }
 
         uint8_t scene_id = doc["scene"].as<int>();
-        DaliSceneManagement::Instance().activateScene(bus_id, scene_id);
+        DaliSceneManagement::activateScene(bus_id, scene_id);
     }
 
     void MQTTCommandHandler::processSendDALICommand(const std::string &data) {
@@ -435,7 +435,7 @@ namespace daliMQTT {
         if (parts.empty()) return;
 
         if (parts[0] == "light") {
-            handleLightCommand({parts.begin(), parts.end()}, data);
+            handleLightCommand(parts, data);
         } else if (parts[0] == "config") {
             if (parts.size() == 2) {
                 if (parts[1] == "get") handleConfigGet();

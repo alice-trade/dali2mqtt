@@ -29,10 +29,10 @@ namespace daliMQTT {
     class DaliAddressMap {
         public:
             /** Loads the map from NVS. */
-            static bool load(etl::vector<DaliDevice, Constants::MaxBuses * 64>& devices, std::array<DaliLongAddress_t, Constants::MaxBuses * 256>& int_to_long);
+            static bool load(etl::vector<DaliDevice, FirmwareConfig::BusLimit * 128>& devices, std::array<DaliLongAddress_t, FirmwareConfig::BusLimit * 256>& int_to_long);
 
             /** Saves the current map to NVS. */
-            static esp_err_t save(const std::vector<DaliDevice>& devices);
+            static esp_err_t save(const etl::vector<DaliDevice, FirmwareConfig::BusLimit * 128>& devices);
 
         private:
             static constexpr char  NVS_NAMESPACE[] = "dali_state";

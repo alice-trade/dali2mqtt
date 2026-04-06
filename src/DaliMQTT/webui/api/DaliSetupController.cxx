@@ -282,7 +282,7 @@ namespace daliMQTT {
         }
 
         const uint8_t scene_id = doc["scene_id"].as<int>();
-        std::array<SceneDeviceLevels, Constants::MaxBuses> bus_levels{};
+        std::array<SceneDeviceLevels, FirmwareConfig::BusLimit> bus_levels{};
         for (auto& l : bus_levels) l.fill(255);
 
         const auto& controller = DaliDeviceController::Instance();
@@ -299,10 +299,10 @@ namespace daliMQTT {
             }
         }
 
-        for (uint8_t b = 0; b < Constants::MaxBuses; ++b) {
+        for (uint8_t b = 0; b < FirmwareConfig::BusLimit; ++b) {
             auto* adapter = DaliDeviceController::Instance().getAdapter(b);
             if (adapter && adapter->isInitialized()) {
-                DaliSceneManagement::Instance().saveScene(b, scene_id, bus_levels[b]);
+                DaliSceneManagement::saveScene(b, scene_id, bus_levels[b]);
             }
         }
 
@@ -361,11 +361,11 @@ namespace daliMQTT {
         JsonObject levels_obj = doc["levels"].to<JsonObject>();
         const auto& controller = DaliDeviceController::Instance();
 
-        for (uint8_t b = 0; b < Constants::MaxBuses; ++b) {
+        for (uint8_t b = 0; b < FirmwareConfig::BusLimit; ++b) {
             auto* adapter = DaliDeviceController::Instance().getAdapter(b);
             if (!adapter || !adapter->isInitialized()) continue;
 
-            const auto levels = DaliSceneManagement::Instance().getSceneLevels(b, static_cast<uint8_t>(scene_id));
+            const auto levels = DaliSceneManagement::getSceneLevels(b, static_cast<uint8_t>(scene_id));
             for (uint8_t short_addr = 0; short_addr < 64; ++short_addr) {
                 uint8_t level = levels[short_addr];
                 if (level != 255) {

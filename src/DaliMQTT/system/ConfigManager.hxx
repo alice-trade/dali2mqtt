@@ -32,7 +32,7 @@ namespace daliMQTT
         std::string http_pass;
 
         // DALI
-        std::array<DaliBusConfig, Constants::MaxBuses> buses;
+        std::array<DaliBusConfig, FirmwareConfig::BusLimit> buses;
         uint32_t dali_poll_interval_ms;
         std::string dali_device_identificators;
         std::string dali_group_assignments;

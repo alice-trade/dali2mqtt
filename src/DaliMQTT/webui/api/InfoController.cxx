@@ -61,7 +61,7 @@ namespace daliMQTT {
         // Get DALI status
         auto& dc = DaliDeviceController::Instance();
         int active_buses = 0;
-        for (uint8_t i = 0; i < Constants::MaxBuses; ++i) {
+        for (uint8_t i = 0; i < FirmwareConfig::BusLimit; ++i) {
             auto* adapter = DaliDeviceController::Instance().getAdapter(i);
             if (adapter && adapter->isInitialized()) active_buses++;
         }

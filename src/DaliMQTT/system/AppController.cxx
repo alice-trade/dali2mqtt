@@ -53,7 +53,6 @@ namespace daliMQTT
         dali_manager.start();
 
         DaliGroupManagement::Instance().init();
-        DaliSceneManagement::Instance().init();
     }
 
     void AppController::initNetworkSubsystem() {

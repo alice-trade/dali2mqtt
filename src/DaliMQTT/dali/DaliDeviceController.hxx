@@ -25,7 +25,7 @@ namespace daliMQTT
         void applyBusConfiguration();
 
         DaliAdapter* getAdapter(const uint8_t bus_id) const {
-            if (bus_id < Constants::MaxBuses) return m_adapters[bus_id].get();
+            if (bus_id < FirmwareConfig::BusLimit) return m_adapters[bus_id].get();
             return nullptr;
         }
 
@@ -44,7 +44,7 @@ namespace daliMQTT
          */
         std::bitset<64> performScan();
 
-        [[nodiscard]] std::vector<DaliDevice> getDevices() const;
+        [[nodiscard]] etl::vector<DaliDevice, FirmwareConfig::BusLimit * 128> getDevices() const;
 
         [[nodiscard]] std::optional<DaliInternalAddr> getInternalAddress(DaliLongAddress_t longAddress) const;
 
@@ -81,7 +81,7 @@ namespace daliMQTT
     private:
         DaliDeviceController() = default;
 
-        std::array<std::unique_ptr<DaliAdapter>, Constants::MaxBuses> m_adapters{};
+        std::array<std::unique_ptr<DaliAdapter>, FirmwareConfig::BusLimit> m_adapters{};
         QueueHandle_t m_central_event_queue{};
 
         void SnifferProcessFrame(const dali_frame_t& frame);
@@ -106,7 +106,7 @@ namespace daliMQTT
         void handleDeferredNvsSave(int64_t now);
         std::optional<DaliInternalAddr> popPriorityRequest(int64_t now);
         std::optional<DaliInternalAddr> getNextRoundRobinTarget(bool& do_group_sync);
-        void performGroupSync();
+        void performGroupSync() const;
 
         [[noreturn]] static void daliEventHandlerTask(void* pvParameters);
         [[noreturn]] static void daliSyncTask(void* pvParameters);
@@ -117,14 +117,15 @@ namespace daliMQTT
 
         TaskHandle_t m_event_handler_task{nullptr};
         TaskHandle_t m_sync_task_handle{nullptr};
+        static constexpr size_t MaxTotalDevices = FirmwareConfig::BusLimit * 128;
 
-        etl::vector<DaliDevice, Constants::MaxBuses * 64> m_devices{};
-        std::array<DaliLongAddress_t, Constants::MaxBuses * 256> m_internal_to_long_map{};
+        etl::vector<DaliDevice, MaxTotalDevices> m_devices{};
+        std::array<DaliLongAddress_t, FirmwareConfig::BusLimit * 256> m_internal_to_long_map{};
         mutable std::mutex m_devices_mutex{};
 
-        etl::vector<DeferredRequest, Constants::MaxBuses * 64> m_deferred_requests{};
-        etl::queue<DaliInternalAddr, Constants::MaxBuses * 64> m_priority_queue{};
-        etl::flat_set<DaliInternalAddr, Constants::MaxBuses * 64> m_priority_set{};
+        etl::vector<DeferredRequest, MaxTotalDevices> m_deferred_requests{};
+        etl::queue<DaliInternalAddr, MaxTotalDevices> m_priority_queue{};
+        etl::flat_set<DaliInternalAddr, MaxTotalDevices> m_priority_set{};
         mutable std::mutex m_queue_mutex{};
         uint8_t m_round_robin_index{0};
         bool m_nvs_dirty{false};

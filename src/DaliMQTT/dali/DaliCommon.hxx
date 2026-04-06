@@ -8,9 +8,9 @@
 
 namespace daliMQTT
 {
-    namespace Constants
+    namespace FirmwareConfig
     {
-        constexpr uint8_t MaxBuses = 3;
+        constexpr uint8_t BusLimit = 1;
     }
     // Dali address Type
     enum class DaliAddressType : uint8_t {

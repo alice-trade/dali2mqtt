@@ -102,9 +102,8 @@ namespace daliMQTT
 
     esp_err_t DaliGroupManagement::setAllAssignments(const GroupAssignments& newAssignments) {
         struct Cmd { uint8_t sa; uint8_t grp; bool assign; uint8_t bus_id; };
-        std::vector<Cmd> commands;
-        std::vector<std::pair<DaliLongAddress_t, std::bitset<16>>> changed_devices;
-
+        etl::vector<Cmd, FirmwareConfig::BusLimit * 64 * 16> commands;
+        etl::vector<std::pair<DaliLongAddress_t, std::bitset<16>>, FirmwareConfig::BusLimit * 64> changed_devices;
         {
             std::lock_guard<std::mutex> lock(m_mutex);
 
@@ -186,7 +185,7 @@ namespace daliMQTT
 
     DaliGroup DaliGroupManagement::getGroupState(uint8_t bus_id, const uint8_t group_id) const {
         std::lock_guard<std::mutex> lock(m_mutex);
-        if (bus_id < Constants::MaxBuses && group_id < 16) return m_group_states[(bus_id * 16) + group_id];
+        if (bus_id < FirmwareConfig::BusLimit && group_id < 16) return m_group_states[(bus_id * 16) + group_id];
         return DaliGroup{};
     }
 
@@ -216,7 +215,7 @@ namespace daliMQTT
     }
 
     void DaliGroupManagement::updateGroupState(uint8_t bus_id, const uint8_t group_id, const DaliPublishState& state) {
-        if (bus_id >= Constants::MaxBuses || group_id >= 16) return;
+        if (bus_id >= FirmwareConfig::BusLimit || group_id >= 16) return;
 
         uint8_t index = (bus_id * 16) + group_id;
         bool changed = false;
@@ -245,7 +244,7 @@ namespace daliMQTT
     }
 
     void DaliGroupManagement::restoreGroupLevel(uint8_t bus_id, const uint8_t group_id) {
-        if (bus_id >= Constants::MaxBuses || group_id >= 16) return;
+        if (bus_id >= FirmwareConfig::BusLimit || group_id >= 16) return;
         uint8_t target;
         {
             std::lock_guard<std::mutex> lock(m_mutex);
@@ -256,7 +255,7 @@ namespace daliMQTT
     }
 
     void DaliGroupManagement::stepGroupLevel(uint8_t bus_id, const uint8_t group_id, const bool is_up) {
-        if (bus_id >= Constants::MaxBuses || group_id >= 16) return;
+        if (bus_id >= FirmwareConfig::BusLimit || group_id >= 16) return;
         constexpr int STEP_SIZE = 10;
         uint8_t new_level = 0;
         bool should_update = false;

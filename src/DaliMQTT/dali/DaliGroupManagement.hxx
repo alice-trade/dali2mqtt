@@ -7,7 +7,7 @@
 
 namespace daliMQTT
 {
-    using GroupAssignments = etl::flat_map<DaliLongAddress_t, std::bitset<16>, Constants::MaxBuses * 64>;
+    using GroupAssignments = etl::flat_map<DaliLongAddress_t, std::bitset<16>, FirmwareConfig::BusLimit * 128>;
 
     class DaliGroupManagement {
     public:
@@ -67,7 +67,7 @@ namespace daliMQTT
         void publishDeviceGroupState(DaliLongAddress_t longAddr, const std::bitset<16>& groups) const;
 
         GroupAssignments m_assignments{};
-        std::array<DaliGroup, Constants::MaxBuses * 16> m_group_states{};
+        std::array<DaliGroup, FirmwareConfig::BusLimit * 16> m_group_states{};
         mutable std::mutex m_mutex{};
     };
 

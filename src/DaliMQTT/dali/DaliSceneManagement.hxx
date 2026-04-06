@@ -10,22 +10,13 @@ namespace daliMQTT
 
     class DaliSceneManagement {
     public:
-        DaliSceneManagement(const DaliSceneManagement&) = delete;
-        DaliSceneManagement& operator=(const DaliSceneManagement&) = delete;
+        DaliSceneManagement() = default;
 
-        static DaliSceneManagement& Instance() {
-            static DaliSceneManagement instance;
-            return instance;
-        }
-
-        void init();
-
-        esp_err_t activateScene(uint8_t bus_id, uint8_t sceneId) const;
-        esp_err_t saveScene(uint8_t bus_id, uint8_t sceneId, const SceneDeviceLevels& levels) const;
-        [[nodiscard]] SceneDeviceLevels getSceneLevels(uint8_t bus_id, uint8_t sceneId) const;
+        static esp_err_t activateScene(uint8_t bus_id, uint8_t sceneId) ;
+        static esp_err_t saveScene(uint8_t bus_id, uint8_t sceneId, const SceneDeviceLevels& levels) ;
+        [[nodiscard]] static SceneDeviceLevels getSceneLevels(uint8_t bus_id, uint8_t sceneId);
 
     private:
-        DaliSceneManagement() = default;
     };
 
 } // daliMQTT
