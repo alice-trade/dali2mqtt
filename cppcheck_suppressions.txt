@@ -1,0 +1,11 @@
+syntaxError:*/NvsHandle.hxx
+syntaxError:*/AppController.cxx
+
+*:*/src/DaliMQTT/webui/*
+
+unusedFunction
+cstyleCast
+constParameterPointer
+missingInclude
+preprocessorErrorDirective
+unreachableCode

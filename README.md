@@ -209,8 +209,14 @@ cmake --build build --target test
 cmake --build build --target test-flash
 cmake --build build --target test-monitor
 ```
+### Cppcheck
+To run cppcheck analysis install cppcheck and run:
+```bash
+cmake --build build --target cppcheck
 
-## Project Structure
+```
+
+  ## Project Structure
 
 ```
 .
