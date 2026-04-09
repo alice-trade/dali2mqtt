@@ -7,9 +7,10 @@ namespace daliMQTT::Driver {
 
     static constexpr char TAG[] = "DaliDriver";
 
-    DaliDriver::DaliDriver() {
-        m_tx_queue = xQueueCreate(16, sizeof(DaliMessage));
-        m_rx_buffer = new rmt_symbol_word_t[RX_BUFFER_SIZE];
+    DaliDriver::DaliDriver()
+        : m_tx_queue(xQueueCreate(16, sizeof(DaliMessage))),
+          m_rx_buffer(new rmt_symbol_word_t[RX_BUFFER_SIZE])
+    {
     }
 
     DaliDriver::~DaliDriver() {
@@ -198,8 +199,8 @@ namespace daliMQTT::Driver {
         uint32_t current_dur = Constants::T_TE;
 
         bool is_first_part = true;
-        uint32_t dur0 = 0, dur1 = 0;
-        uint8_t lvl0 = 0, lvl1 = 0;
+        uint32_t dur0 = 0;
+        uint8_t lvl0 = 0;
 
         for (size_t i = 1; i < half_bits.size(); i++) {
             if (half_bits[i] == current_lvl) {
@@ -209,8 +210,7 @@ namespace daliMQTT::Driver {
                     dur0 = current_dur; lvl0 = current_lvl;
                     is_first_part = false;
                 } else {
-                    dur1 = current_dur; lvl1 = current_lvl;
-                    m_tx_static_buffer[count++] = make_symbol(dur0, lvl0, dur1, lvl1);
+                    m_tx_static_buffer[count++] = make_symbol(dur0, lvl0, current_dur, current_lvl);
                     is_first_part = true;
                 }
                 current_lvl = half_bits[i];
@@ -248,14 +248,18 @@ namespace daliMQTT::Driver {
 
         for(size_t i = 0; i < count; ++i) {
             if (symbols[i].duration0 > 0) {
-                int te = std::round(static_cast<float>(symbols[i].duration0) / Constants::T_TE);
-                te = std::clamp(te, 1, 4); // Игнорируем шумы > 4TE
-                for(int j=0; j<te; j++) half_bits.push_back(symbols[i].level0);
+                uint32_t te = (symbols[i].duration0 + (Constants::T_TE / 2)) / Constants::T_TE;
+                te = std::clamp<uint32_t>(te, 1, 4);
+                for (uint32_t j = 0; j < te; ++j) {
+                    half_bits.push_back(symbols[i].level0);
+                }
             }
             if (symbols[i].duration1 > 0) {
-                int te = std::round(static_cast<float>(symbols[i].duration1) / Constants::T_TE);
-                te = std::clamp(te, 1, 4);
-                for(int j=0; j<te; j++) half_bits.push_back(symbols[i].level1);
+                uint32_t te = (symbols[i].duration1 + (Constants::T_TE / 2)) / Constants::T_TE;
+                te = std::clamp<uint32_t>(te, 1, 4);
+                for (uint32_t j = 0; j < te; ++j) {
+                    half_bits.push_back(symbols[i].level1);
+                }
             }
         }
 
@@ -278,7 +282,7 @@ namespace daliMQTT::Driver {
                 bits_decoded++;
                 idx += 2;
             } else if (half_bits[idx] == Constants::RMT_LEVEL_IDLE && half_bits[idx+1] == Constants::RMT_LEVEL_ACTIVE) {
-                rx_data = (rx_data << 1) | 0;
+                rx_data = (rx_data << 1);
                 bits_decoded++;
                 idx += 2;
             } else {
@@ -311,4 +315,5 @@ namespace daliMQTT::Driver {
         }
 
         return report_collision();
-    }} // namespace daliMQTT::Driver
+    }
+} // namespace daliMQTT::Driver

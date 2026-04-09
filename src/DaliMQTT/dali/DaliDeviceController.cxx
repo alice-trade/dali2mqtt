@@ -203,7 +203,7 @@ namespace daliMQTT
         ESP_LOGI(TAG, "Validating cached DALI address map...");
 
         struct ValidationItem {
-            DaliLongAddress_t long_addr;
+            DaliLongAddress_t long_addr{};
             DaliInternalAddr internal_addr;
         };
         etl::vector<ValidationItem, FirmwareConfig::BusLimit * 64> devices_to_validate;
@@ -299,19 +299,18 @@ namespace daliMQTT
     std::optional<DaliInternalAddr> DaliDeviceController::popPriorityRequest(const int64_t now) {
         std::lock_guard<std::mutex> lock(m_queue_mutex);
 
-        if (!m_deferred_requests.empty()) {
-            auto it = m_deferred_requests.begin();
-            while (it != m_deferred_requests.end()) {
-                if (now >= it->execute_at_ts) {
-                    if (!m_priority_set.contains(it->internal_address) && !m_priority_queue.full()) {
-                        m_priority_queue.push(it->internal_address);
-                        m_priority_set.insert(it->internal_address);
-                    }
-                    it = m_deferred_requests.erase(it);
-                } else {
-                    ++it;
-                }
+        auto it = m_deferred_requests.begin();
+        while (it != m_deferred_requests.end()) {
+            if (now < it->execute_at_ts) {
+                ++it;
+                continue;
             }
+
+            if (!m_priority_set.contains(it->internal_address) && !m_priority_queue.full()) {
+                m_priority_queue.push(it->internal_address);
+                m_priority_set.insert(it->internal_address);
+            }
+            it = m_deferred_requests.erase(it);
         }
 
         if (!m_priority_queue.empty()) {
@@ -650,23 +649,25 @@ namespace daliMQTT
             }
         }
 
-        if (is_initial_sync) {
-            if (const auto groups_opt = DaliGroupManagement::Instance().getGroupsForDevice(longAddr)) {
-                for (uint8_t i = 0; i < 16; ++i) {
-                    if (groups_opt->test(i)) {
-                        const auto current_grp = DaliGroupManagement::Instance().getGroupState(bus_id, i);
-                        DaliPublishState groupUpdate;
-                        if (level > current_grp.current_level) groupUpdate.level = level;
+        if (!is_initial_sync) return;
 
-                        if (is_dt8) {
-                            groupUpdate.color_temp = colorData.tc;
-                            groupUpdate.rgb = colorData.rgb;
-                        }
-                        if (groupUpdate.level.has_value() || groupUpdate.color_temp.has_value() || groupUpdate.rgb.has_value()) {
-                            DaliGroupManagement::Instance().updateGroupState(bus_id, i, groupUpdate);
-                        }
-                    }
-                }
+        const auto groups_opt = DaliGroupManagement::Instance().getGroupsForDevice(longAddr);
+        if (!groups_opt) return;
+
+        for (uint8_t i = 0; i < 16; ++i) {
+            if (!groups_opt->test(i)) continue;
+
+            const auto current_grp = DaliGroupManagement::Instance().getGroupState(bus_id, i);
+            DaliPublishState groupUpdate;
+            if (level > current_grp.current_level) groupUpdate.level = level;
+
+            if (is_dt8) {
+                groupUpdate.color_temp = colorData.tc;
+                groupUpdate.rgb = colorData.rgb;
+            }
+
+            if (groupUpdate.level.has_value() || groupUpdate.color_temp.has_value() || groupUpdate.rgb.has_value()) {
+                DaliGroupManagement::Instance().updateGroupState(bus_id, i, groupUpdate);
             }
         }
     }

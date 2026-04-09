@@ -74,7 +74,9 @@ namespace daliMQTT {
         AdapterLock lock(this);
         AdapterEvent ev;
         ev.type = AdapterEvent::Type::CMD;
-        ev.cmd = {data, bits, false, false, xTaskGetCurrentTaskHandle()};
+        ev.cmd = {
+            .data = data, .bits = bits, .is_query = false, .send_twice = false, .caller = xTaskGetCurrentTaskHandle()
+        };
         xTaskNotifyStateClearIndexed(nullptr, NOTIFY_IDX);
         xQueueSend(m_event_queue, &ev, portMAX_DELAY);
 
@@ -87,7 +89,13 @@ namespace daliMQTT {
         AdapterLock lock(this);
         AdapterEvent ev;
         ev.type = AdapterEvent::Type::CMD;
-        ev.cmd = {data, bits, true, false, xTaskGetCurrentTaskHandle()};
+        ev.cmd = {
+            .data = data,
+            .bits = bits,
+            .is_query = true,
+            .send_twice = false,
+            .caller = xTaskGetCurrentTaskHandle()
+        };
         xTaskNotifyStateClearIndexed(nullptr, NOTIFY_IDX);
         xQueueSend(m_event_queue, &ev, portMAX_DELAY);
 
@@ -109,7 +117,13 @@ namespace daliMQTT {
 
         AdapterEvent ev;
         ev.type = AdapterEvent::Type::CMD;
-        ev.cmd = {frame.data, 16, false, send_twice, xTaskGetCurrentTaskHandle()};
+        ev.cmd = {
+            .data = frame.data,
+            .bits = 16,
+            .is_query = false,
+            .send_twice = send_twice,
+            .caller = xTaskGetCurrentTaskHandle()
+        };
         xTaskNotifyStateClearIndexed(nullptr, NOTIFY_IDX);
         xQueueSend(m_event_queue, &ev, portMAX_DELAY);
 
@@ -124,7 +138,13 @@ namespace daliMQTT {
 
         AdapterEvent ev;
         ev.type = AdapterEvent::Type::CMD;
-        ev.cmd = {payload, 16, false, send_twice, xTaskGetCurrentTaskHandle()};
+        ev.cmd = {
+            .data = payload,
+            .bits = 16,
+            .is_query = false,
+            .send_twice = send_twice,
+            .caller = xTaskGetCurrentTaskHandle()
+        };
         xTaskNotifyStateClearIndexed(nullptr, NOTIFY_IDX);
         xQueueSend(m_event_queue, &ev, portMAX_DELAY);
 
@@ -214,7 +234,12 @@ namespace daliMQTT {
                     if (state == State::IDLE) {
                         if (msg.type == Driver::DaliEventType::FrameReceived && self->m_sniffer_enabled && self->
                             m_dali_event_queue) {
-                            dali_frame_t frame{msg.data, msg.length, msg.is_backward, self->m_bus_id};
+                            dali_frame_t frame{
+                                .data = msg.data,
+                                .length = msg.length,
+                                .is_backward_frame = msg.is_backward,
+                                .bus_id = self->m_bus_id
+                            };
                             xQueueSend(self->m_dali_event_queue, &frame, 0);
                         }
                     } else if (state == State::TX_WAIT) {
@@ -311,9 +336,10 @@ namespace daliMQTT {
                 sendRaw((0xC1 << 16) | (0x06 << 8) | ((addr >> 8) & 0xFF), 24);
                 sendRaw((0xC1 << 16) | (0x07 << 8) | (addr & 0xFF), 24);
             } else {
-                sendRaw(Factory::Special(SpecialOpCode::SearchAddrH, (addr >> 16) & 0xFF).data, 16);
-                sendRaw(Factory::Special(SpecialOpCode::SearchAddrM, (addr >> 8) & 0xFF).data, 16);
-                sendRaw(Factory::Special(SpecialOpCode::SearchAddrL, (addr) & 0xFF).data, 16);
+                using enum daliMQTT::Commands::SpecialOpCode;
+                sendRaw(Factory::Special(SearchAddrH, (addr >> 16) & 0xFF).data, 16);
+                sendRaw(Factory::Special(SearchAddrM, (addr >> 8) & 0xFF).data, 16);
+                sendRaw(Factory::Special(SearchAddrL, (addr) & 0xFF).data, 16);
             }
         };
 
@@ -321,10 +347,9 @@ namespace daliMQTT {
             if (input_devices) {
                 auto res = sendRawQuery((0xC1 << 16) | (0x03 << 8) | 0x00, 24);
                 return res.has_value();
-            } else {
-                auto res = sendRawQuery(Factory::Special(SpecialOpCode::Compare, 0).data, 16);
-                return res.has_value();
             }
+            auto res = sendRawQuery(Factory::Special(SpecialOpCode::Compare, 0).data, 16);
+            return res.has_value();
         };
 
         sendSearchAddr(0xFFFFFF);
@@ -387,12 +412,13 @@ namespace daliMQTT {
     }
 
     std::optional<DaliLongAddress_t> DaliAdapter::getLongAddress(const uint8_t shortAddress) const {
+        using enum daliMQTT::Commands::OpCode;
         AdapterLock lock(this);
-        const auto h = sendQuery(DaliAddressType::Short, shortAddress, OpCode::QueryRandomAddrH);
+        const auto h = sendQuery(DaliAddressType::Short, shortAddress, QueryRandomAddrH);
         if (!h) return std::nullopt;
-        const auto m = sendQuery(DaliAddressType::Short, shortAddress, OpCode::QueryRandomAddrM);
+        const auto m = sendQuery(DaliAddressType::Short, shortAddress, QueryRandomAddrM);
         if (!m) return std::nullopt;
-        const auto l = sendQuery(DaliAddressType::Short, shortAddress, OpCode::QueryRandomAddrL);
+        const auto l = sendQuery(DaliAddressType::Short, shortAddress, QueryRandomAddrL);
         if (!l) return std::nullopt;
 
         return (static_cast<uint32_t>(*h) << 16) | (static_cast<uint32_t>(*m) << 8) | (*l);
@@ -465,7 +491,7 @@ namespace daliMQTT {
         const auto r = queryDT8Value(shortAddress, 9);
         const auto g = queryDT8Value(shortAddress, 10);
         const auto b = queryDT8Value(shortAddress, 11);
-        if(r && g && b) return DaliRGB{*r, *g, *b};
+        if (r && g && b) return DaliRGB{*r, *g, *b};
         return std::nullopt;
     }
 

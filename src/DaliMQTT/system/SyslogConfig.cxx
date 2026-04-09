@@ -9,7 +9,7 @@
 namespace daliMQTT {
 
     static constexpr char TAG[] = "SyslogService";
-    static constexpr int SYSLOG_PORT = 514;
+    static constexpr char SYSLOG_PORT_STR[] = "514";
     static constexpr size_t MESSAGE_BUFFER_SIZE = 4096;
     static constexpr size_t MAX_LOG_MSG_SIZE = 256;
 
@@ -78,7 +78,7 @@ namespace daliMQTT {
         hints.ai_socktype = SOCK_DGRAM;
         struct addrinfo *res;
 
-        int err = getaddrinfo(m_server_addr.c_str(), std::to_string(SYSLOG_PORT).c_str(), &hints, &res);
+        int err = getaddrinfo(m_server_addr.c_str(), SYSLOG_PORT_STR, &hints, &res);
         if (err != 0 || res == nullptr) {
             ESP_LOGE(TAG, "DNS lookup failed for '%s': err=%d", m_server_addr.c_str(), err);
             return;
