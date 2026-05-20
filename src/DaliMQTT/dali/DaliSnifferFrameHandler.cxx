@@ -2,9 +2,74 @@
 #include <dali/DaliGroupManagement.hxx>
 #include <mqtt/MQTTClient.hxx>
 #include "utils/DaliLongAddrConversions.hxx"
+#include <utils/StringUtils.hxx>
+#include "system/ConfigManager.hxx"
+#include <cJSON.h>
 
 namespace daliMQTT {
     static constexpr char TAG[] = "DaliSnifferFrameHandler";
+
+    static const char* daliCommandName(uint8_t cmd) {
+        switch (cmd) {
+            case DALI_COMMAND_OFF:               return "OFF";
+            case DALI_COMMAND_ON_AND_STEP_UP:    return "ON_AND_STEP_UP";
+            case DALI_COMMAND_STEP_DOWN_AND_OFF: return "STEP_DOWN_AND_OFF";
+            case DALI_COMMAND_RECALL_MAX_LEVEL:  return "RECALL_MAX_LEVEL";
+            case DALI_COMMAND_RECALL_MIN_LEVEL:  return "RECALL_MIN_LEVEL";
+            case DALI_COMMAND_UP:                return "STEP_UP";
+            case DALI_COMMAND_DOWN:              return "STEP_DOWN";
+            case DALI_COMMAND_STEP_UP:           return "STEP_UP";
+            case DALI_COMMAND_STEP_DOWN:         return "STEP_DOWN";
+            case DALI_COMMAND_GO_TO_SCENE_0:     return "SCENE_0";
+            case DALI_COMMAND_GO_TO_SCENE_1:     return "SCENE_1";
+            case DALI_COMMAND_GO_TO_SCENE_2:     return "SCENE_2";
+            case DALI_COMMAND_GO_TO_SCENE_3:     return "SCENE_3";
+            case DALI_COMMAND_GO_TO_SCENE_4:     return "SCENE_4";
+            case DALI_COMMAND_GO_TO_SCENE_5:     return "SCENE_5";
+            case DALI_COMMAND_GO_TO_SCENE_6:     return "SCENE_6";
+            case DALI_COMMAND_GO_TO_SCENE_7:     return "SCENE_7";
+            case DALI_COMMAND_GO_TO_SCENE_8:     return "SCENE_8";
+            case DALI_COMMAND_GO_TO_SCENE_9:     return "SCENE_9";
+            case DALI_COMMAND_GO_TO_SCENE_10:    return "SCENE_10";
+            case DALI_COMMAND_GO_TO_SCENE_11:    return "SCENE_11";
+            case DALI_COMMAND_GO_TO_SCENE_12:    return "SCENE_12";
+            case DALI_COMMAND_GO_TO_SCENE_13:    return "SCENE_13";
+            case DALI_COMMAND_GO_TO_SCENE_14:    return "SCENE_14";
+            case DALI_COMMAND_GO_TO_SCENE_15:    return "SCENE_15";
+            default:                             return nullptr;
+        }
+    }
+
+    static void publishCommandEvent(uint8_t addr_byte, uint8_t cmd_byte) {
+        const char* cmd_name = daliCommandName(cmd_byte);
+        if (!cmd_name) return;
+
+        const auto& config = ConfigManager::Instance().getConfig();
+        const std::string topic = utils::stringFormat("%s/dali/command/event", config.mqtt_base_topic.c_str());
+
+        cJSON* root = cJSON_CreateObject();
+        if (!root) return;
+
+        if ((addr_byte & 0x80) == 0) {
+            cJSON_AddStringToObject(root, "address_type", "short");
+            cJSON_AddNumberToObject(root, "address", (addr_byte >> 1) & 0x3F);
+        } else if ((addr_byte & 0xE0) == 0x80) {
+            cJSON_AddStringToObject(root, "address_type", "group");
+            cJSON_AddNumberToObject(root, "address", (addr_byte >> 1) & 0x0F);
+        } else {
+            cJSON_AddStringToObject(root, "address_type", "broadcast");
+            cJSON_AddNumberToObject(root, "address", -1);
+        }
+        cJSON_AddStringToObject(root, "command", cmd_name);
+
+        char* payload = cJSON_PrintUnformatted(root);
+        cJSON_Delete(root);
+        if (!payload) return;
+
+        MQTTClient::Instance().publish(topic, payload, 0, false);
+        ESP_LOGD(TAG, "Published command event: %s -> %s", topic.c_str(), payload);
+        cJSON_free(payload);
+    }
     void DaliDeviceController::SnifferProcessFrame(const dali_frame_t& frame) {
         if (frame.is_backward_frame) {
             ESP_LOGD(TAG, "Process sniffed backward frame 0x%02X", frame.data & 0xFF);
@@ -56,6 +121,13 @@ namespace daliMQTT {
                     affected_devices.push_back(long_addr);
                 }
             }
+        }
+
+        // Publish a command event for every non-DACP sniffer frame (i.e. commands from
+        // DALI masters such as push button couplers). These are not sent by dali2mqtt itself
+        // (we only send DACP), so they are always external inputs.
+        if ((addr_byte & 0x01) != 0) {
+            publishCommandEvent(addr_byte, cmd_byte);
         }
 
         if (target_group_id.has_value()) {

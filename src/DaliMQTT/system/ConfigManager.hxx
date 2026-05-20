@@ -69,6 +69,8 @@ namespace daliMQTT
 
             [[nodiscard]] AppConfig getConfig() const;
 
+            [[nodiscard]] std::pair<std::string, std::string> getHttpCredentials() const;
+
             [[nodiscard]] std::string getMqttBaseTopic() const;
 
             void setConfig(const AppConfig& new_config);

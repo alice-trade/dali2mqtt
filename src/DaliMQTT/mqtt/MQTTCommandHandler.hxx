@@ -28,7 +28,6 @@ namespace daliMQTT {
         // Background tasks
         static void backgroundScanTask(void* arg);
         static void backgroundInitTask(void* arg);
-        static void backgroundInputInitTask(void* arg);
 
         // Publishing Light state
         static void publishLightState(dali_addressType_t addr_type, uint8_t target_id, const std::string& state_str, const DaliPublishState& state_data);

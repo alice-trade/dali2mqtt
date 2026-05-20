@@ -180,6 +180,9 @@
 #define DALI_SPECIAL_COMMAND_DATA_TRANSFER_REGISTER_2     0xC5 // bin. 1100 0101 XXXX XXXX
 #define DALI_SPECIAL_COMMAND_WRITE_MEMORY_LOCATION        0xC7 // bin. 1100 0111 XXXX XXXX
 // reserved
-#define DALI_COMMAND_INPUT_QUERY_STATUS 0x10
-#define DALI_COMMAND_INPUT_READ_MEMORY_LOCATION 0x3C
+// IEC 62386-103 Table 21: device-level query commands (instance byte must be 0xFE)
+// 0x10 is a send-twice write command (Reset), NOT a query — do not use for detection.
+#define DALI_COMMAND_INPUT_QUERY_DEVICE_STATUS 0x30  // QueryDeviceStatus — always returns a response
+#define DALI_COMMAND_INPUT_QUERY_NUM_INSTANCES 0x35  // QueryNumberOfInstances
+#define DALI_COMMAND_INPUT_READ_MEMORY_LOCATION 0x3C // ReadMemoryLocation (requires DTR0/DTR1 set up)
 #endif // __DALI_COMMANDS_H__

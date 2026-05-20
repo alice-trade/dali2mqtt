@@ -26,14 +26,10 @@ namespace daliMQTT
         void start();
 
         /**
-         * @brief Performs full bus initialization (addressing).
+         * @brief Performs full bus initialization: addresses new gear and DALI-2 input device slaves,
+         *        then discovers all devices.
          */
         std::bitset<64> performFullInitialization();
-
-        /**
-         * @brief Performs initialization for 24-bit input devices.
-         */
-        std::bitset<64> perform24BitDeviceInitialization();
 
         /**
          * @brief Scans the bus for existing devices without re-addressing.
@@ -69,6 +65,14 @@ namespace daliMQTT
          */
         void requestBroadcastSync(uint32_t base_delay_ms, uint32_t stagger_ms);
 
+        /**
+         * @brief Re-publishes the availability status of all known control gear.
+         * Call this after MQTT reconnects to ensure retained availability messages
+         * are present on the broker (they may have been lost if MQTT was not yet
+         * connected during the initial DALI scan/validation).
+         */
+        void republishAllAvailability() const;
+
 
     private:
         DaliDeviceController() = default;
@@ -77,6 +81,7 @@ namespace daliMQTT
         void ProcessInputDeviceFrame(const dali_frame_t& frame) const;
 
         std::bitset<64> discoverAndMapDevices();
+
         bool validateAddressMap();
         void pollSingleDevice(uint8_t shortAddr);
 

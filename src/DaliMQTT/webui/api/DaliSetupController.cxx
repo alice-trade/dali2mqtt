@@ -3,6 +3,7 @@
 #include <dali/DaliSceneManagement.hxx>
 #include <utils/StringUtils.hxx>
 #include "system/ConfigManager.hxx"
+#include "system/AppController.hxx"
 #include "webui/WebUI.hxx"
 #include "dali/DaliAdapter.hxx"
 #include "utils/DaliLongAddrConversions.hxx"
@@ -100,6 +101,10 @@ namespace daliMQTT {
         ESP_LOGI(TAG, "Starting background DALI initialization...");
         DaliDeviceController::Instance().performFullInitialization();
         DaliGroupManagement::Instance().refreshAssignmentsFromBus();
+        // Republish HA discovery so any newly-addressed devices appear in HA,
+        // and republish availability so HA sees all devices as online.
+        DaliDeviceController::Instance().republishAllAvailability();
+        AppController::Instance().publishHAMqttDiscovery();
         ESP_LOGI(TAG, "Background DALI initialization finished.");
         g_dali_task_status = DaliTaskStatus::IDLE;
         vTaskDelete(nullptr);

@@ -270,6 +270,11 @@ namespace daliMQTT
         return err;
     }
 
+    std::pair<std::string, std::string> ConfigManager::getHttpCredentials() const {
+        std::lock_guard<std::mutex> lock(config_mutex);
+        return {config_cache.http_user, config_cache.http_pass};
+    }
+
     std::string ConfigManager::getMqttBaseTopic() const {
         std::lock_guard<std::mutex> lock(config_mutex);
         return config_cache.mqtt_base_topic;

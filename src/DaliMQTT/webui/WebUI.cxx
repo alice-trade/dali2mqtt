@@ -17,6 +17,7 @@ namespace daliMQTT
     esp_err_t WebUI::start() {
         httpd_config_t config = HTTPD_DEFAULT_CONFIG();
 
+        config.stack_size = 8192;
         config.lru_purge_enable = true;
         config.uri_match_fn = httpd_uri_match_wildcard;
         config.max_uri_handlers = 17;
@@ -153,8 +154,8 @@ namespace daliMQTT
             return send_unauthorized();
         }
 
-        const auto cfg = ConfigManager::Instance().getConfig();
-        if (decoded_sv.substr(0, colon_pos) == cfg.http_user && decoded_sv.substr(colon_pos + 1) == cfg.http_pass) {
+        const auto [http_user, http_pass] = ConfigManager::Instance().getHttpCredentials();
+        if (decoded_sv.substr(0, colon_pos) == http_user && decoded_sv.substr(colon_pos + 1) == http_pass) {
             return ESP_OK;
         }
 

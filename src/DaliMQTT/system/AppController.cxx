@@ -166,6 +166,12 @@ namespace daliMQTT
         mqtt.subscribe(config_set_topic);
         ESP_LOGI(TAG, "Subscribed to system config management: %s, %s", config_get_topic.c_str(), config_set_topic.c_str());
 
+        // Re-publish per-device availability so HA sees each light as available.
+        // The first availability publish happens during DALI init (before MQTT connected),
+        // so those publishes are dropped. Since the sync task only publishes on change,
+        // retained "online" messages are never sent to the broker without this re-publish.
+        DaliDeviceController::Instance().republishAllAvailability();
+
         if (config.hass_discovery_enabled) {
             publishHAMqttDiscovery();
         }
