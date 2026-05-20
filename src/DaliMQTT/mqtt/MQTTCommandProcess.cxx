@@ -26,9 +26,10 @@ namespace daliMQTT {
         constexpr size_t header_size = sizeof(RingBufHeader);
         const size_t total_size = header_size + topic_len + data_len;
         void* item_ptr = nullptr;
-        const esp_err_t sent = xRingbufferSendAcquire(m_ringbuf, &item_ptr, total_size, pdMS_TO_TICKS(10));
+        // xRingbufferSendAcquire returns pdTRUE/pdFALSE, NOT esp_err_t.
+        const BaseType_t sent = xRingbufferSendAcquire(m_ringbuf, &item_ptr, total_size, pdMS_TO_TICKS(10));
 
-        if (sent != ESP_OK) {
+        if (sent != pdTRUE) {
             ESP_LOGW(TAG, "Ring Buffer busy/full, dropped message");
             return false;
         }

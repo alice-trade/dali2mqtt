@@ -34,7 +34,11 @@ namespace daliMQTT
          * @brief Sends a query waiting for a reply.
          */
         [[nodiscard]] std::optional<uint8_t> sendQuery(dali_addressType_t addr_type, uint8_t addr, uint8_t command);
-        std::optional<uint8_t> sendInputDeviceCommand(uint8_t shortAddress, uint8_t opcode, std::optional<uint8_t> param = std::nullopt);
+        // Sends a DALI-2 IEC 62386-103 24-bit command: [addr][instance_byte][opcode].
+        // instance_byte=0xFE (default) = device-level (IEC 62386-103 Table 21 commands).
+        // instance_byte=0xFF = broadcast to all instances (instance-level commands).
+        // instance_byte=0x00..0x1F = specific instance number.
+        std::optional<uint8_t> sendInputDeviceCommand(uint8_t shortAddress, uint8_t opcode, std::optional<uint8_t> instance_byte = std::nullopt);
 
         /**
          * @brief Sends a raw command.

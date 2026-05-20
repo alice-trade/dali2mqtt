@@ -894,8 +894,11 @@ uint8_t Dali::commission_id(const uint8_t init_arg) {
 
     vTaskDelay(pdMS_TO_TICKS(100));
 
+    // Pre-scan: mark SAs that already have a device responding.
+    // Frame: [(sa<<1)|1][0xFE][0x30] = individual SA, device-level instance byte (0xFE),
+    // QueryDeviceStatus opcode (0x30) per IEC 62386-103 Table 21.
     for (sa = 0; sa < 64; sa++) {
-        const int16_t rv = tx_wait_rx((sa << 1) | 1, DALI_QUERY_STATUS, 0x00, 50);
+        const int16_t rv = tx_wait_rx((sa << 1) | 1, 0xFE, 0x30, 50);
         if (rv >= 0) {
             arr[sa] = 1;
         }

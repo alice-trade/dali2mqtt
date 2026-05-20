@@ -100,7 +100,8 @@ namespace daliMQTT {
             if (!long_addr_opt) return;
             const auto short_addr_opt = DaliDeviceController::Instance().getShortAddress(*long_addr_opt);
             if (!short_addr_opt) {
-                ESP_LOGD(TAG, "Received command for unknown long address: %s", std::string(parts[1]).c_str());
+                ESP_LOGW(TAG, "Received command for unknown long address: %s (run a scan to refresh the device map)",
+                         std::string(parts[1]).c_str());
                 return;
             }
             target_id = *short_addr_opt;
@@ -504,24 +505,12 @@ namespace daliMQTT {
         DaliDeviceController::Instance().performFullInitialization();
         DaliGroupManagement::Instance().refreshAssignmentsFromBus();
 
+        // Republish HA discovery and availability after map may have changed.
+        DaliDeviceController::Instance().republishAllAvailability();
+        AppController::Instance().publishHAMqttDiscovery();
+
         mqtt.publish(status_topic, R"({"status":"idle", "last_action":"init_complete"})", 0, false);
         ESP_LOGI(TAG, "MQTT-initiated DALI initialization finished.");
-        g_mqtt_bus_busy = false;
-        vTaskDelete(nullptr);
-    }
-    void MQTTCommandHandler::backgroundInputInitTask(void* arg) {
-        ESP_LOGI(TAG, "Starting MQTT-initiated DALI Input Device initialization...");
-        auto const& mqtt = MQTTClient::Instance();
-        auto config = ConfigManager::Instance().getConfig();
-        std::string status_topic = config.mqtt_base_topic + "/config/input_device/sync_status";
-
-        mqtt.publish(status_topic, R"({"status":"initializing"})", 0, false);
-
-        DaliDeviceController::Instance().perform24BitDeviceInitialization();
-        DaliGroupManagement::Instance().refreshAssignmentsFromBus();
-
-        mqtt.publish(status_topic, R"({"status":"idle", "last_action":"init_complete"})", 0, false);
-        ESP_LOGI(TAG, "MQTT-initiated DALI Input Device initialization finished.");
         g_mqtt_bus_busy = false;
         vTaskDelete(nullptr);
     }
@@ -580,19 +569,6 @@ namespace daliMQTT {
                     handleInitializeCommand();
                 }
             }
-            else if (parts.size() > 2 && parts[1] == "input_device") {
-                if (parts[2] == "scan") {
-                    handleScanCommand();
-                } else if (parts[2] == "initialize") {
-                    if (g_mqtt_bus_busy.exchange(true)) {
-                        ESP_LOGW(TAG, "Bus operation already in progress. Ignoring input init request.");
-                        return;
-                    }
-                    if (xTaskCreate(backgroundInputInitTask, "mqtt_input_init", 4096, nullptr, 4, nullptr) != pdPASS) {
-                        ESP_LOGE(TAG, "Failed to create input init task");
-                        g_mqtt_bus_busy = false;
-                    }
-                }
             } else if (parts[0] == "config" && parts.size() > 1 && parts[1] == "discovery") {
                 if (parts.size() > 2 && parts[2] == "publish") {
                     AppController::Instance().publishHAMqttDiscovery();

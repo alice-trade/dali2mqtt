@@ -520,6 +520,22 @@ namespace daliMQTT
         }
     }
 
+    void DaliDeviceController::republishAllAvailability() const {
+        std::map<DaliLongAddress_t, bool> snapshot;
+        {
+            std::lock_guard<std::mutex> lock(m_devices_mutex);
+            for (const auto& [long_addr, dev_var] : m_devices) {
+                if (std::holds_alternative<ControlGear>(dev_var)) {
+                    snapshot[long_addr] = getIdentity(dev_var).available;
+                }
+            }
+        }
+        for (const auto& [long_addr, is_available] : snapshot) {
+            publishAvailability(long_addr, is_available);
+        }
+        ESP_LOGI(TAG, "Re-published availability for %zu control gear devices.", snapshot.size());
+    }
+
     std::optional<uint8_t> DaliDeviceController::pollAvailabilityAndLevel(const uint8_t shortAddr, const DaliLongAddress_t longAddr) {
         auto& dali = DaliAdapter::Instance();
         const auto level_opt = dali.sendQuery(DALI_ADDRESS_TYPE_SHORT, shortAddr, DALI_COMMAND_QUERY_ACTUAL_LEVEL);
@@ -769,14 +785,8 @@ namespace daliMQTT
             return {};
         }
         DaliAdapter::Instance().initializeBus();
-        return discoverAndMapDevices();
-    }
-
-    std::bitset<64> DaliDeviceController::perform24BitDeviceInitialization() {
-        if (!DaliAdapter::Instance().isInitialized()) {
-            ESP_LOGE(TAG, "Cannot initialize DALI bus: DALI driver is not initialized.");
-            return {};
-        }
+        // Commission any unaddressed DALI-2 input device slaves (e.g. Part 303 occupancy sensors).
+        // This is a no-op if no such devices are present on the bus.
         DaliAdapter::Instance().initialize24BitDevicesBus();
         return discoverAndMapDevices();
     }
@@ -811,7 +821,9 @@ namespace daliMQTT
                 }
             }
 
-            if (auto status_input_opt = dali.sendInputDeviceCommand(sa, DALI_COMMAND_INPUT_QUERY_STATUS); status_input_opt.has_value()) {
+            // Device-level QueryDeviceStatus (IEC 62386-103 Table 21, opcode 0x30).
+            // Instance byte 0xFE = device-level. Works for Part 301 (push buttons), 302, 303, etc.
+            if (auto status_input_opt = dali.sendInputDeviceCommand(sa, DALI_COMMAND_INPUT_QUERY_DEVICE_STATUS, 0xFE); status_input_opt.has_value()) {
                 ESP_LOGI(TAG, "Input Device found at SA %d", sa);
                 auto long_addr_opt = getInputDeviceLongAddress(sa);
                 DaliLongAddress_t long_addr;

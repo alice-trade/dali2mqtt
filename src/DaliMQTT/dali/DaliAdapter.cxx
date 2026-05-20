@@ -230,15 +230,18 @@ namespace daliMQTT
         return std::nullopt;
     }
 
-    std::optional<uint8_t> DaliAdapter::sendInputDeviceCommand(const uint8_t shortAddress, const uint8_t opcode, const std::optional<uint8_t> param) {
+    std::optional<uint8_t> DaliAdapter::sendInputDeviceCommand(const uint8_t shortAddress, const uint8_t opcode, const std::optional<uint8_t> instance_byte) {
         std::lock_guard lock(bus_mutex);
+        // DALI-2 IEC 62386-103 24-bit frame: [device_addr][instance_byte][opcode]
+        // Per IEC 62386-103 Table 21, device-level commands use instance_byte=0xFE.
+        // instance_byte=0xFF broadcasts to all instances (instance-level commands).
+        // Caller must specify the correct instance_byte for the command type.
         const uint8_t addr_byte = (shortAddress << 1) | 1;
-        const uint8_t param_byte = param.value_or(0x00);
+        const uint8_t inst_byte = instance_byte.value_or(0xFE);
 
-        const int16_t result = m_dali_impl.tx_wait_rx(addr_byte, opcode, param_byte);
+        const int16_t result = m_dali_impl.tx_wait_rx(addr_byte, inst_byte, opcode);
 
         vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS));
-
 
         if (result >= 0) {
             return static_cast<uint8_t>(result);
@@ -247,16 +250,20 @@ namespace daliMQTT
     }
     uint8_t DaliAdapter::initializeBus() {
         std::lock_guard lock(bus_mutex);
-        ESP_LOGI(TAG, "Starting DALI commissioning process...");
-        uint8_t assigned_devices = m_dali_impl.commission(0xff);
-        ESP_LOGI(TAG, "Commissioning finished. Assigned %u devices", assigned_devices);
+        ESP_LOGI(TAG, "Starting DALI commissioning process (unaddressed gear only)...");
+        // init_arg=0xFF: only devices WITHOUT a short address enter the initialise state.
+        // init_arg=0x00 would put ALL devices in initialise state, causing them to regenerate
+        // random addresses and breaking HA entity mappings.
+        uint8_t assigned_devices = m_dali_impl.commission(0xFF);
+        ESP_LOGI(TAG, "Commissioning finished. Assigned %u new devices", assigned_devices);
         return assigned_devices;
     }
     uint8_t DaliAdapter::initialize24BitDevicesBus() {
         std::lock_guard lock(bus_mutex);
-        ESP_LOGI(TAG, "Starting DALI commissioning process (Input Devices)...");
-        uint8_t assigned_devices = m_dali_impl.commission_id(0xff);
-        ESP_LOGI(TAG, "Input Device Commissioning finished. Assigned %u devices", assigned_devices);
+        ESP_LOGI(TAG, "Starting DALI commissioning process (unaddressed input devices only)...");
+        // init_arg=0xFF: only input devices WITHOUT a short address enter the initialise state.
+        uint8_t assigned_devices = m_dali_impl.commission_id(0xFF);
+        ESP_LOGI(TAG, "Input Device Commissioning finished. Assigned %u new devices", assigned_devices);
         return assigned_devices;
     }
     esp_err_t DaliAdapter::assignToGroup(const uint8_t shortAddress, const uint8_t group) {
