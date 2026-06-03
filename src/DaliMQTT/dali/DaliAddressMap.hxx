@@ -37,6 +37,7 @@ namespace daliMQTT {
         private:
             static constexpr char  NVS_NAMESPACE[] = "dali_state";
             static constexpr char  MAP_KEY[] = "DaliAddrMap";
+            static std::mutex m_nvs_mutex;
         };
     };
 

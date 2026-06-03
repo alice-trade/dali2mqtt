@@ -216,7 +216,7 @@ namespace daliMQTT {
 
         while (true) {
             AdapterEvent ev;
-            const TickType_t wait_ticks = (state == State::WAIT_RX) ? pdMS_TO_TICKS(10) : portMAX_DELAY;
+            const TickType_t wait_ticks = (state == State::IDLE) ? portMAX_DELAY : pdMS_TO_TICKS(10);
 
             if (xQueueReceive(self->m_event_queue, &ev, wait_ticks) == pdTRUE) {
                 if (ev.type == AdapterEvent::Type::CMD) {

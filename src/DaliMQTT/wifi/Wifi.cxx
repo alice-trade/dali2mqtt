@@ -143,16 +143,9 @@ namespace daliMQTT
 
             manager->s_retry_count++;
 
-            if (manager->s_retry_count >= CONFIG_DALI2MQTT_WIFI_MAX_RETRY) {
-                ESP_LOGE(TAG, "WiFi connection failed after %d attempts. Entering deep sleep for %d seconds.",
-                    manager->s_retry_count, CONFIG_DALI2MQTT_WIFI_DEEP_SLEEP_S);
-                esp_deep_sleep(1000000LL * CONFIG_DALI2MQTT_WIFI_DEEP_SLEEP_S);
-            } else {
-                ESP_LOGW(TAG, "STA_DISCONNECTED: connection failed. Attempt %d of %d. Retrying...",
-                         manager->s_retry_count, CONFIG_DALI2MQTT_WIFI_MAX_RETRY);
-
-                esp_wifi_connect();
-            }
+            ESP_LOGW(TAG, "STA_DISCONNECTED: Connection failed. Attempt %d. Reconnecting...",
+                 manager->s_retry_count);
+            esp_wifi_connect();
 
         } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
             ip_event_got_ip_t const* event = static_cast<ip_event_got_ip_t*>(event_data);

@@ -117,17 +117,20 @@ namespace daliMQTT::Driver {
     void DaliDriver::driverTask() {
         DaliMessage tx_msg;
         uint32_t notified_symbols = 0;
+        rmt_symbol_word_t local_symbol_buffer[RX_BUFFER_SIZE];
 
         while (true) {
-            if (xTaskNotifyWait(0, 0xFFFFFFFF, &notified_symbols, pdMS_TO_TICKS(1)) == pdTRUE) {
+            if (xTaskNotifyWait(0, 0xFFFFFFFF, &notified_symbols, std::max<TickType_t>(1, pdMS_TO_TICKS(5))) == pdTRUE) {
                 if (notified_symbols > 0) {
-                    processRxSymbols(m_rx_buffer, notified_symbols);
+                    size_t symbols_to_copy = std::min<size_t>(notified_symbols, RX_BUFFER_SIZE);
+                    memcpy(local_symbol_buffer, m_rx_buffer, symbols_to_copy * sizeof(rmt_symbol_word_t));
 
                     rmt_receive_config_t rx_config = {
                         .signal_range_min_ns = Constants::RX_MIN_NOISE_FILTER_NS,
                         .signal_range_max_ns = Constants::RX_IDLE_THRESH_NS,
                     };
                     rmt_receive(m_rx_channel, m_rx_buffer, RX_BUFFER_SIZE * sizeof(rmt_symbol_word_t), &rx_config);
+                    processRxSymbols(local_symbol_buffer, symbols_to_copy);
                 }
             }
 
@@ -250,6 +253,10 @@ namespace daliMQTT::Driver {
             if (symbols[i].duration0 > 0) {
                 uint32_t te = (symbols[i].duration0 + (Constants::T_TE / 2)) / Constants::T_TE;
                 te = std::clamp<uint32_t>(te, 1, 4);
+                if (half_bits.size() + te > half_bits.max_size()) {
+                    ESP_LOGV(TAG, "RX half_bits overflow due to noise. Frame discarded.");
+                    return report_collision();
+                }
                 for (uint32_t j = 0; j < te; ++j) {
                     half_bits.push_back(symbols[i].level0);
                 }
@@ -257,6 +264,10 @@ namespace daliMQTT::Driver {
             if (symbols[i].duration1 > 0) {
                 uint32_t te = (symbols[i].duration1 + (Constants::T_TE / 2)) / Constants::T_TE;
                 te = std::clamp<uint32_t>(te, 1, 4);
+                if (half_bits.size() + te > half_bits.max_size()) {
+                    ESP_LOGV(TAG, "RX half_bits overflow due to noise. Frame discarded.");
+                    return report_collision();
+                }
                 for (uint32_t j = 0; j < te; ++j) {
                     half_bits.push_back(symbols[i].level1);
                 }

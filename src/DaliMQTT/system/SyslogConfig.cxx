@@ -123,6 +123,9 @@ namespace daliMQTT {
                 BaseType_t high_task_wakeup = pdFALSE;
                 xRingbufferSendFromISR(g_syslog_instance->m_log_buffer, msg_buffer, actual_len, &high_task_wakeup);
                 if (high_task_wakeup) {
+                    #ifndef traceISR_EXIT_TO_SCHEDULER
+                    #define traceISR_EXIT_TO_SCHEDULER()
+                    #endif
                     portYIELD_FROM_ISR();
                 }
             } else {

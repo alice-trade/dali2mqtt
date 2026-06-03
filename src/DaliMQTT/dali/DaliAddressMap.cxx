@@ -7,8 +7,10 @@
 namespace daliMQTT
 {
     static constexpr char TAG[] = "DaliAddrMapLoader";
+    std::mutex DaliAddressMap::m_nvs_mutex;
 
     bool DaliAddressMap::load(etl::vector<DaliDevice, FirmwareConfig::BusLimit * 128>& devices, std::array<DaliLongAddress_t, FirmwareConfig::BusLimit * 256>& int_to_long) {
+        std::lock_guard<std::mutex> lock(m_nvs_mutex);
         NvsHandle nvs_handle(NVS_NAMESPACE, NVS_READONLY);
         if (!nvs_handle) {
             ESP_LOGE(TAG, "Failed to open NVS for reading address map.");
@@ -92,6 +94,7 @@ namespace daliMQTT
     }
 
     esp_err_t DaliAddressMap::save(const etl::vector<DaliDevice, FirmwareConfig::BusLimit * 128>& devices) {
+        std::lock_guard<std::mutex> lock(m_nvs_mutex);
         NvsHandle nvs_handle(NVS_NAMESPACE, NVS_READWRITE);
         if (!nvs_handle) return ESP_FAIL;
 
