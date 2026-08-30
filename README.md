@@ -30,15 +30,17 @@ graph LR
 
 ## Hardware Requirements
 
-1.  **ESP-based Board**: Any board with an ESP32-S3 or ESP32-C6 module (e.g., ESP32-S3-DevKitC) with Wifi module.
+1.  **ESP-based Board**: Any board with an ESP32-S3, ESP32-C3 or ESP32-C6 module (e.g., ESP32-S3-DevKitC) with Wifi module.
 2.  **DALI Transceiver/Power Supply**: A specialized circuit/device that provides DALI bus power and converts ESP32 logic levels to DALI electrical signals.
 
 ## Software Requirements
 
-1.  **ESP-IDF v5.x**: [Installation Guide](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/index.html). (IDF v6 at moment is experimental)
+1.  **ESP-IDF** (v5.x and v6.x): [Installation Guide](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/index.html).
 2.  **GCC** (xtensa/riscv-esp-elf-g++): The C/C++ compiler provided by ESP-IDF.
 3.  **Git**: To clone the repository and fetching dependencies.
-4.  **Node.js and npm**: To build the Web UI frontend.
+4.  **CMake**: Build system. Ninja or GMake also required
+5.  **Python 3**: Required by ESP-IDF also for pytest suites.
+6.  **Node.js and npm**: To build the Web UI frontend.
 
 ## Building and Flashing
 
@@ -53,12 +55,21 @@ cd daliMQTT
 
 All main settings are exposed in `menuconfig`. You can change DALI pins, default parameters, and other options.
 
+Using build.sh bash script:
+```bash
+# build.sh will try to find esp-idf export.sh but you may need to source it
+# Run menuconfig
+./build.sh menuconfig
+```
+Or manually:
 ```bash
 # Activate ESP-IDF environment
 . $HOME/esp/esp-idf/export.sh
 
+# Configure project for Release
+cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=/path/to/esp-idf/tools/cmake/toolchain-esp<chip>.cmake -GNinja .
+
 # Run menuconfig
-cmake -B build -DCMAKE_TOOLCHAIN_FILE=/path/to/esp-idf/tools/cmake/toolchain-esp<chip>.cmake -GNinja .
 cmake --build build --target menuconfig
 ```
 Main settings are located under the `DALI MQTT Bridge Settings` section.
@@ -68,14 +79,18 @@ Main settings are located under the `DALI MQTT Bridge Settings` section.
 The process consists of three steps: building, flashing the main firmware, and flashing the file system for the Web UI.
 
 ```bash
-# Build the project
+# Build firmware
+./build.sh app
+
+# Flash
+./build.sh flash
+
+# Monitor
+./build.sh monitor
+
+# Or using cmake directly:
 cmake --build build
-
-# Flash the main application
 cmake --build build --target flash
-
-# Start the serial monitor to view logs
-cmake --build build --target monitor
 ```
 
 ## Initial Setup (Provisioning)
@@ -192,7 +207,7 @@ The bridge reports its status in the topic:
 `{base_topic}/status`
 
 *   Payload `online`: Bridge is connected to MQTT.
-*   Payload `offline`: LWT (Last Will and Testament) message, sent by the broker if the bridge disconnects.
+*   Payload `offline-fetch`: LWT (Last Will and Testament) message, sent by the broker if the bridge disconnects.
 
 ## Development and Testing
 
@@ -201,19 +216,22 @@ The bridge reports its status in the topic:
 To build the test firmware, pass the `BUILD_TESTING=ON` flag to the CMake command:
 
 ```bash
-# Configuration for building tests
-cmake -B build -G Ninja -DBUILD_TESTING=ON
+# Install pytest
+pip install pytest pytest-embedded pytest-embedded-idf pytest-embedded-serial-esp
 
-# Build and run tests
-cmake --build build --target test
-cmake --build build --target test-flash
-cmake --build build --target test-monitor
+# Configuration for building tests
+cmake -B build -G Ninja -DCMAKE_TOOLCHAIN_FILE=/path/to/esp-idf/tools/cmake/toolchain-esp<chip>.cmake
+
+# Build and run unit tests
+cmake --build build --target pytest-unit
+
+# Build and run integration tests
+cmake --build build --target pytest-integration
 ```
 ### Cppcheck
 To run cppcheck analysis install cppcheck and run:
 ```bash
 cmake --build build --target cppcheck
-
 ```
 
   ## Project Structure

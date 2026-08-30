@@ -14,3 +14,14 @@ add_custom_target(size-components
         USES_TERMINAL
         VERBATIM
 )
+add_custom_target(size-files
+        COMMAND ${CMAKE_COMMAND}
+        -D "IDF_SIZE_TOOL=${idf_size}"
+        -D "IDF_SIZE_MODE=--files"
+        -D "MAP_FILE=${mapfile}"
+        -D "OUTPUT_JSON=${OUTPUT_JSON}"
+        -P "$ENV{IDF_PATH}/tools/cmake/run_size_tool.cmake"
+        DEPENDS ${mapfile}
+        USES_TERMINAL
+        VERBATIM
+)

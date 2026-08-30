@@ -1,12 +1,12 @@
-cmake_minimum_required(VERSION 3.16)
-project(DaliMQTTTests LANGUAGES CXX)
+cmake_minimum_required(VERSION 3.22)
+project(DaliMQTTTestFirmware LANGUAGES C CXX ASM)
 
 include(${PROJDIR}/scripts/common.cmake)
 include(${PROJDIR}/scripts/idf_buildup.cmake)
 
 add_subdirectory(${PROJDIR}/src/DaliMQTT MainSourceTree)
 
-set(TEST_APP_NAME "daliMQTTTestESP")
+set(TEST_APP_NAME "${CMAKE_PROJECT_NAME}.elf")
 file(GLOB_RECURSE TEST_CASE_FILES "**/*.test.cxx")
 
 message(STATUS "Found test files: ${TEST_CASE_FILES}")

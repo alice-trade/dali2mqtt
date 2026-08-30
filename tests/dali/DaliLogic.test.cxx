@@ -35,9 +35,14 @@ static void test_dali_driver_init() {
     gpio_num_t rx = static_cast<gpio_num_t>(CONFIG_DALI2MQTT_DALI_RX_PIN);
     gpio_num_t tx = static_cast<gpio_num_t>(CONFIG_DALI2MQTT_DALI_TX_PIN);
 
-    esp_err_t err = DaliAdapter::Instance().init(rx, tx);
+    QueueHandle_t dummy_q = xQueueCreate(10, sizeof(dali_frame_t));
+    DaliAdapter adapter(0, dummy_q);
+
+    esp_err_t err = adapter.init(rx, tx);
     TEST_ASSERT_EQUAL(ESP_OK, err);
-    TEST_ASSERT_TRUE(DaliAdapter::Instance().isInitialized());
+    TEST_ASSERT_TRUE(adapter.isInitialized());
+
+    vQueueDelete(dummy_q);
 }
 
 static void test_dali_controller_singleton() {

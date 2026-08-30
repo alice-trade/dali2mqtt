@@ -1,0 +1,13 @@
+diff --git a/components/esptool_py/project_include.cmake b/components/esptool_py/project_include.cmake
+index f1037953c61..b78f90d9ccb 100644
+--- a/components/esptool_py/project_include.cmake
++++ b/components/esptool_py/project_include.cmake
+@@ -739,7 +739,7 @@ function(__esptool_py_setup_utility_targets)
+     add_custom_target(monitor
+         COMMAND ${CMAKE_COMMAND}
+         -D "IDF_PATH=${idf_path}"
+-        -D "SERIAL_TOOL=${python} -m esp_idf_monitor"
++        -D "SERIAL_TOOL=${python};-m;esp_idf_monitor"
+         -D "SERIAL_TOOL_ARGS=${MONITOR_ARGS}"
+         -D "WORKING_DIRECTORY=${build_dir}"
+         -P run_serial_tool.cmake

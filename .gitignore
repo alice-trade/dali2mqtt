@@ -131,7 +131,7 @@ bower_components
 .lock-wscript
 
 # Compiled binary addons (https://nodejs.org/api/addons.html)
-build/Release
+build.sh/Release
 
 # Dependency directories
 node_modules/
@@ -250,7 +250,7 @@ __pycache__/
 
 # Distribution / packaging
 .Python
-build/
+build.sh/
 develop-eggs/
 dist/
 downloads/
