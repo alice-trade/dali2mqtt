@@ -1,0 +1,79 @@
+// Copyright (c) 2026 Alice-Trade Inc.
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#ifndef DALIMQTT_DALIDEVICEREGISTRY_ICC
+#define DALIMQTT_DALIDEVICEREGISTRY_ICC
+
+namespace daliMQTT {
+
+inline DaliGroupState DaliDeviceRegistry::getGroupState(const uint8_t busId, const uint8_t groupId) const {
+    std::lock_guard<std::mutex> lock(m_registryMutex);
+    if (busId < BUS_COUNT && groupId < 16) {
+        return m_groupStates[busId][groupId];
+    }
+    return DaliGroupState{};
+}
+
+inline GroupAssignments DaliDeviceRegistry::getGroupAssignments() const {
+    std::lock_guard<std::mutex> lock(m_registryMutex);
+    return m_groupAssignments;
+}
+
+inline std::optional<DaliInternalAddr> DaliDeviceRegistry::getInternalAddress(const DaliLongAddress_t longAddr) const {
+    std::lock_guard<std::mutex> lock(m_registryMutex);
+
+    const auto it = std::ranges::find_if(
+        m_devices, [longAddr](const DaliDevice& dev) { return getIdentity(dev).longAddress == longAddr; });
+
+    if (it != m_devices.end()) {
+        return getIdentity(*it).internalAddress;
+    }
+    return std::nullopt;
+}
+
+inline std::optional<DaliLongAddress_t> DaliDeviceRegistry::getLongAddress(const DaliInternalAddr internalAddr,
+                                                                           const bool isInput) const {
+    size_t index = (internalAddr.bus() * 64) + internalAddr.shortAddr();
+    if (isInput)
+        index += (BUS_COUNT * 64);
+
+    std::lock_guard<std::mutex> lock(m_registryMutex);
+    if (index < m_internalToLongMap.size()) {
+        const DaliLongAddress_t addr = m_internalToLongMap[index];
+        if (addr != InvalidLongAddr)
+            return addr;
+    }
+    return std::nullopt;
+}
+
+inline std::optional<uint8_t> DaliDeviceRegistry::getLastLevel(const DaliLongAddress_t longAddr) const {
+    std::lock_guard<std::mutex> lock(m_registryMutex);
+    for (const auto& dev : m_devices) {
+        if (getIdentity(dev).longAddress == longAddr) {
+            if (const auto* gear = etl::get_if<ControlGear>(&dev)) {
+                return gear->lastLevel;
+            }
+            break;
+        }
+    }
+    return std::nullopt;
+}
+
+inline void DaliDeviceRegistry::setDeviceStateCallback(DeviceStateCallback cb, void* ctx) noexcept {
+    m_deviceStateCb = cb;
+    m_deviceStateCtx = ctx;
+}
+
+inline void DaliDeviceRegistry::setGroupStateCallback(GroupStateCallback cb, void* ctx) noexcept {
+    m_groupStateCb = cb;
+    m_groupStateCtx = ctx;
+}
+
+inline void DaliDeviceRegistry::setInputEventCallback(InputEventCallback cb, void* ctx) noexcept {
+    m_inputEventCb = cb;
+    m_inputEventCtx = ctx;
+}
+
+} // namespace daliMQTT
+
+#endif // DALIMQTT_DALIDEVICEREGISTRY_ICC

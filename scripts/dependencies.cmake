@@ -20,11 +20,10 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(arduinojson)
 if(NOT TARGET ArduinoJson)
-    add_library(arduinojson INTERFACE)
-    target_include_directories(arduinojson SYSTEM INTERFACE
+    add_library(ArduinoJson INTERFACE IMPORTED GLOBAL)
+    target_include_directories(ArduinoJson SYSTEM INTERFACE
             "${arduinojson_SOURCE_DIR}/src"
     )
-    add_library(ArduinoJson ALIAS arduinojson)
 endif()
 
 if(Dependencies_Platform_HostTests)

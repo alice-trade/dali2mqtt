@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-# Copyright (c) 2026 Alice-Trade Inc.
-# DaliMQTT Build & Management Script
+#
+# // Copyright (c) 2026 Alice-Trade Inc.
+# // SPDX-License-Identifier: GPL-3.0-or-later
+#
 
 set -e
 
 TARGET=""
-BUILD_TYPE="Release"
+BUILD_TYPE=""
 COMMAND="app"
 BUILD_TESTS="ON"
 OFFLINE_DIR=""
@@ -25,7 +27,7 @@ function print_help() {
     echo "  flash         Build and flash the firmware to the device"
     echo "  monitor       Open the ESP-IDF serial monitor"
     echo "  menuconfig    Open the Kconfig menu"
-    echo "  test-flash      Build and flash the test firmware"
+    echo "  test-flash    Build and flash the test firmware"
     echo "  unit-test     Run embedded unit tests"
     echo "  integration   Run integration Pytest suite"
     echo "  clean         Remove the build directory for the selected target"
@@ -33,7 +35,8 @@ function print_help() {
     echo "Options:"
     echo "  -t, --target <target>    ESP32 target (esp32s3, esp32c6, esp32c3, esp32s2)."
     echo "                           If omitted, an interactive menu will appear."
-    echo "  -b, --build-type <type>  CMake build type (Debug/Release). Default: Release"
+    echo "  -b, --build-type <type>  CMake build type (Debug/Release)."
+    echo "                           If omitted, an interactive menu will appear."
     echo "  --offline <dir>          Use offline assets directory for dependencies"
     echo "  -h, --help               Show this help message"
     echo ""
@@ -102,16 +105,42 @@ if [ -z "$TARGET" ]; then
                     ;;
             esac
         done
-
-        if [ -z "$TARGET" ]; then
-            echo -e "\n${RED}Aborted.${NC}"
-            exit 1
-        fi
     else
         echo -e "${RED}FATAL ERROR: Target platform is not specified and the shell is not interactive.${NC}"
         echo "You must specify the target explicitly using: -t <target> (e.g., ./build.sh app -t esp32s3)"
         exit 1
     fi
+fi
+
+if [ -z "$BUILD_TYPE" ]; then
+    if [ -t 0 ]; then
+        echo -e "\n${YELLOW}Build Type was not specified.${NC}"
+        echo "Please select a build type:"
+
+        btypes=("Release" "Debug")
+
+        PS3="Enter a number: "
+        select opt in "${btypes[@]}"; do
+            case $opt in
+                "Release"|"Debug")
+                    BUILD_TYPE="$opt"
+                    echo -e "Selected Build Type: ${GREEN}$BUILD_TYPE${NC}"
+                    break
+                    ;;
+                *)
+                    echo -e "${RED}Invalid option. Please try again.${NC}"
+                    ;;
+            esac
+        done
+    else
+        echo -e "${YELLOW}Non-interactive shell. Defaulting to Release build.${NC}"
+        BUILD_TYPE="Release"
+    fi
+fi
+
+if [ -z "$TARGET" ] || [ -z "$BUILD_TYPE" ]; then
+    echo -e "\n${RED}Aborted: Missing target or build type.${NC}"
+    exit 1
 fi
 
 BUILD_DIR="build_${TARGET}_${BUILD_TYPE,,}"
@@ -165,11 +194,11 @@ CMAKE_ARGS=(
 
 if [ -n "$OFFLINE_DIR" ]; then
     echo -e "${YELLOW}Fetching offline flags from $OFFLINE_DIR...${NC}"
-    if [ ! -f "offline_builder.py" ]; then
-        echo -e "${RED}Error: offline_builder.py not found.${NC}"
+    if [ ! -f "offline-fetch" ]; then
+        echo -e "${RED}Error: offline-fetch tool not found.${NC}"
         exit 1
     fi
-    OFFLINE_FLAGS=$(python3 offline_builder.py get-args "$OFFLINE_DIR" | grep "\-DFETCHCONTENT" || true)
+    OFFLINE_FLAGS=$(python3 offline-fetch get-args "$OFFLINE_DIR" | grep "\-DFETCHCONTENT" || true)
     if [ -n "$OFFLINE_FLAGS" ]; then
         read -r -a OFFLINE_ARGS <<< "$OFFLINE_FLAGS"
         CMAKE_ARGS+=("${OFFLINE_ARGS[@]}")
@@ -179,13 +208,12 @@ if [ -n "$OFFLINE_DIR" ]; then
     fi
 fi
 
-# --- Execution ---
-echo -e "${BLUE}=================================================${NC}"
+echo -e "\n${BLUE}=================================================${NC}"
 echo -e " Target     : ${GREEN}$TARGET${NC}"
 echo -e " Build Type : ${GREEN}$BUILD_TYPE${NC}"
 echo -e " Testing    : ${GREEN}$BUILD_TESTS${NC}"
 echo -e " Build Dir  : ${GREEN}$BUILD_DIR${NC}"
-echo -e "${BLUE}=================================================${NC}"
+echo -e "${BLUE}=================================================${NC}\n"
 
 if [ ! -f "$BUILD_DIR/CMakeCache.txt" ]; then
     echo -e "${YELLOW}First-time configuration for $TARGET ($BUILD_TYPE)...${NC}"
@@ -214,9 +242,9 @@ case $COMMAND in
         cmake --build "$BUILD_DIR" --target pytest-unit
         ;;
     integration)
-          echo -e "${YELLOW}Running integration Pytest suite...${NC}"
-          cmake --build "$BUILD_DIR" --target pytest-integration
-          ;;
+        echo -e "${YELLOW}Running integration Pytest suite...${NC}"
+        cmake --build "$BUILD_DIR" --target pytest-integration
+        ;;
 esac
 
-echo -e "${GREEN}Done!${NC}"
+echo -e "\n${GREEN}Done${NC}"

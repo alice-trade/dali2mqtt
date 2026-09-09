@@ -4,19 +4,20 @@
 #ifndef DALIMQTT_DALIDEVICEIDENTITY_HXX
 #define DALIMQTT_DALIDEVICEIDENTITY_HXX
 
-#include <dali/DaliInternalAddr.hxx>
+#include "dali/DaliAddress.hxx"
+#include <etl/string.h>
 
 namespace daliMQTT {
-    using DaliLongAddress_t = uint32_t;
-    inline constexpr DaliLongAddress_t InvalidLongAddr = 0xFFFFFFFF;
 
-    struct DeviceIdentity {
-        DaliLongAddress_t long_address{0};          // 24-bit DALI Long (random) Address
-        DaliInternalAddr internal_address{};        // Internal addr
-        etl::string<16> gtin;                       // GTIN
-        bool available{false};                      // Runtime Availability flag
+struct DeviceIdentity {
+    DaliLongAddress_t longAddress{InvalidLongAddr};
+    DaliInternalAddr internalAddress{};
+    etl::string<16> gtin{};
+    bool available{false};
 
-        [[nodiscard]] bool is_assigned() const { return (internal_address).shortAddr() < 64; }
-    };
-}
-#endif //DALIMQTT_DALIDEVICEIDENTITY_HXX
+    [[nodiscard]] constexpr bool isAssigned() const noexcept { return internalAddress.isAssigned(); }
+};
+
+} // namespace daliMQTT
+
+#endif // DALIMQTT_DALIDEVICEIDENTITY_HXX

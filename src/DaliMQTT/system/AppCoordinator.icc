@@ -1,0 +1,44 @@
+// Copyright (c) 2026 Alice-Trade Inc.
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#ifndef DALIMQTT_APPCOORDINATOR_ICC
+#define DALIMQTT_APPCOORDINATOR_ICC
+
+namespace daliMQTT {
+
+inline AppState AppCoordinator::getState() const noexcept {
+    return m_state.load(std::memory_order_relaxed);
+}
+
+inline void AppCoordinator::handleSystemEvent(const SystemEventType event) {
+    switch (event) {
+    case SystemEventType::NetworkConnected:
+        handleNetworkConnected();
+        break;
+    case SystemEventType::NetworkDisconnected:
+        handleNetworkDisconnected();
+        break;
+    case SystemEventType::FactoryResetRequested:
+        factoryReset();
+        break;
+    default:
+        break;
+    }
+}
+
+inline void AppCoordinator::eventLoop(const uint32_t waitMs) {
+    SystemEventType event;
+    if (xQueueReceive(m_deps.systemQueue, &event, pdMS_TO_TICKS(waitMs)) == pdTRUE) {
+        handleSystemEvent(event);
+    }
+
+    const int64_t nowSec = esp_timer_get_time() / 1'000'000;
+    if (nowSec != m_lastTickSec) {
+        m_lastTickSec = nowSec;
+        m_deps.scheduler.tick(nowSec);
+    }
+}
+
+} // namespace daliMQTT
+
+#endif // DALIMQTT_APPCOORDINATOR_ICC

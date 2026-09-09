@@ -1,0 +1,21 @@
+// Copyright (c) 2026 Alice-Trade Inc.
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#ifndef DALIMQTT_CONFIGSTORE_ICC
+#define DALIMQTT_CONFIGSTORE_ICC
+
+namespace daliMQTT {
+
+inline std::shared_ptr<const ConfigStructure> ConfigStore::get() const noexcept {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    return m_config;
+}
+
+inline bool ConfigStore::isConfigured() const noexcept {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    return m_config->isFullyConfigured();
+}
+
+} // namespace daliMQTT
+
+#endif // DALIMQTT_CONFIGSTORE_ICC

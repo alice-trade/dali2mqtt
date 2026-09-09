@@ -14,12 +14,12 @@ if(BUILD_TESTING)
 
         ExternalProject_Add(
                 host_unit_tests_build
-                SOURCE_DIR ${CMAKE_SOURCE_DIR}/host
+                SOURCE_DIR ${CMAKE_SOURCE_DIR}/tests/host
                 BINARY_DIR ${HOST_TESTS_BINARY_DIR}
 
                 CMAKE_ARGS
-                -DCMAKE_C_COMPILER=${HOST_C_COMPILER}
-                -DCMAKE_CXX_COMPILER=${HOST_CXX_COMPILER}
+                -D CMAKE_C_COMPILER=${HOST_C_COMPILER}
+                -D CMAKE_CXX_COMPILER=${HOST_CXX_COMPILER}
                 -DCMAKE_TOOLCHAIN_FILE=
                 -DCMAKE_BUILD_TYPE=Debug
                 -DPROJDIR=${PROJDIR}
@@ -86,10 +86,19 @@ if(BUILD_TESTING)
     find_program(PYTEST_EXE NAMES pytest pytest.exe)
 
     if(PYTEST_EXE)
+        set(PYTEST_PORT_ARG "")
+        if(EXISTS "/dev/ttyACM0")
+            set(PYTEST_PORT_ARG "--port;/dev/ttyACM0")
+        elseif(EXISTS "/dev/ttyUSB0")
+            set(PYTEST_PORT_ARG "--port;/dev/ttyUSB0")
+        endif()
+
         add_custom_target(pytest-unit
+                COMMAND ${CMAKE_MAKE_PROGRAM} -C ${TESTS_BINARY_DIR} flash
                 COMMAND ${PYTEST_EXE} ${CMAKE_SOURCE_DIR}/tests/test_embedded.py
                 --target ${TARGET}
                 --app-path ${TESTS_BINARY_DIR}
+                ${PYTEST_PORT_ARG}
                 DEPENDS test_firmware_build
                 WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
                 COMMENT "Running Embedded Unit Tests via Pytest Embedded..."
@@ -97,9 +106,11 @@ if(BUILD_TESTING)
         )
 
         add_custom_target(pytest-integration
+                COMMAND ${CMAKE_MAKE_PROGRAM} flash
                 COMMAND ${PYTEST_EXE} ${CMAKE_SOURCE_DIR}/integration/test_main_app.py
                 --target ${TARGET}
                 --app-path ${CMAKE_BINARY_DIR}
+                ${PYTEST_PORT_ARG}
                 DEPENDS ${app} webui
                 WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
                 COMMENT "Running Firmware Integration Tests via Pytest Embedded..."

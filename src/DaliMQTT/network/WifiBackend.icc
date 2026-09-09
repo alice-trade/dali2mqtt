@@ -1,0 +1,19 @@
+// Copyright (c) 2026 Alice-Trade Inc.
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#ifndef DALIMQTT_WIFIBACKEND_ICC
+#define DALIMQTT_WIFIBACKEND_ICC
+
+namespace daliMQTT {
+
+inline NetworkStatus WifiBackend::getStatus() const noexcept {
+    return m_status.load(std::memory_order_relaxed);
+}
+
+inline void WifiBackend::setEventQueue(QueueHandle_t queue) noexcept {
+    m_eventQueue = queue;
+}
+
+} // namespace daliMQTT
+
+#endif // DALIMQTT_WIFIBACKEND_ICC

@@ -1,0 +1,191 @@
+// Copyright (c) 2026 Alice-Trade Inc.
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#ifndef DALIMQTT_RMTDALITRANSCEIVER_ICC
+#define DALIMQTT_RMTDALITRANSCEIVER_ICC
+
+namespace daliMQTT {
+
+struct RmtDaliTransceiver::Timing {
+    static constexpr uint32_t T_TE_US = 417;
+
+    static constexpr uint32_t TE_MIN_US = 280;
+    static constexpr uint32_t TE_MAX_US = 560;
+    static constexpr uint32_t TE2_MIN_US = 680;
+    static constexpr uint32_t TE2_MAX_US = 1050;
+
+    static constexpr uint32_t RX_NOISE_FILTER_NS = 1'500;
+    static constexpr uint32_t RX_IDLE_THRESH_NS = 1'250'000;
+
+    static constexpr int64_t FWD_TO_FWD_DELAY_US = 9200;
+    static constexpr int64_t TX_TIMEOUT_US = 35'000;
+
+    static constexpr uint8_t LEVEL_IDLE = 0;
+    static constexpr uint8_t LEVEL_ACTIVE = 1;
+};
+
+inline bool RmtDaliTransceiver::isInitialized() const noexcept {
+    return m_initialized.load(std::memory_order_relaxed);
+}
+
+inline void RmtDaliTransceiver::setFrameCallback(PhyFrameCallback cb, void* ctx) noexcept {
+    m_frameCb = cb;
+    m_frameCbCtx = ctx;
+}
+
+constexpr rmt_symbol_word_t RmtDaliTransceiver::makeSymbol(const uint32_t dur0, const uint8_t lvl0, const uint32_t dur1,
+                                                           const uint8_t lvl1) noexcept {
+    rmt_symbol_word_t sym{};
+    sym.duration0 = dur0;
+    sym.level0 = lvl0;
+    sym.duration1 = dur1;
+    sym.level1 = lvl1;
+    return sym;
+}
+
+inline size_t RmtDaliTransceiver::encodeManchester(const uint32_t data, const uint8_t bits) noexcept {
+    size_t symIdx = 0;
+
+    // Start bit: Active (Low on bus) -> Idle (High on bus)
+    m_txBuffer[symIdx++] = makeSymbol(Timing::T_TE_US, Timing::LEVEL_ACTIVE, Timing::T_TE_US, Timing::LEVEL_IDLE);
+
+    for (int i = bits - 1; i >= 0; --i) {
+        if ((data >> i) & 1) {
+            // Logical 1: Active -> Idle
+            m_txBuffer[symIdx++] =
+                makeSymbol(Timing::T_TE_US, Timing::LEVEL_ACTIVE, Timing::T_TE_US, Timing::LEVEL_IDLE);
+        } else {
+            // Logical 0: Idle -> Active
+            m_txBuffer[symIdx++] =
+                makeSymbol(Timing::T_TE_US, Timing::LEVEL_IDLE, Timing::T_TE_US, Timing::LEVEL_ACTIVE);
+        }
+    }
+
+    // Stop condition: Idle for 4 Te
+    m_txBuffer[symIdx++] = makeSymbol(Timing::T_TE_US * 4, Timing::LEVEL_IDLE, 0, 0);
+
+    return symIdx;
+}
+
+inline void RmtDaliTransceiver::decodeSymbols(const rmt_symbol_word_t* symbols, const size_t count) noexcept {
+    if (!symbols || count == 0)
+        return;
+
+    m_lastBusActivityUs = esp_timer_get_time();
+
+    static constexpr size_t MAX_HALF_BITS = 64;
+    uint8_t halfBits[MAX_HALF_BITS];
+    size_t hbCount = 0;
+    bool stopConditionFound = false;
+
+    for (size_t i = 0; i < count && hbCount < MAX_HALF_BITS && !stopConditionFound; ++i) {
+        const uint32_t durs[2] = {symbols[i].duration0, symbols[i].duration1};
+        const uint8_t lvls[2] = {static_cast<uint8_t>(symbols[i].level0), static_cast<uint8_t>(symbols[i].level1)};
+
+        for (int p = 0; p < 2; ++p) {
+            if (durs[p] == 0)
+                continue;
+
+            if (durs[p] > Timing::TE2_MAX_US) {
+                if (lvls[p] == Timing::LEVEL_IDLE) {
+                    if (hbCount % 2 == 1 && hbCount < MAX_HALF_BITS) {
+                        halfBits[hbCount++] = Timing::LEVEL_IDLE;
+                    }
+                    stopConditionFound = true;
+                    break;
+                }
+                m_txState.active = false;
+                dispatchFrame(DaliFrameType::NoiseCorrupted, 0, 0);
+                return;
+            }
+
+            if (durs[p] >= Timing::TE_MIN_US && durs[p] <= Timing::TE_MAX_US) {
+                halfBits[hbCount++] = lvls[p];
+            } else if (durs[p] >= Timing::TE2_MIN_US && durs[p] <= Timing::TE2_MAX_US) {
+                if (hbCount + 1 >= MAX_HALF_BITS) {
+                    stopConditionFound = true;
+                    break;
+                }
+                halfBits[hbCount++] = lvls[p];
+                halfBits[hbCount++] = lvls[p];
+            } else {
+                m_txState.active = false;
+                dispatchFrame(DaliFrameType::NoiseCorrupted, 0, 0);
+                return;
+            }
+        }
+    }
+
+    if (hbCount < 4 || halfBits[0] != Timing::LEVEL_ACTIVE || halfBits[1] != Timing::LEVEL_IDLE) {
+        m_txState.active = false;
+        dispatchFrame(DaliFrameType::NoiseCorrupted, 0, 0);
+        return;
+    }
+
+    uint32_t rxData = 0;
+    uint8_t decodedBits = 0;
+
+    for (size_t i = 2; i + 1 < hbCount; i += 2) {
+        const uint8_t h0 = halfBits[i];
+        const uint8_t h1 = halfBits[i + 1];
+
+        if (h0 == Timing::LEVEL_IDLE && h1 == Timing::LEVEL_ACTIVE) {
+            // IDLE -> ACTIVE = 0
+            rxData <<= 1;
+            decodedBits++;
+        } else if (h0 == Timing::LEVEL_ACTIVE && h1 == Timing::LEVEL_IDLE) {
+            // ACTIVE -> IDLE = 1
+            rxData = (rxData << 1) | 1;
+            decodedBits++;
+        } else {
+            break;
+        }
+    }
+
+    if (m_txState.active) {
+        if (m_txState.bits == decodedBits && m_txState.data == rxData) {
+            m_txState.active = false;
+            dispatchFrame(DaliFrameType::TxEchoSuccess, rxData, decodedBits);
+            return;
+        }
+        if (decodedBits == 8 && m_txState.bits != 8) {
+            m_txState.active = false;
+            dispatchFrame(DaliFrameType::Backward8, rxData, 8);
+            return;
+        }
+
+        m_txState.active = false;
+        dispatchFrame(DaliFrameType::Collision, rxData, decodedBits);
+        return;
+    }
+
+    if (decodedBits == 8) {
+        dispatchFrame(DaliFrameType::Backward8, rxData, 8);
+    } else if (decodedBits == 16) {
+        dispatchFrame(DaliFrameType::Forward16, rxData, 16);
+    } else if (decodedBits == 24) {
+        dispatchFrame(DaliFrameType::Forward24, rxData, 24);
+    } else {
+        dispatchFrame(DaliFrameType::NoiseCorrupted, rxData, decodedBits);
+    }
+}
+
+inline void RmtDaliTransceiver::dispatchFrame(const DaliFrameType type, const uint32_t data,
+                                              const uint8_t bits) const noexcept {
+    if (m_frameCb) {
+        const DaliRawFrame frame{.data = data, .bits = bits, .type = type, .timestampUs = esp_timer_get_time()};
+        m_frameCb(frame, m_frameCbCtx);
+    }
+}
+
+inline DaliBusPhysicalState RmtDaliTransceiver::getPhysicalBusState() const noexcept {
+    if (m_config.rxPin == GPIO_NUM_NC) {
+        return DaliBusPhysicalState::NormalIdle;
+    }
+    return m_isBusStuckActive.load(std::memory_order_relaxed) ? DaliBusPhysicalState::StuckActive
+                                                              : DaliBusPhysicalState::NormalIdle;
+}
+
+} // namespace daliMQTT
+
+#endif // DALIMQTT_RMTDALITRANSCEIVER_ICC

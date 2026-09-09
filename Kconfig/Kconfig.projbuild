@@ -1,5 +1,78 @@
 menu "DALI MQTT Bridge Settings"
+    menu "Network Interface Selection"
 
+        choice DALI2MQTT_NETWORK_TYPE
+            prompt "Network Interface"
+            default DALI2MQTT_NET_WIFI
+            help
+                Select physical network transport for MQTT and WebUI.
+
+            config DALI2MQTT_NET_WIFI
+                bool "Wi-Fi (STA / Provisioning AP)"
+
+            config DALI2MQTT_NET_ETHERNET
+                bool "Ethernet (LAN8720 / W5500)"
+        endchoice
+
+        menu "Ethernet Hardware Configuration"
+            depends on DALI2MQTT_NET_ETHERNET
+
+            choice DALI2MQTT_ETH_PHY_TYPE
+                prompt "Ethernet Controller / PHY"
+                default DALI2MQTT_ETH_TYPE_SPI_W5500
+                help
+                    Choose your Ethernet PHY. For ESP32-S3/C3/C6 use SPI (W5500).
+
+                config DALI2MQTT_ETH_TYPE_SPI_W5500
+                    bool "W5500 (SPI) - Recommended for S3/C3/C6/Classic"
+
+                config DALI2MQTT_ETH_TYPE_INTERNAL_RMII
+                    bool "Internal EMAC (RMII: LAN8720 / IP101) - ESP32 Classic Only"
+                    depends on IDF_TARGET_ESP32
+            endchoice
+
+            menu "SPI Ethernet Pins"
+                depends on DALI2MQTT_ETH_TYPE_SPI_W5500
+
+                config DALI2MQTT_ETH_SPI_HOST
+                    int "SPI Host ID (1=SPI2_HOST)"
+                    default 1
+                    range 1 2
+
+                config DALI2MQTT_ETH_SPI_SCK_PIN
+                    int "SPI SCK GPIO"
+                    default 12
+
+                config DALI2MQTT_ETH_SPI_MOSI_PIN
+                    int "SPI MOSI GPIO"
+                    default 11
+
+                config DALI2MQTT_ETH_SPI_MISO_PIN
+                    int "SPI MISO GPIO"
+                    default 13
+
+                config DALI2MQTT_ETH_SPI_CS_PIN
+                    int "SPI CS GPIO"
+                    default 10
+
+                config DALI2MQTT_ETH_SPI_INT_PIN
+                    int "Interrupt (INT) GPIO"
+                    default 9
+
+                config DALI2MQTT_ETH_SPI_RST_PIN
+                    int "Reset (RST) GPIO (-1 if unused)"
+                    default 14
+
+                config DALI2MQTT_ETH_SPI_CLOCK_MHZ
+                    int "SPI Clock Speed (MHz)"
+                    default 25
+                    range 10 33
+            endmenu
+
+        endmenu
+
+    endmenu
+    
     menu "DALI Configuration"
     comment "Protocol Configuration"
 

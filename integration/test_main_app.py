@@ -1,3 +1,7 @@
+#  // Copyright (c) 2026 Alice-Trade Inc.
+#  // SPDX-License-Identifier: GPL-3.0-or-later
+#
+
 import pytest
 from pytest_embedded import Dut
 

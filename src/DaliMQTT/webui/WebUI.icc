@@ -1,0 +1,15 @@
+// Copyright (c) 2026 Alice-Trade Inc.
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#ifndef DALIMQTT_WEBUI_ICC
+#define DALIMQTT_WEBUI_ICC
+
+namespace daliMQTT {
+
+inline bool WebUI::isRunning() const noexcept {
+    return m_serverHandle != nullptr;
+}
+
+} // namespace daliMQTT
+
+#endif // DALIMQTT_WEBUI_ICC

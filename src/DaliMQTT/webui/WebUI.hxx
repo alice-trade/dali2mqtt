@@ -3,56 +3,39 @@
 
 #ifndef DALIMQTT_WEBUI_HXX
 #define DALIMQTT_WEBUI_HXX
+
+#include "webui/ApiContext.hxx"
+#include <esp_err.h>
 #include <esp_http_server.h>
 
-namespace daliMQTT
-{
-    class WebUI {
-    public:
-        WebUI(const WebUI&) = delete;
-        WebUI& operator=(const WebUI&) = delete;
+namespace daliMQTT {
 
-        static WebUI& Instance() {
-            static WebUI instance;
-            return instance;
-        }
+struct Application;
 
-        esp_err_t start();
-        [[nodiscard]] esp_err_t stop() const;
+class WebUI {
+  public:
+    explicit WebUI(ApiContext& apiCtx);
+    ~WebUI();
 
-    private:
-        WebUI() = default;
+    WebUI(const WebUI&) = delete;
+    WebUI& operator=(const WebUI&) = delete;
 
-        // API handlers
-        struct api
-        {
-            static esp_err_t GetConfigHandler(httpd_req_t *req);
-            static esp_err_t SetConfigHandler(httpd_req_t *req);
-            static esp_err_t GetInfoHandler(httpd_req_t *req);
-            static esp_err_t DaliGetDevicesHandler(httpd_req_t *req);
-            static esp_err_t DaliScanHandler(httpd_req_t *req);
-            static esp_err_t DaliGetStatusHandler(httpd_req_t *req);
-            static esp_err_t DaliInitializeHandler(httpd_req_t *req);
-            static esp_err_t DaliGetNamesHandler(httpd_req_t *req);
-            static esp_err_t DaliSetNamesHandler(httpd_req_t *req);
-            static esp_err_t DaliGetGroupsHandler(httpd_req_t *req);
-            static esp_err_t DaliSetGroupsHandler(httpd_req_t *req);
-            static esp_err_t DaliRefreshGroupsHandler(httpd_req_t *req);
-            static esp_err_t DaliSetSceneHandler(httpd_req_t *req);
-            static esp_err_t DaliGetSceneHandler(httpd_req_t *req);
-            static esp_err_t OtaUpdateHandler(httpd_req_t *req);
-        };
+    esp_err_t start();
+    esp_err_t stop();
 
-        // File handler
-        static esp_err_t staticFileGetHandler(httpd_req_t *req);
+    [[nodiscard]] inline bool isRunning() const noexcept;
 
-        // Helpers
+  private:
+    static esp_err_t staticFileGetHandler(httpd_req_t* req);
+    static esp_err_t checkAuthentication(httpd_req_t* req, const ApiContext* ctx);
+    static void setContentTypeByFilename(httpd_req_t* req, const char* filepath);
 
-        static esp_err_t checkAuth(httpd_req_t *req);
-        static void set_content_type_from_file(httpd_req_t *req, const char *filepath);
+    ApiContext& m_apiCtx;
+    httpd_handle_t m_serverHandle{nullptr};
+};
 
-        httpd_handle_t server_handle{nullptr};
-    };
-} // daliMQTT
+} // namespace daliMQTT
 
-#endif //DALIMQTT_WEBUI_HXX
+#include "webui/WebUI.icc"
+
+#endif // DALIMQTT_WEBUI_HXX

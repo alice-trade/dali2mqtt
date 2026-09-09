@@ -1,0 +1,32 @@
+// Copyright (c) 2026 Alice-Trade Inc.
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#ifndef DALIMQTT_SYSTEMSCHEDULER_ICC
+#define DALIMQTT_SYSTEMSCHEDULER_ICC
+
+namespace daliMQTT {
+
+inline void SystemScheduler::setTelemetryCallback(ScheduledActionCallback cb, void* ctx,
+                                                  const uint32_t intervalSec) noexcept {
+    m_telemetryCb = cb;
+    m_telemetryCtx = ctx;
+    m_telemetryIntervalSec = intervalSec;
+}
+
+inline void SystemScheduler::setBusHealthCallback(ScheduledActionCallback cb, void* ctx,
+                                                  const uint32_t intervalSec) noexcept {
+    m_busHealthCb = cb;
+    m_busHealthCtx = ctx;
+    m_busHealthIntervalSec = intervalSec;
+}
+
+inline void SystemScheduler::setOtaCheckCallback(ScheduledActionCallback cb, void* ctx,
+                                                 const uint32_t intervalSec) noexcept {
+    m_otaCheckCb = cb;
+    m_otaCheckCtx = ctx;
+    m_otaIntervalSec = intervalSec;
+}
+
+} // namespace daliMQTT
+
+#endif // DALIMQTT_SYSTEMSCHEDULER_ICC

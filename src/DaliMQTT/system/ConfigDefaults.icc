@@ -1,0 +1,39 @@
+#ifndef DALIMQTT_CONFIGDEFAULTS_ICC
+#define DALIMQTT_CONFIGDEFAULTS_ICC
+
+#include "system/ConfigStructure.hxx"
+
+namespace daliMQTT {
+
+inline ConfigStructure makeDefaultConfig() {
+    ConfigStructure cfg{};
+
+    cfg.mqttBaseTopic = CONFIG_DALI2MQTT_MQTT_BASE_TOPIC;
+    cfg.httpDomain = CONFIG_DALI2MQTT_WEBUI_DEFAULT_MDNS_DOMAIN;
+    cfg.httpUser = CONFIG_DALI2MQTT_WEBUI_DEFAULT_USER;
+    cfg.httpPass = CONFIG_DALI2MQTT_WEBUI_DEFAULT_PASS;
+
+    cfg.buses[0] = BusHardwareConfig{.enabled = true,
+                                     .rxPin = static_cast<int8_t>(CONFIG_DALI2MQTT_DALI_RX_PIN),
+                                     .txPin = static_cast<int8_t>(CONFIG_DALI2MQTT_DALI_TX_PIN)};
+
+    cfg.daliPollIntervalMs = CONFIG_DALI2MQTT_DALI_DEFAULT_POLL_INTERVAL_MS;
+    cfg.hassDiscoveryEnabled = false;
+    cfg.otaCheckIntervalDays = 3;
+    cfg.telemetryIntervalSec = 60;
+
+    /*
+    cfg.hassDiscoveryEnabled = CONFIG_DALI2MQTT_MQTT_HOMEASSISTANT_DISCOVERY_ENABLED;
+    */
+
+#ifdef CONFIG_DALI2MQTT_SYSLOG_ENABLED_BY_DEFAULT
+    cfg.syslogEnabled = true;
+    cfg.syslogServer = CONFIG_DALI2MQTT_SYSLOG_DEFAULT_SERVER;
+#endif
+
+    return cfg;
+}
+
+} // namespace daliMQTT
+
+#endif // DALIMQTT_CONFIGDEFAULTS_ICC

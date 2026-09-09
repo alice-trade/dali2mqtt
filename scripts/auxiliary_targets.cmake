@@ -20,7 +20,6 @@ if(CPPCHECK_EXE)
             "-DESP_LOGW(...)"
             "-DESP_LOGD(...)"
             "-DESP_LOGV(...)"
-            "-Dconstexpr=const"
             "-DIRAM_ATTR="
             ${CPPCHECK_SUPPRESSIONS}
     )

@@ -2,6 +2,17 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 add_library(DaliMQTT-Core STATIC)
 
+target_compile_options(DaliMQTT-Core PRIVATE
+        -Wall
+        -Wextra
+        -Wshadow
+        -Wnon-virtual-dtor
+        -Wunused
+        -Woverloaded-virtual
+        -Wformat=2
+        -Wno-missing-field-initializers
+)
+
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/pch.hxx")
     target_precompile_headers(DaliMQTT-Core PUBLIC pch.hxx)
 endif()
@@ -20,14 +31,14 @@ set_source_files_properties(
 )
 target_include_directories(DaliMQTT-Core PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
 )
 
 add_subdirectory(system)
-add_subdirectory(wifi)
 add_subdirectory(dali)
 add_subdirectory(mqtt)
 add_subdirectory(webui)
+add_subdirectory(network)
+
 
 target_link_libraries(DaliMQTT-Core PUBLIC
         idf::nvs_flash
@@ -44,7 +55,6 @@ target_link_libraries(DaliMQTT-Core PUBLIC
         idf::esp-littlefs-src
         idf::esp-mqtt-src
         idf::mdns
-        idf::esp_wifi
         idf::cxx
         idf::esp_http_server
         idf::esp_https_ota

@@ -3,11 +3,16 @@
 
 #ifndef DALIMQTT_DALIINPUTDEVICE_HXX
 #define DALIMQTT_DALIINPUTDEVICE_HXX
+
 #include "dali/DaliDeviceIdentity.hxx"
+#include <cstdint>
 
 namespace daliMQTT {
-    struct InputDevice : DeviceIdentity {
-        uint8_t instance_byte{0};
-    };
-}
-#endif //DALIMQTT_DALIINPUTDEVICE_HXX
+
+struct InputDevice : DeviceIdentity {
+    uint8_t instanceByte{0};
+};
+
+} // namespace daliMQTT
+
+#endif // DALIMQTT_DALIINPUTDEVICE_HXX

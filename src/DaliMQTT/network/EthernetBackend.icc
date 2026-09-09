@@ -1,0 +1,15 @@
+#ifndef DALIMQTT_ETHERNETBACKEND_ICC
+#define DALIMQTT_ETHERNETBACKEND_ICC
+
+namespace daliMQTT {
+
+inline NetworkStatus EthernetBackend::getStatus() const noexcept {
+    return m_status.load(std::memory_order_relaxed);
+}
+inline void setEventQueue(QueueHandle_t queue) noexcept {
+    m_eventQueue = queue;
+}
+
+} // namespace daliMQTT
+
+#endif // DALIMQTT_ETHERNETBACKEND_ICC

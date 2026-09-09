@@ -1,0 +1,56 @@
+// Copyright (c) 2026 Alice-Trade Inc.
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#ifndef DALIMQTT_DALISERVICE_ICC
+#define DALIMQTT_DALISERVICE_ICC
+
+#include <esp_check.h>
+#include <esp_log.h>
+
+namespace daliMQTT {
+
+inline DaliService::DaliService() : m_phy(), m_bus(m_phy, 0), m_registry(m_bus) {}
+
+inline esp_err_t DaliService::init(const BusHardwareConfig& cfg) {
+    if (!cfg.enabled) {
+        ESP_LOGI("DaliService", "DALI Bus 0 is disabled in configuration.");
+        return ESP_OK;
+    }
+
+    ESP_LOGI("DaliService", "Initializing DALI Subsystem on RX: %d, TX: %d", cfg.rxPin, cfg.txPin);
+
+    const RmtTransceiverConfig phyCfg{
+        .rxPin = static_cast<gpio_num_t>(cfg.rxPin),
+        .txPin = static_cast<gpio_num_t>(cfg.txPin),
+        .invertRx = true,
+        .invertTx = false
+    };
+
+    ESP_RETURN_ON_ERROR(m_phy.init(phyCfg), "DaliService", "PHY init failed");
+    ESP_RETURN_ON_ERROR(m_bus.start(), "DaliService", "Bus Engine start failed");
+    ESP_RETURN_ON_ERROR(m_registry.init(), "DaliService", "Device Registry init failed");
+
+    m_registry.start();
+    ESP_LOGI("DaliService", "DALI Subsystem successfully started");
+    return ESP_OK;
+}
+
+[[nodiscard]] inline BusHealth DaliService::checkHealth() const {
+    return m_bus.checkHealth();
+}
+
+[[nodiscard]] inline DaliDeviceRegistry& DaliService::Registry() {
+    return m_registry;
+}
+
+[[nodiscard]] inline DaliBusEngine& DaliService::Bus() {
+    return m_bus;
+}
+
+[[nodiscard]] inline RmtDaliTransceiver& DaliService::Driver() {
+    return m_phy;
+}
+
+} // namespace daliMQTT
+
+#endif // DALIMQTT_DALISERVICE_ICC

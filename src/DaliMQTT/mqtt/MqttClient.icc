@@ -1,0 +1,34 @@
+// Copyright (c) 2026 Alice-Trade Inc.
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#ifndef DALIMQTT_MQTTCLIENT_ICC
+#define DALIMQTT_MQTTCLIENT_ICC
+
+namespace daliMQTT {
+
+inline MqttStatus MqttClient::getStatus() const noexcept {
+    return m_status.load(std::memory_order_relaxed);
+}
+
+inline bool MqttClient::isConnected() const noexcept {
+    return m_status.load(std::memory_order_relaxed) == MqttStatus::Connected;
+}
+
+inline void MqttClient::setConnectedCallback(MqttConnectedCallback cb, void* ctx) noexcept {
+    m_connectedCb = cb;
+    m_connectedCtx = ctx;
+}
+
+inline void MqttClient::setDisconnectedCallback(MqttDisconnectedCallback cb, void* ctx) noexcept {
+    m_disconnectedCb = cb;
+    m_disconnectedCtx = ctx;
+}
+
+inline void MqttClient::setDataCallback(MqttDataCallback cb, void* ctx) noexcept {
+    m_dataCb = cb;
+    m_dataCtx = ctx;
+}
+
+} // namespace daliMQTT
+
+#endif // DALIMQTT_MQTTCLIENT_ICC

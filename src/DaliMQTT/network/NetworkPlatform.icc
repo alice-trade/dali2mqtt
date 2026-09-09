@@ -1,0 +1,63 @@
+// Copyright (c) 2026 Alice-Trade Inc.
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#ifndef DALIMQTT_NETWORKPLATFORM_ICC
+#define DALIMQTT_NETWORKPLATFORM_ICC
+
+namespace daliMQTT {
+
+inline esp_err_t NetworkPlatform::init() {
+    return m_backend.init();
+}
+
+inline esp_err_t NetworkPlatform::start(const ConfigStructure& cfg) {
+    return m_backend.start(cfg);
+}
+
+inline esp_err_t NetworkPlatform::startAccessPoint(const char* ssid, const char* pass) {
+    return m_backend.startAccessPoint(ssid, pass);
+}
+
+inline void NetworkPlatform::stop() {
+    m_backend.stop();
+}
+
+inline void NetworkPlatform::startMdns(const char* hostname, const char* clientId) {
+    m_backend.startMdns(hostname, clientId);
+}
+
+inline void NetworkPlatform::setEventQueue(QueueHandle_t queue) noexcept {
+    m_backend.setEventQueue(queue);
+}
+
+inline etl::string<16> NetworkPlatform::getIpAddress() const {
+    return m_backend.getIpAddress();
+}
+
+inline NetworkStatus NetworkPlatform::getStatus() const noexcept {
+    return m_backend.getStatus();
+}
+
+inline bool NetworkPlatform::isConnected() const noexcept {
+    return m_backend.getStatus() == NetworkStatus::Connected;
+}
+
+constexpr bool NetworkPlatform::supportsAccessPoint() noexcept {
+    return SelectedBackend::supportsAccessPoint();
+}
+
+constexpr const char* NetworkPlatform::getInterfaceName() noexcept {
+    return SelectedBackend::interfaceName();
+}
+
+[[nodiscard]] constexpr bool NetworkPlatform::isConfigured(const ConfigStructure& cfg) {
+    if constexpr (supportsAccessPoint()) {
+        return !cfg.wifiSsid.empty();
+    } else {
+        return true;
+    }
+}
+
+} // namespace daliMQTT
+
+#endif // DALIMQTT_NETWORKPLATFORM_ICC
