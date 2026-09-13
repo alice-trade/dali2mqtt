@@ -1,0 +1,190 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 22,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build_${presetName}",
+      "cacheVariables": {
+        "BUILD_TESTING": "ON"
+      }
+    },
+    {
+      "name": "type-debug",
+      "hidden": true,
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "type-release",
+      "hidden": true,
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+
+    {
+      "name": "net-wifi",
+      "hidden": true,
+      "cacheVariables": {
+        "ENABLE_ETHERNET": "OFF"
+      }
+    },
+    {
+      "name": "net-eth",
+      "hidden": true,
+      "cacheVariables": {
+        "ENABLE_ETHERNET": "ON"
+      }
+    },
+
+    {
+      "name": "target-esp32c6",
+      "hidden": true,
+      "cacheVariables": {
+        "TARGET": "esp32c6",
+        "CMAKE_TOOLCHAIN_FILE": "$env{IDF_PATH}/tools/cmake/toolchain-esp32c6.cmake"
+      }
+    },
+    {
+      "name": "target-esp32s3",
+      "hidden": true,
+      "cacheVariables": {
+        "TARGET": "esp32s3",
+        "CMAKE_TOOLCHAIN_FILE": "$env{IDF_PATH}/tools/cmake/toolchain-esp32s3.cmake"
+      }
+    },
+    {
+      "name": "target-esp32c3",
+      "hidden": true,
+      "cacheVariables": {
+        "TARGET": "esp32c3",
+        "CMAKE_TOOLCHAIN_FILE": "$env{IDF_PATH}/tools/cmake/toolchain-esp32c3.cmake"
+      }
+    },
+    {
+      "name": "target-esp32s2",
+      "hidden": true,
+      "cacheVariables": {
+        "TARGET": "esp32s2",
+        "CMAKE_TOOLCHAIN_FILE": "$env{IDF_PATH}/tools/cmake/toolchain-esp32s2.cmake"
+      }
+    },
+    {
+      "name": "target-esp32",
+      "hidden": true,
+      "cacheVariables": {
+        "TARGET": "esp32",
+        "CMAKE_TOOLCHAIN_FILE": "$env{IDF_PATH}/tools/cmake/toolchain-esp32.cmake"
+      }
+    },
+
+    {
+      "name": "esp32c6-debug",
+      "displayName": "ESP32-C6 (Debug Wi-Fi)",
+      "description": "Target ESP32-C6 with Wi-Fi in Debug mode",
+      "inherits": ["base", "target-esp32c6", "type-debug", "net-wifi"]
+    },
+    {
+      "name": "esp32c6-release",
+      "displayName": "ESP32-C6 (Release Wi-Fi)",
+      "description": "Target ESP32-C6 with Wi-Fi in Release mode",
+      "inherits": ["base", "target-esp32c6", "type-release", "net-wifi"]
+    },
+    {
+      "name": "esp32c6-debug-eth",
+      "displayName": "ESP32-C6 (Debug Ethernet W5500)",
+      "description": "Target ESP32-C6 with Ethernet (W5500) in Debug mode",
+      "inherits": ["base", "target-esp32c6", "type-debug", "net-eth"]
+    },
+    {
+      "name": "esp32c6-release-eth",
+      "displayName": "ESP32-C6 (Release Ethernet W5500)",
+      "description": "Target ESP32-C6 with Ethernet (W5500) in Release mode",
+      "inherits": ["base", "target-esp32c6", "type-release", "net-eth"]
+    },
+
+    {
+      "name": "esp32s3-debug",
+      "displayName": "ESP32-S3 (Debug Wi-Fi)",
+      "description": "Target ESP32-S3 with Wi-Fi in Debug mode",
+      "inherits": ["base", "target-esp32s3", "type-debug", "net-wifi"]
+    },
+    {
+      "name": "esp32s3-release",
+      "displayName": "ESP32-S3 (Release Wi-Fi)",
+      "description": "Target ESP32-S3 with Wi-Fi in Release mode",
+      "inherits": ["base", "target-esp32s3", "type-release", "net-wifi"]
+    },
+    {
+      "name": "esp32s3-debug-eth",
+      "displayName": "ESP32-S3 (Debug Ethernet W5500)",
+      "description": "Target ESP32-S3 with Ethernet (W5500) in Debug mode",
+      "inherits": ["base", "target-esp32s3", "type-debug", "net-eth"]
+    },
+    {
+      "name": "esp32s3-release-eth",
+      "displayName": "ESP32-S3 (Release Ethernet W5500)",
+      "description": "Target ESP32-S3 with Ethernet (W5500) in Release mode",
+      "inherits": ["base", "target-esp32s3", "type-release", "net-eth"]
+    },
+
+    {
+      "name": "esp32c3-debug",
+      "displayName": "ESP32-C3 (Debug Wi-Fi)",
+      "description": "Target ESP32-C3 with Wi-Fi in Debug mode",
+      "inherits": ["base", "target-esp32c3", "type-debug", "net-wifi"]
+    },
+    {
+      "name": "esp32c3-release",
+      "displayName": "ESP32-C3 (Release Wi-Fi)",
+      "description": "Target ESP32-C3 with Wi-Fi in Release mode",
+      "inherits": ["base", "target-esp32c3", "type-release", "net-wifi"]
+    },
+    {
+      "name": "esp32c3-release-eth",
+      "displayName": "ESP32-C3 (Release Ethernet W5500)",
+      "description": "Target ESP32-C3 with Ethernet (W5500) in Release mode",
+      "inherits": ["base", "target-esp32c3", "type-release", "net-eth"]
+    },
+
+    {
+      "name": "esp32s2-debug",
+      "displayName": "ESP32-S2 (Debug Wi-Fi)",
+      "description": "Target ESP32-S2 with Wi-Fi in Debug mode",
+      "inherits": ["base", "target-esp32s2", "type-debug", "net-wifi"]
+    },
+    {
+      "name": "esp32s2-release",
+      "displayName": "ESP32-S2 (Release Wi-Fi)",
+      "description": "Target ESP32-S2 with Wi-Fi in Release mode",
+      "inherits": ["base", "target-esp32s2", "type-release", "net-wifi"]
+    }
+  ],
+
+  "buildPresets": [
+    { "name": "esp32c6-debug", "configurePreset": "esp32c6-debug" },
+    { "name": "esp32c6-release", "configurePreset": "esp32c6-release" },
+    { "name": "esp32c6-debug-eth", "configurePreset": "esp32c6-debug-eth" },
+    { "name": "esp32c6-release-eth", "configurePreset": "esp32c6-release-eth" },
+
+    { "name": "esp32s3-debug", "configurePreset": "esp32s3-debug" },
+    { "name": "esp32s3-release", "configurePreset": "esp32s3-release" },
+    { "name": "esp32s3-debug-eth", "configurePreset": "esp32s3-debug-eth" },
+    { "name": "esp32s3-release-eth", "configurePreset": "esp32s3-release-eth" },
+
+    { "name": "esp32c3-debug", "configurePreset": "esp32c3-debug" },
+    { "name": "esp32c3-release", "configurePreset": "esp32c3-release" },
+    { "name": "esp32c3-release-eth", "configurePreset": "esp32c3-release-eth" },
+
+    { "name": "esp32s2-debug", "configurePreset": "esp32s2-debug" },
+    { "name": "esp32s2-release", "configurePreset": "esp32s2-release" }
+  ]
+}

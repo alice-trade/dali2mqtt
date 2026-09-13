@@ -164,6 +164,8 @@ if [ -z "$IDF_PATH" ]; then
     if [ $FOUND -eq 0 ]; then
         echo -e "${RED}Error: Cannot find ESP-IDF export.sh.${NC}"
         echo "Please source it manually: . /path/to/esp-idf/export.sh"
+        echo -e "\n${YELLOW}If you haven't installed ESP-IDF yet, download and install it:${NC}"
+        echo -e "${BLUE}https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/${NC}\n"
         exit 1
     fi
 else

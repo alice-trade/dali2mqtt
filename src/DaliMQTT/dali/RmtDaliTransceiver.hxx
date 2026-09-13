@@ -39,7 +39,7 @@ class RmtDaliTransceiver {
     RmtDaliTransceiver& operator=(const RmtDaliTransceiver&) = delete;
 
     esp_err_t init(const RmtTransceiverConfig& config);
-    esp_err_t sendAsync(uint32_t data, uint8_t bits);
+    esp_err_t sendAsync(uint32_t data, uint8_t bits) const;
 
     [[nodiscard]] inline bool isInitialized() const noexcept;
     inline void setFrameCallback(PhyFrameCallback cb, void* ctx) noexcept;
@@ -89,6 +89,7 @@ class RmtDaliTransceiver {
     rmt_encoder_handle_t m_copyEncoder{nullptr};
 
     QueueHandle_t m_txQueue{nullptr};
+    QueueHandle_t m_rxDoneQueue{nullptr};
     TaskHandle_t m_taskHandle{nullptr};
 
     PhyFrameCallback m_frameCb{nullptr};

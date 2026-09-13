@@ -25,7 +25,7 @@ DaliBusEngine::~DaliBusEngine() {
     if (m_workerTaskHandle)
         vTaskDelete(m_workerTaskHandle);
     if (m_busMutex)
-        vSemaphoreDelete(m_busMutex);
+        vQueueDelete(reinterpret_cast<QueueHandle_t>(m_busMutex));
     if (m_phyEventQueue)
         vQueueDelete(m_phyEventQueue);
     if (m_txQueue)
@@ -63,7 +63,7 @@ void DaliBusEngine::busWorkerTaskRunner(void* arg) {
 }
 
 [[noreturn]] void DaliBusEngine::busWorkerLoop() const {
-    enum class EngineState { Idle, Transmitting, AwaitingReply, TwiceDelay };
+    enum class EngineState { Idle, Transmitting, AwaitingReply, TwiceDelay, CollisionBackoff };
     auto state = EngineState::Idle;
 
     TransactionRequest activeTx{};
@@ -79,9 +79,34 @@ void DaliBusEngine::busWorkerTaskRunner(void* arg) {
         activeTx = {};
     };
 
+    auto getDynamicWaitTicks = [&]() -> TickType_t {
+        if (state == EngineState::Idle) {
+            return pdMS_TO_TICKS(50);
+        }
+
+        int64_t targetTimeoutUs = 0;
+        switch (state) {
+        case EngineState::CollisionBackoff: targetTimeoutUs = 35'000; break;
+        case EngineState::TwiceDelay:       targetTimeoutUs = 40'000; break;
+        case EngineState::AwaitingReply:    targetTimeoutUs = 25'000; break;
+        case EngineState::Transmitting:     targetTimeoutUs = 70'000; break;
+        default: return 0;
+        }
+
+        const int64_t elapsedUs = esp_timer_get_time() - stateEnterTimeUs;
+        const int64_t remUs = targetTimeoutUs - elapsedUs;
+
+        if (remUs <= 0) {
+            return 0;
+        }
+
+        return pdMS_TO_TICKS((remUs + 999) / 1000);
+    };
+
+
     while (true) {
         DaliRawFrame frame{};
-        const TickType_t waitTicks = (state == EngineState::Idle) ? pdMS_TO_TICKS(50) : pdMS_TO_TICKS(1);
+        const TickType_t waitTicks = getDynamicWaitTicks();
 
         if (xQueueReceive(m_phyEventQueue, &frame, waitTicks) == pdTRUE) {
             if (state == EngineState::Idle) {
@@ -93,9 +118,11 @@ void DaliBusEngine::busWorkerTaskRunner(void* arg) {
                     finish(ESP_OK, static_cast<uint8_t>(frame.data & 0xFF));
                 } else if (frame.type == DaliFrameType::Collision || frame.type == DaliFrameType::NoiseCorrupted) {
                     if (++retryCount <= 2) {
-                        m_transceiver.sendAsync(activeTx.data, activeTx.bits);
+                        ESP_LOGW(TAG, "Bus collision, backing off and retrying (%d/2)...", retryCount);
+                        state = EngineState::CollisionBackoff;
                         stateEnterTimeUs = esp_timer_get_time();
                     } else {
+                        ESP_LOGE(TAG, "Bus collision retry limit exceeded");
                         finish(ESP_FAIL, 0);
                     }
                 } else if (frame.type == DaliFrameType::TxEchoSuccess) {
@@ -124,23 +151,22 @@ void DaliBusEngine::busWorkerTaskRunner(void* arg) {
 
         switch (state) {
         case EngineState::Transmitting: {
-            const int64_t txDurationUs = (1 + activeTx.bits + 4) * 834 + 25'000;
-            if (nowUs - stateEnterTimeUs >= txDurationUs) {
-                if (activeTx.sendTwice) {
-                    state = EngineState::TwiceDelay;
-                    stateEnterTimeUs = nowUs;
-                } else if (activeTx.isQuery) {
-                    state = EngineState::AwaitingReply;
-                    stateEnterTimeUs = nowUs;
-                } else {
-                    finish(ESP_OK, 0);
-                }
+            constexpr int64_t MAX_TX_TIMEOUT_US = 70'000;
+            if (nowUs - stateEnterTimeUs >= MAX_TX_TIMEOUT_US) {
+                ESP_LOGE(TAG, "TX timeout: frame was not transmitted (no echo on bus)");
+                finish(ESP_ERR_TIMEOUT, 0);
             }
             break;
         }
-
+        case EngineState::CollisionBackoff:
+            if (nowUs - stateEnterTimeUs >= 35'000) {
+                m_transceiver.sendAsync(activeTx.data, activeTx.bits);
+                state = EngineState::Transmitting;
+                stateEnterTimeUs = nowUs;
+            }
+            break;
         case EngineState::TwiceDelay:
-            if (nowUs - stateEnterTimeUs >= 15'000) {
+            if (nowUs - stateEnterTimeUs >= 40'000) {
                 activeTx.sendTwice = false;
                 m_transceiver.sendAsync(activeTx.data, activeTx.bits);
                 state = EngineState::Transmitting;

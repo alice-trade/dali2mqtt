@@ -413,6 +413,52 @@ esp_err_t DaliDeviceRegistry::setRgb(const DaliLongAddress_t longAddr, const uin
     return err;
 }
 
+esp_err_t DaliDeviceRegistry::setRgbwaf(const DaliLongAddress_t longAddr,
+                                        const uint8_t r, const uint8_t g, const uint8_t b,
+                                        const uint8_t w, const uint8_t a, const uint8_t f) {
+    const auto intAddrOpt = getInternalAddress(longAddr);
+    if (!intAddrOpt) return ESP_ERR_NOT_FOUND;
+
+    const uint8_t shortAddr = intAddrOpt->shortAddr();
+    DaliBusLock bus_lock(m_bus);
+
+    m_bus.setDtr2(b);
+    m_bus.setDtr1(g);
+    m_bus.setDtr0(r);
+    m_bus.sendSpecialCommand(SpecialOpCode::EnableDeviceTypeX, 8);
+    m_bus.sendCommand(DaliAddressType::Short, shortAddr, static_cast<OpCode>(DT8OpCode::SetTempRGB));
+
+    m_bus.setDtr2(f);
+    m_bus.setDtr1(a);
+    m_bus.setDtr0(w);
+    m_bus.sendSpecialCommand(SpecialOpCode::EnableDeviceTypeX, 8);
+    m_bus.sendCommand(DaliAddressType::Short, shortAddr, static_cast<OpCode>(DT8OpCode::SetTempWAF));
+
+    m_bus.sendSpecialCommand(SpecialOpCode::EnableDeviceTypeX, 8);
+    const esp_err_t err = m_bus.sendCommand(DaliAddressType::Short, shortAddr, static_cast<OpCode>(DT8OpCode::Activate));
+
+    if (err == ESP_OK) {
+        ControlGear copyGear;
+        bool found = false;
+        {
+            std::lock_guard lock(m_registryMutex);
+            for (auto& dev : m_devices) {
+                if (getIdentity(dev).longAddress == longAddr) {
+                    if (auto* gear = etl::get_if<ControlGear>(&dev)) {
+                        if (!gear->color.has_value()) gear->color = ColorFeatures();
+                        gear->color->currentRgb = DaliRGB{r, g, b};
+                        copyGear = *gear;
+                        found = true;
+                    }
+                    break;
+                }
+            }
+        }
+        if (found) notifyDeviceChange(copyGear);
+    }
+    return err;
+}
+
 esp_err_t DaliDeviceRegistry::setGroupBrightness(const uint8_t busId, const uint8_t groupId, const uint8_t level) {
     if (groupId >= 16 || busId >= BUS_COUNT)
         return ESP_ERR_INVALID_ARG;
@@ -875,6 +921,11 @@ void DaliDeviceRegistry::commissionNewDevices() {
     ESP_LOGI(TAG, "Starting DALI Commissioning (Control Gear)...");
     ScanCommissionGuard guard(m_scanCommissionActive, m_bus);
 
+
+    m_bus.sendDevice24BitCommand(0xFF, 0x1D, true);
+    vTaskDelay(pdMS_TO_TICKS(50));
+    m_bus.sendSpecial24BitCommand(0x00, 0x00, false);
+    vTaskDelay(pdMS_TO_TICKS(50));
     std::bitset<64> occupiedAddresses;
     for (uint8_t sa = 0; sa < 64; ++sa) {
         if (m_bus.query(DaliAddressType::Short, sa, OpCode::QueryControlGear).has_value()) {
@@ -932,7 +983,7 @@ void DaliDeviceRegistry::commissionNewDevices() {
         }
 
         const uint8_t progByte = static_cast<uint8_t>((targetShortAddr << 1) | 0x01);
-        m_bus.sendSpecialCommand(SpecialOpCode::ProgramShortAddr, progByte, false);
+        m_bus.sendSpecialCommand(SpecialOpCode::ProgramShortAddr, progByte, true);
 
         const auto verifyResp = m_bus.querySpecial(SpecialOpCode::VerifyShortAddr, progByte);
         if (verifyResp.has_value()) {
@@ -948,14 +999,19 @@ void DaliDeviceRegistry::commissionNewDevices() {
     }
 
     m_bus.sendSpecialCommand(SpecialOpCode::Terminate, 0, false);
-    ESP_LOGI(TAG, "Commissioning complete. Newly assigned devices: %u", newlyAssignedCount);
+    m_bus.sendDevice24BitCommand(0xFF, 0x1E, true);
+    vTaskDelay(pdMS_TO_TICKS(50));
 
+    ESP_LOGI(TAG, "Commissioning complete. Newly assigned devices: %u", newlyAssignedCount);
     scanBus();
 }
 
 void DaliDeviceRegistry::commission24BitDevices() {
     ESP_LOGI(TAG, "Starting DALI Commissioning (Input Devices)...");
     ScanCommissionGuard guard(m_scanCommissionActive, m_bus);
+
+    m_bus.sendSpecialCommand(SpecialOpCode::Terminate, 0, false);
+    vTaskDelay(pdMS_TO_TICKS(50));
 
     std::bitset<64> occupiedInputAddresses;
     for (uint8_t sa = 0; sa < 64; ++sa) {
@@ -973,7 +1029,7 @@ void DaliDeviceRegistry::commission24BitDevices() {
     }
 
     m_bus.sendSpecial24BitCommand(0x00, 0x00, false); // Terminate
-    m_bus.sendSpecial24BitCommand(0x01, 0xFF, true);  // Initialise unaddressed (Send Twice)
+    m_bus.sendSpecial24BitCommand(0x01, 0x00, true);
     m_bus.sendSpecial24BitCommand(0x02, 0x00, true);  // Randomise (Send Twice)
 
     vTaskDelay(pdMS_TO_TICKS(100));
@@ -1010,8 +1066,8 @@ void DaliDeviceRegistry::commission24BitDevices() {
         if (targetShortAddr >= 64)
             break;
 
-        const uint8_t progByte = static_cast<uint8_t>((targetShortAddr << 1) | 0x01);
-        m_bus.sendSpecial24BitCommand(0x08, progByte, false);
+        const uint8_t progByte = targetShortAddr;
+        m_bus.sendSpecial24BitCommand(0x08, progByte, true);
         const uint32_t verifyFrame = (0xC1U << 16) | (0x09U << 8) | progByte;
         const auto verifyResp = m_bus.queryRaw(verifyFrame, 24);
 

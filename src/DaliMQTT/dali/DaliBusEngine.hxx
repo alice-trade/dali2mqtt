@@ -41,6 +41,7 @@ class DaliBusEngine {
     inline esp_err_t sendSpecialCommand(SpecialOpCode opcode, uint8_t data, bool sendTwice = false) const;
     inline esp_err_t sendInputDeviceCommand(uint8_t shortAddr, uint8_t instance, uint8_t opcode) const;
     inline esp_err_t sendSpecial24BitCommand(uint8_t inst, uint8_t opcode, bool sendTwice) const;
+    inline esp_err_t sendDevice24BitCommand(uint8_t addrByte, uint8_t opcode, bool sendTwice = true) const;
 
     inline std::optional<uint8_t> query(DaliAddressType addrType, uint8_t addr, OpCode opcode) const;
     inline std::optional<uint8_t> querySpecial(SpecialOpCode opcode, uint8_t data) const;

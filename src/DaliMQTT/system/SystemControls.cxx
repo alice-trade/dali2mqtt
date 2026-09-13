@@ -60,7 +60,7 @@ void SystemControls::setResetCallback(ResetActionCallback cb, void* ctx) noexcep
 }
 
 void SystemControls::onButtonHeldTimer(TimerHandle_t xTimer) {
-    auto* self = static_cast<SystemControls*>(pvTimerGetTimerID(xTimer));
+    const auto* self = static_cast<SystemControls*>(pvTimerGetTimerID(xTimer));
     if (gpio_get_level(self->m_buttonPin) == 0) {
         ESP_LOGW(TAG, "BOOT Button held for 5 seconds. Triggering Factory Reset!");
         if (self->m_resetCb) {
@@ -70,7 +70,7 @@ void SystemControls::onButtonHeldTimer(TimerHandle_t xTimer) {
 }
 
 void IRAM_ATTR SystemControls::gpioButtonIsr(void* arg) {
-    auto* self = static_cast<SystemControls*>(arg);
+    const auto* self = static_cast<SystemControls*>(arg);
     BaseType_t highTaskWoken = pdFALSE;
 
     if (gpio_get_level(self->m_buttonPin) == 0) {

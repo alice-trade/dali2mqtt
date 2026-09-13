@@ -3,6 +3,7 @@
 
 #include "mqtt/MqttBridge.hxx"
 #include "utils/DaliLongAddrConversions.hxx"
+#include "utils/DaliSensorMath.hxx"
 #include <ArduinoJson.h>
 #include <esp_log.h>
 #include <esp_system.h>
@@ -245,6 +246,13 @@ void MqttBridge::onDaliInputEvent(const InputDeviceEvent& event, void* ctx) {
     doc["instance"] = event.instanceNumber;
     doc["instance_type"] = event.instanceType;
     doc["event_code"] = event.eventCode;
+
+    if (event.instanceType == 4) {
+        const uint8_t rawLux = static_cast<uint8_t>(event.eventCode & 0xFF);
+        doc["illuminance_lux"] = utils::rawToLux(rawLux);
+    } else if (event.instanceType == 3) {
+        doc["occupied"] = utils::isOccupied(static_cast<uint8_t>(event.eventCode & 0xFF));
+    }
 
     char payload[256];
     serializeJson(doc, payload, sizeof(payload));

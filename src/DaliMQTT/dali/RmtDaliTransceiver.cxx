@@ -8,22 +8,33 @@
 #include <esp_log.h>
 #include <esp_rom_sys.h>
 #include <esp_timer.h>
+#include <soc/soc_caps.h>
 
 namespace daliMQTT {
 
 static constexpr char TAG[] = "RmtPhy";
 
-RmtDaliTransceiver::RmtDaliTransceiver() : m_txQueue(xQueueCreate(8, sizeof(TxMessage))) {}
+RmtDaliTransceiver::RmtDaliTransceiver()
+    : m_txQueue(xQueueCreate(8, sizeof(TxMessage))), m_rxDoneQueue(xQueueCreate(4, sizeof(uint8_t))) {}
 
 RmtDaliTransceiver::~RmtDaliTransceiver() {
     m_initialized.store(false);
     if (m_rxChannel) {
         rmt_disable(m_rxChannel);
+    }
+    if (m_txChannel) {
+        rmt_disable(m_txChannel);
+    }
+    if (m_taskHandle) {
+        vTaskDelete(m_taskHandle);
+        m_taskHandle = nullptr;
+    }
+
+    if (m_rxChannel) {
         rmt_del_channel(m_rxChannel);
         m_rxChannel = nullptr;
     }
     if (m_txChannel) {
-        rmt_disable(m_txChannel);
         rmt_del_channel(m_txChannel);
         m_txChannel = nullptr;
     }
@@ -32,13 +43,13 @@ RmtDaliTransceiver::~RmtDaliTransceiver() {
         m_copyEncoder = nullptr;
     }
 
-    if (m_taskHandle) {
-        vTaskDelete(m_taskHandle);
-        m_taskHandle = nullptr;
-    }
     if (m_txQueue) {
         vQueueDelete(m_txQueue);
         m_txQueue = nullptr;
+    }
+    if (m_rxDoneQueue) {
+        vQueueDelete(m_rxDoneQueue);
+        m_rxDoneQueue = nullptr;
     }
 }
 
@@ -73,7 +84,11 @@ esp_err_t RmtDaliTransceiver::setupTx() {
         .gpio_num = m_config.txPin,
         .clk_src = RMT_CLK_SRC_DEFAULT,
         .resolution_hz = 1'000'000,
+#if defined(SOC_RMT_MEM_WORDS_PER_CHANNEL)
+        .mem_block_symbols = SOC_RMT_MEM_WORDS_PER_CHANNEL,
+#else
         .mem_block_symbols = RMT_SYMBOLS_CAPACITY,
+#endif
         .trans_queue_depth = 4,
         .flags =
             {
@@ -94,7 +109,11 @@ esp_err_t RmtDaliTransceiver::setupRx() {
     rmt_rx_channel_config_t rxCfg = {.gpio_num = m_config.rxPin,
                                      .clk_src = RMT_CLK_SRC_DEFAULT,
                                      .resolution_hz = 1'000'000,
+#if defined(SOC_RMT_MEM_WORDS_PER_CHANNEL)
+                                     .mem_block_symbols = SOC_RMT_MEM_WORDS_PER_CHANNEL,
+#else
                                      .mem_block_symbols = RMT_SYMBOLS_CAPACITY,
+#endif
                                      .flags = {
                                          .invert_in = m_config.invertRx,
                                          .with_dma = false,
@@ -108,11 +127,11 @@ esp_err_t RmtDaliTransceiver::setupRx() {
     return ESP_OK;
 }
 
-esp_err_t RmtDaliTransceiver::sendAsync(const uint32_t data, const uint8_t bits) {
+esp_err_t RmtDaliTransceiver::sendAsync(const uint32_t data, const uint8_t bits) const {
     if (!isInitialized())
         return ESP_ERR_INVALID_STATE;
 
-    TxMessage msg{.data = data, .bits = bits};
+    const TxMessage msg{.data = data, .bits = bits};
     if (xQueueSend(m_txQueue, &msg, 0) != pdTRUE) {
         ESP_LOGW(TAG, "TX Queue full, frame dropped: 0x%04lX", data);
         return ESP_ERR_NO_MEM;
@@ -140,8 +159,8 @@ bool IRAM_ATTR RmtDaliTransceiver::rmtRxDoneCallback(rmt_channel_handle_t rxChan
     rmt_receive(rxChan, self->m_rxBuffers[nextBufIdx], sizeof(self->m_rxBuffers[0]), &rxConf);
 
     BaseType_t highTaskWoken = pdFALSE;
-    const uint32_t notifyVal = (finishedBufIdx == 0) ? EVT_RX_DONE_BUF0 : EVT_RX_DONE_BUF1;
-    xTaskNotifyFromISR(self->m_taskHandle, notifyVal, eSetBits, &highTaskWoken);
+    xQueueSendFromISR(self->m_rxDoneQueue, &finishedBufIdx, &highTaskWoken);
+    xTaskNotifyFromISR(self->m_taskHandle, 1, eSetBits, &highTaskWoken);
     return highTaskWoken == pdTRUE;
 }
 
@@ -178,52 +197,48 @@ void RmtDaliTransceiver::taskRunner(void* arg) {
             }
         }
 
-        uint32_t eventBits = 0;
-        const BaseType_t res = xTaskNotifyWait(0, 0xFFFFFFFF, &eventBits, pdMS_TO_TICKS(50));
-        if (res == pdFALSE) {
-            eventBits = 0;
-        }
-
         const int64_t now = esp_timer_get_time();
         if (m_txState.active && (now - m_txState.startTs > Timing::TX_TIMEOUT_US)) {
             m_txState.active = false;
         }
 
-        if (eventBits & EVT_RX_DONE_BUF0) {
-            processBuffer(0);
+        TickType_t waitTicks = pdMS_TO_TICKS(50);
+        if (!m_txState.active && uxQueueMessagesWaiting(m_txQueue) > 0) {
+            const int64_t elapsedUs = now - m_lastBusActivityUs;
+            if (elapsedUs < Timing::FWD_TO_FWD_DELAY_US) {
+                const int64_t remainUs = Timing::FWD_TO_FWD_DELAY_US - elapsedUs;
+                waitTicks = pdMS_TO_TICKS((remainUs / 1000) + 1);
+            } else {
+                waitTicks = 0;
+            }
         }
-        if (eventBits & EVT_RX_DONE_BUF1) {
-            processBuffer(1);
+        uint32_t eventBits = 0;
+        xTaskNotifyWait(0, 0xFFFFFFFF, &eventBits, waitTicks);
+
+        uint8_t readyBufIdx = 0;
+        while (xQueueReceive(m_rxDoneQueue, &readyBufIdx, 0) == pdTRUE) {
+            processBuffer(readyBufIdx);
         }
-        if ((eventBits & EVT_TX_QUEUED) || (!m_txState.active && uxQueueMessagesWaiting(m_txQueue) > 0)) {
-            if (!m_txState.active && xQueueReceive(m_txQueue, &txMsg, 0) == pdTRUE) {
-                const int64_t nowUs = esp_timer_get_time();
-                const int64_t elapsedUs = nowUs - m_lastBusActivityUs;
 
-                if (elapsedUs < Timing::FWD_TO_FWD_DELAY_US) {
-                    const int64_t waitUs = Timing::FWD_TO_FWD_DELAY_US - elapsedUs;
+        if (!m_txState.active && uxQueueMessagesWaiting(m_txQueue) > 0) {
+            const int64_t currentNowUs = esp_timer_get_time();
+            if ((currentNowUs - m_lastBusActivityUs) >= Timing::FWD_TO_FWD_DELAY_US) {
+                if (xQueueReceive(m_txQueue, &txMsg, 0) == pdTRUE) {
+                    m_txState.active = true;
+                    m_txState.data = txMsg.data;
+                    m_txState.bits = txMsg.bits;
+                    m_txState.startTs = currentNowUs;
 
-                    if (waitUs >= 1500) {
-                        const TickType_t delayTicks = pdMS_TO_TICKS((waitUs / 1000) - 1);
-                        if (delayTicks > 0) {
-                            vTaskDelay(delayTicks);
+                    const size_t symCount = encodeManchester(txMsg.data, txMsg.bits);
+                    rmt_transmit_config_t txConf = {
+                        .loop_count = 0,
+                        .flags = {
+                            .eot_level = Timing::LEVEL_IDLE
                         }
-                    }
-
-                    while ((esp_timer_get_time() - m_lastBusActivityUs) < Timing::FWD_TO_FWD_DELAY_US) {
-                        esp_rom_delay_us(15);
-                    }
+                    };
+                    ESP_ERROR_CHECK(rmt_transmit(m_txChannel, m_copyEncoder, m_txBuffer,
+                                                 symCount * sizeof(rmt_symbol_word_t), &txConf));
                 }
-
-                m_txState.active = true;
-                m_txState.data = txMsg.data;
-                m_txState.bits = txMsg.bits;
-                m_txState.startTs = esp_timer_get_time();
-
-                const size_t symCount = encodeManchester(txMsg.data, txMsg.bits);
-                rmt_transmit_config_t txConf = {.loop_count = 0};
-                ESP_ERROR_CHECK(rmt_transmit(m_txChannel, m_copyEncoder, m_txBuffer,
-                                             symCount * sizeof(rmt_symbol_word_t), &txConf));
             }
         }
     }

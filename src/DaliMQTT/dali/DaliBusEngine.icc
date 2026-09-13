@@ -90,6 +90,16 @@ inline esp_err_t DaliBusEngine::sendInputDeviceCommand(const uint8_t shortAddr, 
     return executeTransaction(req, nullptr);
 }
 
+inline esp_err_t DaliBusEngine::sendDevice24BitCommand(const uint8_t addrByte, const uint8_t opcode,
+                                                       const bool sendTwice) const {
+    const TransactionRequest req{.data = makeFrame24(addrByte, 0xFE, opcode),
+                                 .bits = 24,
+                                 .isQuery = false,
+                                 .sendTwice = sendTwice,
+                                 .acceptAnyReplyAsYes = false};
+    return executeTransaction(req, nullptr);
+}
+
 inline std::optional<uint8_t> DaliBusEngine::query(const DaliAddressType addrType, const uint8_t addr,
                                                    const OpCode opcode) const {
     const uint8_t addrByte = makeAddressByte(addrType, addr, true);

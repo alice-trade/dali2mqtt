@@ -8,16 +8,13 @@ namespace daliMQTT {
 
 struct RmtDaliTransceiver::Timing {
     static constexpr uint32_t T_TE_US = 417;
-
-    static constexpr uint32_t TE_MIN_US = 280;
-    static constexpr uint32_t TE_MAX_US = 560;
-    static constexpr uint32_t TE2_MIN_US = 680;
-    static constexpr uint32_t TE2_MAX_US = 1050;
+    static constexpr uint32_t GLITCH_FILTER_US = 220;
+    static constexpr uint32_t TE2_MAX_LIMIT_US = 1050;
 
     static constexpr uint32_t RX_NOISE_FILTER_NS = 1'500;
     static constexpr uint32_t RX_IDLE_THRESH_NS = 1'250'000;
 
-    static constexpr int64_t FWD_TO_FWD_DELAY_US = 9200;
+    static constexpr int64_t FWD_TO_FWD_DELAY_US = 20'000;
     static constexpr int64_t TX_TIMEOUT_US = 35'000;
 
     static constexpr uint8_t LEVEL_IDLE = 0;
@@ -62,7 +59,8 @@ inline size_t RmtDaliTransceiver::encodeManchester(const uint32_t data, const ui
     }
 
     // Stop condition: Idle for 4 Te
-    m_txBuffer[symIdx++] = makeSymbol(Timing::T_TE_US * 4, Timing::LEVEL_IDLE, 0, 0);
+    m_txBuffer[symIdx++] = makeSymbol(Timing::T_TE_US * 2, Timing::LEVEL_IDLE,
+                                     Timing::T_TE_US * 2, Timing::LEVEL_IDLE);
 
     return symIdx;
 }
@@ -73,7 +71,7 @@ inline void RmtDaliTransceiver::decodeSymbols(const rmt_symbol_word_t* symbols, 
 
     m_lastBusActivityUs = esp_timer_get_time();
 
-    static constexpr size_t MAX_HALF_BITS = 64;
+    static constexpr size_t MAX_HALF_BITS = 80;
     uint8_t halfBits[MAX_HALF_BITS];
     size_t hbCount = 0;
     bool stopConditionFound = false;
@@ -83,40 +81,57 @@ inline void RmtDaliTransceiver::decodeSymbols(const rmt_symbol_word_t* symbols, 
         const uint8_t lvls[2] = {static_cast<uint8_t>(symbols[i].level0), static_cast<uint8_t>(symbols[i].level1)};
 
         for (int p = 0; p < 2; ++p) {
-            if (durs[p] == 0)
+            const uint32_t dur = durs[p];
+            const uint8_t lvl = lvls[p];
+
+            if (dur == 0)
                 continue;
 
-            if (durs[p] > Timing::TE2_MAX_US) {
-                if (lvls[p] == Timing::LEVEL_IDLE) {
+            if (dur < Timing::GLITCH_FILTER_US) {
+                m_txState.active = false;
+                dispatchFrame(DaliFrameType::NoiseCorrupted, 0, 0);
+                return;
+            }
+
+            const uint32_t n = (dur + (Timing::T_TE_US / 2)) / Timing::T_TE_US;
+
+            if (n == 1) {
+                halfBits[hbCount++] = lvl;
+            } else if (n == 2) {
+                if (hbCount + 1 < MAX_HALF_BITS) {
+                    halfBits[hbCount++] = lvl;
+                    halfBits[hbCount++] = lvl;
+                } else {
+                    stopConditionFound = true;
+                    break;
+                }
+            } else if (n >= 3) {
+                if (lvl == Timing::LEVEL_IDLE) {
                     if (hbCount % 2 == 1 && hbCount < MAX_HALF_BITS) {
                         halfBits[hbCount++] = Timing::LEVEL_IDLE;
                     }
                     stopConditionFound = true;
                     break;
+                } else {
+                    m_txState.active = false;
+                    dispatchFrame(DaliFrameType::NoiseCorrupted, 0, 0);
+                    return;
                 }
-                m_txState.active = false;
-                dispatchFrame(DaliFrameType::NoiseCorrupted, 0, 0);
-                return;
-            }
-
-            if (durs[p] >= Timing::TE_MIN_US && durs[p] <= Timing::TE_MAX_US) {
-                halfBits[hbCount++] = lvls[p];
-            } else if (durs[p] >= Timing::TE2_MIN_US && durs[p] <= Timing::TE2_MAX_US) {
-                if (hbCount + 1 >= MAX_HALF_BITS) {
-                    stopConditionFound = true;
-                    break;
-                }
-                halfBits[hbCount++] = lvls[p];
-                halfBits[hbCount++] = lvls[p];
-            } else {
-                m_txState.active = false;
-                dispatchFrame(DaliFrameType::NoiseCorrupted, 0, 0);
-                return;
             }
         }
     }
 
-    if (hbCount < 4 || halfBits[0] != Timing::LEVEL_ACTIVE || halfBits[1] != Timing::LEVEL_IDLE) {
+    size_t startIdx = 0;
+    bool startBitFound = false;
+
+    for (; startIdx + 1 < hbCount; ++startIdx) {
+        if (halfBits[startIdx] == Timing::LEVEL_ACTIVE && halfBits[startIdx + 1] == Timing::LEVEL_IDLE) {
+            startBitFound = true;
+            break;
+        }
+    }
+
+    if (!startBitFound || (hbCount - startIdx) < 18) {
         m_txState.active = false;
         dispatchFrame(DaliFrameType::NoiseCorrupted, 0, 0);
         return;
@@ -125,7 +140,7 @@ inline void RmtDaliTransceiver::decodeSymbols(const rmt_symbol_word_t* symbols, 
     uint32_t rxData = 0;
     uint8_t decodedBits = 0;
 
-    for (size_t i = 2; i + 1 < hbCount; i += 2) {
+    for (size_t i = startIdx + 2; i + 1 < hbCount; i += 2) {
         const uint8_t h0 = halfBits[i];
         const uint8_t h1 = halfBits[i + 1];
 

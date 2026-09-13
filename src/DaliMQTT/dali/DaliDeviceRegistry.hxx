@@ -78,7 +78,9 @@ class DaliDeviceRegistry {
     esp_err_t setPower(DaliLongAddress_t longAddr, bool on);
     esp_err_t setColorTemp(DaliLongAddress_t longAddr, uint16_t mireds);
     esp_err_t setRgb(DaliLongAddress_t longAddr, uint8_t r, uint8_t g, uint8_t b);
-
+    esp_err_t setRgbwaf(DaliLongAddress_t longAddr, uint8_t r, uint8_t g, uint8_t b,
+                        uint8_t w = 0xFF, uint8_t a = 0xFF, uint8_t f = 0xFF);
+    
     esp_err_t setGroupBrightness(uint8_t busId, uint8_t groupId, uint8_t level);
     esp_err_t setGroupPower(uint8_t busId, uint8_t groupId, bool on);
     esp_err_t setDeviceGroupMembership(DaliLongAddress_t longAddr, uint8_t groupId, bool assigned);
