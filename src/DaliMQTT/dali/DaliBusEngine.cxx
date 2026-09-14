@@ -109,7 +109,9 @@ void DaliBusEngine::busWorkerTaskRunner(void* arg) {
         const TickType_t waitTicks = getDynamicWaitTicks();
 
         if (xQueueReceive(m_phyEventQueue, &frame, waitTicks) == pdTRUE) {
-            if (state == EngineState::Idle) {
+            if (frame.type == DaliFrameType::Wakeup) {
+                // pass
+            } else if (state == EngineState::Idle) {
                 if (frame.isValid() && m_snifferCb) {
                     m_snifferCb(frame, m_busId, m_snifferCtx);
                 }
@@ -205,6 +207,8 @@ esp_err_t DaliBusEngine::executeTransaction(const TransactionRequest& request, u
         xSemaphoreGiveRecursive(m_busMutex);
         return ESP_ERR_NO_MEM;
     }
+    constexpr DaliRawFrame kick{.type = DaliFrameType::Wakeup};
+    xQueueSend(m_phyEventQueue, &kick, 0);
 
     TransactionResponse resp{};
     const BaseType_t res = xQueueReceive(m_respQueue, &resp, pdMS_TO_TICKS(300));

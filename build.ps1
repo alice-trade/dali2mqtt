@@ -37,7 +37,7 @@ function Print-Help {
     Write-Host "  integration   Run integration Pytest suite"
     Write-Host "  clean         Remove the build directory for the selected target`n"
     Write-Host "Options:"
-    Write-Host "  -t, --target <target>    ESP32 target (esp32s3, esp32c6, esp32c3, esp32s2)."
+    Write-Host "  -t, --target <target>    ESP32 target (esp32s3, esp32c6, esp32c3, esp32s2, esp32)."
     Write-Host "                           If omitted, an interactive menu will appear."
     Write-Host "  -b, --build-type <type>  CMake build type (Debug/Release)."
     Write-Host "                           If omitted, an interactive menu will appear."
@@ -59,7 +59,7 @@ if ([string]::IsNullOrEmpty($Command)) {
 }
 
 if ([string]::IsNullOrEmpty($Target)) {
-    $platforms = @("esp32s3", "esp32c6", "esp32c3", "esp32s2", "Quit")
+    $platforms = @("esp32s3", "esp32c6", "esp32c3", "esp32s2", "esp32", "Quit")
     Write-Host "Target platform was not specified." -ForegroundColor Yellow
     Write-Host "Please select a target platform:"
 

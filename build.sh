@@ -33,7 +33,7 @@ function print_help() {
     echo "  clean         Remove the build directory for the selected target"
     echo ""
     echo "Options:"
-    echo "  -t, --target <target>    ESP32 target (esp32s3, esp32c6, esp32c3, esp32s2)."
+    echo "  -t, --target <target>    ESP32 target (esp32s3, esp32c6, esp32c3, esp32s2, esp32)."
     echo "                           If omitted, an interactive menu will appear."
     echo "  -b, --build-type <type>  CMake build type (Debug/Release)."
     echo "                           If omitted, an interactive menu will appear."
@@ -86,12 +86,12 @@ if [ -z "$TARGET" ]; then
         echo -e "${YELLOW}Target platform was not specified.${NC}"
         echo "Please select a target platform:"
 
-        platforms=("esp32s3" "esp32c6" "esp32c3" "esp32s2" "Quit")
+        platforms=("esp32s3" "esp32c6" "esp32c3" "esp32s2" "esp32" "Quit")
 
         PS3="Enter a number: "
         select opt in "${platforms[@]}"; do
             case $opt in
-                "esp32s3"|"esp32c6"|"esp32c3"|"esp32s2")
+                "esp32s3"|"esp32c6"|"esp32c3"|"esp32s2"|"esp32")
                     TARGET="$opt"
                     echo -e "Selected target: ${GREEN}$TARGET${NC}"
                     break

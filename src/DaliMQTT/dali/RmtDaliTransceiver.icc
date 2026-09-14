@@ -107,9 +107,6 @@ inline void RmtDaliTransceiver::decodeSymbols(const rmt_symbol_word_t* symbols, 
                 }
             } else if (n >= 3) {
                 if (lvl == Timing::LEVEL_IDLE) {
-                    if (hbCount % 2 == 1 && hbCount < MAX_HALF_BITS) {
-                        halfBits[hbCount++] = Timing::LEVEL_IDLE;
-                    }
                     stopConditionFound = true;
                     break;
                 } else {
@@ -131,7 +128,17 @@ inline void RmtDaliTransceiver::decodeSymbols(const rmt_symbol_word_t* symbols, 
         }
     }
 
-    if (!startBitFound || (hbCount - startIdx) < 18) {
+    if (!startBitFound) {
+        m_txState.active = false;
+        dispatchFrame(DaliFrameType::NoiseCorrupted, 0, 0);
+        return;
+    }
+
+    if (stopConditionFound && ((hbCount - startIdx) % 2 != 0) && hbCount < MAX_HALF_BITS) {
+        halfBits[hbCount++] = Timing::LEVEL_IDLE;
+    }
+    
+    if ((hbCount - startIdx) < 18) {
         m_txState.active = false;
         dispatchFrame(DaliFrameType::NoiseCorrupted, 0, 0);
         return;
