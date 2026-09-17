@@ -25,7 +25,7 @@ struct ConfigStructure {
     etl::string<64> mqttPass{};
     etl::string<64> mqttBaseTopic{};
     etl::string<32> clientId{};
-    etl::string<1536> mqttCaCert{};
+    etl::string<2048> mqttCaCert{};
 
     etl::string<32> httpDomain{};
     etl::string<32> httpUser{};

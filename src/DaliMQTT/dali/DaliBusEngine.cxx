@@ -68,6 +68,7 @@ void DaliBusEngine::busWorkerTaskRunner(void* arg) {
 
     TransactionRequest activeTx{};
     int64_t stateEnterTimeUs = 0;
+    int64_t currentBackoffUs = 35'000;
     uint8_t retryCount = 0;
 
     auto finish = [&](const esp_err_t result, const uint8_t response) {
@@ -86,11 +87,20 @@ void DaliBusEngine::busWorkerTaskRunner(void* arg) {
 
         int64_t targetTimeoutUs = 0;
         switch (state) {
-        case EngineState::CollisionBackoff: targetTimeoutUs = 35'000; break;
-        case EngineState::TwiceDelay:       targetTimeoutUs = 40'000; break;
-        case EngineState::AwaitingReply:    targetTimeoutUs = 25'000; break;
-        case EngineState::Transmitting:     targetTimeoutUs = 70'000; break;
-        default: return 0;
+        case EngineState::CollisionBackoff:
+            targetTimeoutUs = 35'000;
+            break;
+        case EngineState::TwiceDelay:
+            targetTimeoutUs = 40'000;
+            break;
+        case EngineState::AwaitingReply:
+            targetTimeoutUs = 25'000;
+            break;
+        case EngineState::Transmitting:
+            targetTimeoutUs = 70'000;
+            break;
+        default:
+            return 0;
         }
 
         const int64_t elapsedUs = esp_timer_get_time() - stateEnterTimeUs;
@@ -102,7 +112,6 @@ void DaliBusEngine::busWorkerTaskRunner(void* arg) {
 
         return pdMS_TO_TICKS((remUs + 999) / 1000);
     };
-
 
     while (true) {
         DaliRawFrame frame{};
@@ -120,6 +129,7 @@ void DaliBusEngine::busWorkerTaskRunner(void* arg) {
                     finish(ESP_OK, static_cast<uint8_t>(frame.data & 0xFF));
                 } else if (frame.type == DaliFrameType::Collision || frame.type == DaliFrameType::NoiseCorrupted) {
                     if (++retryCount <= 2) {
+                        currentBackoffUs = 15'000 + (esp_random() % 25'000);
                         ESP_LOGW(TAG, "Bus collision, backing off and retrying (%d/2)...", retryCount);
                         state = EngineState::CollisionBackoff;
                         stateEnterTimeUs = esp_timer_get_time();
@@ -161,7 +171,7 @@ void DaliBusEngine::busWorkerTaskRunner(void* arg) {
             break;
         }
         case EngineState::CollisionBackoff:
-            if (nowUs - stateEnterTimeUs >= 35'000) {
+            if (nowUs - stateEnterTimeUs >= currentBackoffUs) {
                 m_transceiver.sendAsync(activeTx.data, activeTx.bits);
                 state = EngineState::Transmitting;
                 stateEnterTimeUs = nowUs;

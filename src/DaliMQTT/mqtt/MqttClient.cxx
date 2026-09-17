@@ -65,7 +65,7 @@ esp_err_t MqttClient::init(const ConfigStructure& config) {
     mqttCfg.session.last_will.qos = 1;
     mqttCfg.session.last_will.retain = 1;
 
-    mqttCfg.task.stack_size = 6144;
+    mqttCfg.task.stack_size = 8192;
 
     m_clientHandle = esp_mqtt_client_init(&mqttCfg);
     if (!m_clientHandle) {

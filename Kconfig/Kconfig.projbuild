@@ -1,4 +1,12 @@
 menu "DALI MQTT Bridge Settings"
+    config DALI2MQTT_PRECONFIGURED
+                bool "Enable Headless / Pre-configured Deployment"
+                default n
+                help
+                    If enabled, CMake will verify that all required parameters
+                    (Broker URI, Wi-Fi/Eth settings) are populated in Kconfig/sdkconfig.
+                    If valid, the firmware will compile in 'configured' state and skip
+                    provisioning mode entirely on boot.
     menu "Network Interface Selection"
 
         choice DALI2MQTT_NETWORK_TYPE
@@ -13,6 +21,22 @@ menu "DALI MQTT Bridge Settings"
             config DALI2MQTT_NET_ETHERNET
                 bool "Ethernet (LAN8720 / W5500)"
         endchoice
+
+        menu "Wi-Fi Station (Client) Configuration"
+            depends on DALI2MQTT_NET_WIFI && DALI2MQTT_PRECONFIGURED
+
+            config DALI2MQTT_WIFI_STA_SSID
+                string "Wi-Fi Station SSID"
+                default ""
+                help
+                    Target Wi-Fi Network SSID to connect on boot.
+
+            config DALI2MQTT_WIFI_STA_PASS
+                string "Wi-Fi Station Password"
+                default ""
+                help
+                    Target Wi-Fi Network Password.
+        endmenu
 
         menu "Ethernet Hardware Configuration"
             depends on DALI2MQTT_NET_ETHERNET
@@ -156,6 +180,30 @@ menu "DALI MQTT Bridge Settings"
     endmenu
 
     menu "MQTT Client Configuration"
+
+    config DALI2MQTT_MQTT_BROKER_URI
+        string "MQTT Broker URI"
+        depends on DALI2MQTT_PRECONFIGURED
+        default ""
+        help
+            Target broker URI (e.g. "mqtt://192.168.1.10:1883" or "mqtts://host:8883").
+
+    config DALI2MQTT_MQTT_USER
+        string "MQTT Username"
+        depends on DALI2MQTT_PRECONFIGURED
+        default ""
+
+    config DALI2MQTT_MQTT_PASS
+        string "MQTT Password"
+        depends on DALI2MQTT_PRECONFIGURED
+        default ""
+
+    config DALI2MQTT_MQTT_HOMEASSISTANT_DISCOVERY_ENABLED
+        bool "Enable Home Assistant MQTT Auto-Discovery by default"
+        default y
+        help
+                Automatically publish MQTT discovery configuration topics for Home Assistant
+                on startup. Can still be toggled later in WebUI.
 
     config DALI2MQTT_MQTT_BASE_TOPIC
         string "MQTT Base Topic"

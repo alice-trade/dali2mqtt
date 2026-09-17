@@ -32,6 +32,4 @@ include(${PROJDIR}/scripts/size_components.cmake)
 include(${PROJDIR}/scripts/make_webui.cmake)
 
 include(${PROJDIR}/scripts/build_tests.cmake)
-
-message(NOTICE "--------------------------------------------")
-message(STATUS "Configuration done. Run ninja/make daliMQTT and ninja/make flash")
+include(${PROJDIR}/scripts/print_summary.cmake)

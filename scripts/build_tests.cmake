@@ -29,6 +29,7 @@ if(BUILD_TESTING)
                 INSTALL_COMMAND ""
 
                 BUILD_ALWAYS 1
+                EXCLUDE_FROM_ALL 1
 
                 USES_TERMINAL_CONFIGURE 1
                 USES_TERMINAL_BUILD 1
@@ -64,6 +65,8 @@ if(BUILD_TESTING)
             BUILD_COMMAND ${CMAKE_MAKE_PROGRAM}
 
             BUILD_ALWAYS 1
+            EXCLUDE_FROM_ALL 1
+
             TEST_COMMAND ""
             INSTALL_COMMAND ""
 
