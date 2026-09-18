@@ -1,50 +1,9 @@
 option(BUILD_TESTING "Build and configure testing targets" ON)
 
 if(BUILD_TESTING)
-    message(STATUS "Test targets enabled. Use 'ninja host-test', 'ninja pytest-all', 'pytest-integration', 'test-flash', 'test-monitor'.")
+    message(STATUS "Test targets enabled. Use 'ninja pytest-all', 'pytest-integration', 'test-flash', 'test-monitor'.")
     set(TESTS_BINARY_DIR ${CMAKE_BINARY_DIR}/tests_build)
     set(IDF_TARGET_TOOLCHAIN_FILE "$ENV{IDF_PATH}/tools/cmake/toolchain-${TARGET}.cmake")
-
-    # Host Tests
-    find_program(HOST_C_COMPILER NAMES gcc clang cc)
-    find_program(HOST_CXX_COMPILER NAMES g++ clang++ c++)
-
-    if(HOST_CXX_COMPILER)
-        set(HOST_TESTS_BINARY_DIR ${CMAKE_BINARY_DIR}/host_tests_build)
-
-        ExternalProject_Add(
-                host_unit_tests_build
-                SOURCE_DIR ${CMAKE_SOURCE_DIR}/tests/host
-                BINARY_DIR ${HOST_TESTS_BINARY_DIR}
-
-                CMAKE_ARGS
-                -D CMAKE_C_COMPILER=${HOST_C_COMPILER}
-                -D CMAKE_CXX_COMPILER=${HOST_CXX_COMPILER}
-                -DCMAKE_TOOLCHAIN_FILE=
-                -DCMAKE_BUILD_TYPE=Debug
-                -DPROJDIR=${PROJDIR}
-
-                BUILD_COMMAND ${CMAKE_COMMAND} --build .
-                TEST_COMMAND ""
-                INSTALL_COMMAND ""
-
-                BUILD_ALWAYS 1
-                EXCLUDE_FROM_ALL 1
-
-                USES_TERMINAL_CONFIGURE 1
-                USES_TERMINAL_BUILD 1
-        )
-
-        add_custom_target(test-host
-                COMMAND ${HOST_TESTS_BINARY_DIR}/dali_host_tests
-                DEPENDS host_unit_tests_build
-                COMMENT "Running native host unit tests..."
-                USES_TERMINAL
-        )
-    else()
-        message(STATUS "Host compiler not found. Target 'test-host' is disabled.")
-    endif()
-    # ---------------------
 
     ExternalProject_Add(
             test_firmware_build

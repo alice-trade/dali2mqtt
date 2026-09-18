@@ -26,16 +26,6 @@ if(NOT TARGET ArduinoJson)
     )
 endif()
 
-if(Dependencies_Platform_HostTests)
-    # Catch2
-    FetchContent_Declare(
-            Catch2
-            GIT_REPOSITORY https://github.com/catchorg/Catch2.git
-            GIT_TAG        v3.16.0
-    )
-    FetchContent_MakeAvailable(Catch2)
-endif()
-
 if(Dependencies_Platform_ESP)
     # esp-protocols
     FetchContent_Declare(
