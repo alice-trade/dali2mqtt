@@ -11,6 +11,11 @@
 #include <lwip/ip4_addr.h>
 #include <mdns.h>
 
+#if defined(CONFIG_DALI2MQTT_ETH_TYPE_INTERNAL_RMII)
+#include <esp_eth_mac_esp.h>
+#include <esp_eth_phy_lan87xx.h>
+#endif
+
 namespace daliMQTT {
 
 static constexpr char TAG[] = "Ethernet";
@@ -34,6 +39,11 @@ esp_err_t EthernetBackend::init() {
 
 #if defined(CONFIG_DALI2MQTT_ETH_TYPE_SPI_W5500)
     ESP_RETURN_ON_ERROR(setupW5500(), TAG, "W5500 Init Failed");
+#elif defined(CONFIG_DALI2MQTT_ETH_TYPE_INTERNAL_RMII)
+    ESP_RETURN_ON_ERROR(setupInternalRMII(), TAG, "Internal RMII Init Failed");
+#else
+    ESP_LOGE(TAG, "No Ethernet hardware configured!");
+    return ESP_ERR_NOT_SUPPORTED;
 #endif
 
     ESP_ERROR_CHECK(esp_event_handler_instance_register(ETH_EVENT, ESP_EVENT_ANY_ID, &ethEventHandler, this, nullptr));
@@ -83,6 +93,22 @@ esp_err_t EthernetBackend::setupW5500() {
 
     return esp_netif_attach(m_ethNetif, esp_eth_new_netif_glue(m_ethHandle));
 }
+
+#if defined(CONFIG_DALI2MQTT_ETH_TYPE_INTERNAL_RMII)
+esp_err_t EthernetBackend::setupInternalRMII() {
+    eth_mac_config_t mac_config = ETH_MAC_DEFAULT_CONFIG();
+    eth_phy_config_t phy_config = ETH_PHY_DEFAULT_CONFIG();
+
+    eth_esp32_emac_config_t emac_config = ETH_ESP32_EMAC_DEFAULT_CONFIG();
+
+    esp_eth_mac_t *mac = esp_eth_mac_new_esp32(&emac_config, &mac_config);
+    esp_eth_phy_t *phy = esp_eth_phy_new_lan87xx(&phy_config); // для LAN8720
+
+    esp_eth_config_t eth_config = ETH_DEFAULT_CONFIG(mac, phy);
+    ESP_RETURN_ON_ERROR(esp_eth_driver_install(&eth_config, &m_ethHandle), TAG, "Install driver failed");
+    return esp_netif_attach(m_ethNetif, esp_eth_new_netif_glue(m_ethHandle));
+}
+#endif
 
 esp_err_t EthernetBackend::start(const ConfigStructure&) {
     if (!m_ethHandle) return ESP_ERR_INVALID_STATE;

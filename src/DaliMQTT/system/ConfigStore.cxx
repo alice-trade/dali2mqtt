@@ -28,10 +28,12 @@ esp_err_t ConfigStore::init() {
     }
     ESP_RETURN_ON_ERROR(ret, TAG, "NVS Flash Init failed");
 
+#if defined(CONFIG_DALI2MQTT_ENABLE_WEBUI)
     ret = mountLittleFs();
     if (ret != ESP_OK) {
         ESP_LOGW(TAG, "LittleFS mount warning: %s", esp_err_to_name(ret));
     }
+#endif
 
     m_initialized = true;
     return ESP_OK;

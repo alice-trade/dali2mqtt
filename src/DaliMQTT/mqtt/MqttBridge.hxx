@@ -53,16 +53,17 @@ class MqttBridge {
     static void onOtaVersionReceived(const OtaVersionInfo& info, void* ctx);
 
     static void bridgeTaskRunner(void* arg);
-    [[noreturn]] void bridgeWorkerLoop();
+    [[noreturn]] void bridgeWorkerLoop() const;
 
-    void routeIncomingCommand(std::string_view subTopic, std::string_view payload);
+    void routeIncomingCommand(std::string_view topic, std::string_view payload) const;
     void handleLightCommand(std::string_view targetPath, std::string_view payload) const;
     void handleGroupConfigCommand(std::string_view payload) const;
     void handleSceneCommand(std::string_view busStr, std::string_view payload) const;
     void handleRawDaliCommand(std::string_view payload) const;
     void handleSyncCommand(std::string_view payload) const;
-
+    void replayAllCachedStates() const;
     void publishOtaState(const char* latestVersion, const char* releaseUrl, bool inProgress, uint8_t pct) const;
+    void handleHomeAssistantStatus(std::string_view payload) const;
 
     MqttClient& m_mqtt;
     DaliDeviceRegistry& m_daliRegistry;

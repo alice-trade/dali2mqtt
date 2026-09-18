@@ -319,6 +319,14 @@ menu "DALI MQTT Bridge Settings"
 
     menu "Web UI Configuration"
 
+        config DALI2MQTT_ENABLE_WEBUI
+            bool "Enable Built-in Web UI & HTTP Server"
+            default y
+            help
+                 Enable Web UI for commissioning, bus scanning, and device configuration.
+                 If disabled, Node.js/npm is not required, LittleFS web partition is skipped,
+                 and HTTP server is disabled (saving RAM and Flash).
+
         config DALI2MQTT_WEBUI_SPIFFS_PARTITION_LABEL
             string "LittleFS Partition Label"
             default "web_storage"

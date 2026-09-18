@@ -5,7 +5,7 @@
 FetchContent_Declare(
         etl
         GIT_REPOSITORY https://github.com/ETLCPP/etl.git
-        GIT_TAG        20.48.1
+        GIT_TAG        20.49.0
         GIT_SHALLOW    TRUE
 )
 FetchContent_MakeAvailable(etl)
@@ -32,7 +32,7 @@ if(Dependencies_Platform_ESP)
             esp-protocols
             GIT_REPOSITORY https://github.com/espressif/esp-protocols.git
             GIT_SUBMODULES "ci" # no submodules
-            GIT_TAG da126db1f6e2b0c8df28de5112e5120e2215b8b7
+            GIT_TAG 6057b2b19a0258b632ba3b29629cb14b894df4ab
     )
         FetchContent_MakeAvailable(esp-protocols)
         set(ESP_PROTO_BASEDIR "${esp-protocols_SOURCE_DIR}/components")

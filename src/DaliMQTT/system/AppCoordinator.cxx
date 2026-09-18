@@ -45,7 +45,10 @@ void AppCoordinator::start() {
         m_deps.network.start(*cfg);
     }
 
-    m_deps.webServer.start();
+    if constexpr (WebUIController::isEnabled()) {
+        ESP_LOGI(TAG, "Starting Web UI HTTP server...");
+        m_deps.webUi.start();
+    }
     m_deps.dali.Registry().requestBroadcastSync(2000, 1400);
 }
 

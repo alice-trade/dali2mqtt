@@ -15,8 +15,7 @@
 #include "system/SystemControls.hxx"
 #include "system/SystemEvent.hxx"
 #include "system/SystemScheduler.hxx"
-#include "webui/ApiContext.hxx"
-#include "webui/WebUI.hxx"
+#include "system/WebUIController.hxx"
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 
@@ -33,14 +32,13 @@ struct Application {
     DaliService dali;
     MqttClient mqttClient;
 
-    ApiContext apiCtx;
-    WebUI webServer;
+    WebUIController webUi;
     MqttBridge mqttBridge;
     AppCoordinator coordinator;
 
     Application()
         : systemQueue(xQueueCreate(16, sizeof(SystemEventType))),
-          apiCtx(config, network, dali.Registry(), mqttClient, ota), webServer(apiCtx),
+          webUi(config, network, dali.Registry(), mqttClient, ota),
           mqttBridge(mqttClient, dali.Registry(), dali.Bus(), config, ota, network),
           coordinator(AppCoordinator::Dependencies{.config = config,
                                                    .controls = controls,
@@ -51,7 +49,7 @@ struct Application {
                                                    .dali = dali,
                                                    .mqttClient = mqttClient,
                                                    .mqttBridge = mqttBridge,
-                                                   .webServer = webServer,
+                                                   .webUi = webUi,
                                                    .systemQueue = systemQueue}) {}
 
     ~Application() {

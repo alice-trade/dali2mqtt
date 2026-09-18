@@ -6,7 +6,6 @@
 #include "utils/DaliSensorMath.hxx"
 #include <ArduinoJson.h>
 #include <esp_log.h>
-#include <esp_system.h>
 
 namespace daliMQTT {
 
@@ -106,6 +105,9 @@ void MqttBridge::onMqttConnectedBridge(void* ctx) {
     snprintf(topicBuf, sizeof(topicBuf), "%s/cmd/sync", self->m_baseTopic.c_str());
     self->m_mqtt.subscribe(topicBuf);
 
+    snprintf(topicBuf, sizeof(topicBuf), "%s/cmd/query", self->m_baseTopic.c_str());
+    self->m_mqtt.subscribe(topicBuf);
+
     snprintf(topicBuf, sizeof(topicBuf), "%s/config/get", self->m_baseTopic.c_str());
     self->m_mqtt.subscribe(topicBuf);
     snprintf(topicBuf, sizeof(topicBuf), "%s/config/set", self->m_baseTopic.c_str());
@@ -138,6 +140,7 @@ void MqttBridge::onMqttConnectedBridge(void* ctx) {
 
     if (cfg->hassDiscoveryEnabled) {
         self->publishHomeAssistantDiscovery();
+        self->m_mqtt.subscribe("homeassistant/status");
     }
 }
 
@@ -172,7 +175,7 @@ void MqttBridge::onDaliDeviceStateChanged(const DeviceStateChangeEvent& event, v
 
     char payload[256];
     serializeJson(doc, payload, sizeof(payload));
-    self->m_mqtt.publish(topic, payload, 0, true);
+    self->m_mqtt.publish(topic, payload, 0, false);
 }
 
 void MqttBridge::onDaliGroupStateChanged(const GroupStateChangeEvent& event, void* ctx) {
@@ -197,7 +200,7 @@ void MqttBridge::onDaliGroupStateChanged(const GroupStateChangeEvent& event, voi
 
     char payload[256];
     serializeJson(doc, payload, sizeof(payload));
-    self->m_mqtt.publish(topic, payload, 0, true);
+    self->m_mqtt.publish(topic, payload, 0, false);
 }
 
 void MqttBridge::onOtaProgressChanged(const OtaProgressEvent& event, void* ctx) {
@@ -216,6 +219,48 @@ void MqttBridge::onOtaProgressChanged(const OtaProgressEvent& event, void* ctx) 
     char payload[192];
     serializeJson(doc, payload, sizeof(payload));
     self->m_mqtt.publish(topic, payload, 0, false);
+}
+
+void MqttBridge::replayAllCachedStates() const {
+    ESP_LOGI(TAG, "Replaying cached states from RAM to MQTT...");
+
+    const auto devices = m_daliRegistry.getDevicesSnapshot();
+    for (const auto& dev : devices) {
+        if (const auto* gear = etl::get_if<ControlGear>(&dev)) {
+            DeviceStateChangeEvent ev{
+                .longAddress = gear->longAddress,
+                .internalAddress = gear->internalAddress,
+                .level = gear->currentLevel,
+                .statusByte = gear->statusByte,
+                .available = gear->available
+            };
+            if (gear->color.has_value()) {
+                ev.colorTemp = gear->color->currentTc;
+                ev.rgb = gear->color->currentRgb;
+            }
+
+            onDaliDeviceStateChanged(ev, const_cast<MqttBridge*>(this));
+            vTaskDelay(pdMS_TO_TICKS(2));
+        }
+    }
+
+    for (uint8_t busId = 0; busId < DaliDeviceRegistry::BUS_COUNT; ++busId) {
+        for (uint8_t g = 0; g < 16; ++g) {
+            DaliGroupState gState = m_daliRegistry.getGroupState(busId, g);
+            GroupStateChangeEvent ev{
+                .busId = busId,
+                .groupId = g,
+                .level = gState.currentLevel,
+                .colorTemp = gState.colorTemp,
+                .rgb = gState.rgb
+            };
+            onDaliGroupStateChanged(ev, const_cast<MqttBridge*>(this));
+
+            vTaskDelay(pdMS_TO_TICKS(2));
+        }
+    }
+
+    ESP_LOGI(TAG, "Replay complete.");
 }
 
 void MqttBridge::onDaliInputEvent(const InputDeviceEvent& event, void* ctx) {
@@ -263,23 +308,44 @@ void MqttBridge::bridgeTaskRunner(void* arg) {
     static_cast<MqttBridge*>(arg)->bridgeWorkerLoop();
 }
 
-[[noreturn]] void MqttBridge::bridgeWorkerLoop() {
+[[noreturn]] void MqttBridge::bridgeWorkerLoop() const {
     MqttIncomingMessage msg{};
 
     while (true) {
         if (xQueueReceive(m_cmdQueue, &msg, portMAX_DELAY) == pdTRUE) {
-            std::string_view topic(msg.topic.c_str(), msg.topic.length());
-            std::string_view payload(msg.payload.c_str(), msg.payload.length());
+            const std::string_view topic(msg.topic.c_str(), msg.topic.length());
+            const std::string_view payload(msg.payload.c_str(), msg.payload.length());
 
-            if (topic.starts_with(m_baseTopic.c_str())) {
-                topic.remove_prefix(m_baseTopic.length());
-                routeIncomingCommand(topic, payload);
-            }
+            routeIncomingCommand(topic, payload);
         }
     }
 }
 
-void MqttBridge::routeIncomingCommand(std::string_view subTopic, std::string_view payload) {
+void MqttBridge::handleHomeAssistantStatus(std::string_view payload) const {
+    if (payload == "online") {
+        ESP_LOGI(TAG, "Home Assistant is ONLINE (Birth Message received)!");
+        vTaskDelay(pdMS_TO_TICKS(300));
+        replayAllCachedStates();
+    } else if (payload == "offline") {
+        ESP_LOGW(TAG, "Home Assistant is OFFLINE (LWT)");
+    }
+}
+
+void MqttBridge::routeIncomingCommand(std::string_view topic, std::string_view payload) const {
+    const auto cfg = m_config.get();
+
+    if (cfg->hassDiscoveryEnabled && topic == "homeassistant/status") {
+        handleHomeAssistantStatus(payload);
+        return;
+    }
+
+    if (!topic.starts_with(m_baseTopic.c_str())) {
+        return;
+    }
+
+    std::string_view subTopic = topic;
+    subTopic.remove_prefix(m_baseTopic.length());
+
     if (subTopic.starts_with("/light/")) {
         subTopic.remove_prefix(7);
         handleLightCommand(subTopic, payload);
@@ -289,7 +355,6 @@ void MqttBridge::routeIncomingCommand(std::string_view subTopic, std::string_vie
     } else if (subTopic == "/config/get") {
         char resTopic[128];
         snprintf(resTopic, sizeof(resTopic), "%s/config/get/response", m_baseTopic.c_str());
-        const auto cfg = m_config.get();
         JsonDocument doc;
         doc["mqtt_base"] = cfg->mqttBaseTopic.c_str();
         doc["client_id"] = cfg->clientId.c_str();
@@ -316,12 +381,14 @@ void MqttBridge::routeIncomingCommand(std::string_view subTopic, std::string_vie
     } else if (subTopic == "/cmd/sync") {
         handleSyncCommand(payload);
     } else if (subTopic == "/update/check") {
-        const auto cfg = m_config.get();
         ESP_LOGI(TAG, "MQTT command: check for updates");
         m_ota.checkForUpdateAsync(cfg->otaBaseUrl.c_str());
     } else if (subTopic == "/update/install") {
         ESP_LOGI(TAG, "MQTT command: install update");
         m_ota.startUpdate(nullptr, true);
+    } else if (subTopic == "/cmd/query") {
+        ESP_LOGI(TAG, "External query command received, replaying state cache...");
+        replayAllCachedStates();
     }
 }
 

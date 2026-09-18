@@ -38,7 +38,9 @@ public:
 private:
     static void ethEventHandler(void* arg, esp_event_base_t base, int32_t id, void* data);
     esp_err_t setupW5500();
-
+#if defined(CONFIG_DALI2MQTT_ETH_TYPE_INTERNAL_RMII)
+    esp_err_t setupInternalRMII();
+#endif
     std::atomic<NetworkStatus> m_status{NetworkStatus::Disconnected};
     esp_netif_t* m_ethNetif{nullptr};
     esp_eth_handle_t m_ethHandle{nullptr};

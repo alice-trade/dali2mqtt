@@ -671,10 +671,17 @@ void DaliDeviceRegistry::pollTaskRunner(void* arg) {
             std::lock_guard<std::mutex> lock(m_registryMutex);
             totalDevices = m_devices.size();
             if (totalDevices > 0) {
-                if (m_roundRobinIndex >= totalDevices)
-                    m_roundRobinIndex = 0;
-                rrTarget = getIdentity(m_devices[m_roundRobinIndex++]).internalAddress;
-                hasTarget = true;
+                for (size_t attempts = 0; attempts < totalDevices; ++attempts) {
+                    if (m_roundRobinIndex >= totalDevices)
+                        m_roundRobinIndex = 0;
+
+                    const auto& dev = m_devices[m_roundRobinIndex++];
+                    if (etl::holds_alternative<ControlGear>(dev)) {
+                        rrTarget = getIdentity(dev).internalAddress;
+                        hasTarget = true;
+                        break;
+                    }
+                }
             }
         }
 
@@ -692,23 +699,25 @@ void DaliDeviceRegistry::pollTaskRunner(void* arg) {
 }
 
 esp_err_t DaliDeviceRegistry::removeDevice(const DaliLongAddress_t longAddr) {
-    std::lock_guard<std::mutex> lock(m_registryMutex);
+    {
+        std::lock_guard<std::mutex> lock(m_registryMutex);
 
-    const auto it = std::ranges::find_if(
-        m_devices, [longAddr](const DaliDevice& d) { return getIdentity(d).longAddress == longAddr; });
+        const auto it = std::ranges::find_if(
+            m_devices, [longAddr](const DaliDevice& d) { return getIdentity(d).longAddress == longAddr; });
 
-    if (it == m_devices.end())
-        return ESP_ERR_NOT_FOUND;
+        if (it == m_devices.end())
+            return ESP_ERR_NOT_FOUND;
 
-    const auto intAddr = getIdentity(*it).internalAddress;
-    size_t mapIdx = (intAddr.bus() * 64) + intAddr.shortAddr();
-    if (etl::holds_alternative<InputDevice>(*it)) {
-        mapIdx += (BUS_COUNT * 64);
+        const auto intAddr = getIdentity(*it).internalAddress;
+        size_t mapIdx = (intAddr.bus() * 64) + intAddr.shortAddr();
+        if (etl::holds_alternative<InputDevice>(*it)) {
+            mapIdx += (BUS_COUNT * 64);
+        }
+        m_internalToLongMap[mapIdx] = InvalidLongAddr;
+
+        m_groupAssignments.erase(longAddr);
+        m_devices.erase(it);
     }
-    m_internalToLongMap[mapIdx] = InvalidLongAddr;
-
-    m_groupAssignments.erase(longAddr);
-    m_devices.erase(it);
 
     saveAddressMapToNvs();
     ESP_LOGI(TAG, "Device 0x%06lX manually removed from registry and NVS.", longAddr);

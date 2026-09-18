@@ -56,7 +56,6 @@ target_link_libraries(DaliMQTT-Core PUBLIC
         idf::esp-mqtt-src
         idf::mdns
         idf::cxx
-        idf::esp_http_server
         idf::esp_https_ota
         idf::app_update
 )

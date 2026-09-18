@@ -1,5 +1,10 @@
 # Web UI Build & LittleFS Image Generation
 
+if(NOT CONFIG_DALI2MQTT_ENABLE_WEBUI)
+    message(STATUS "WebUI and LittleFS image generation are disabled.")
+    return()
+endif()
+
 set(WEBUI_SOURCE_DIR ${CMAKE_SOURCE_DIR}/src/DaliMQTT/webui)
 set(WEBUI_BUILD_DIR ${WEBUI_SOURCE_DIR}/dist)
 set(LITTLEFS_PARTITION_NAME "web_storage")

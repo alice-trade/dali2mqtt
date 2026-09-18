@@ -14,9 +14,10 @@ target_sources(DaliMQTT-Core PRIVATE
         SystemControls.hxx
         SystemScheduler.hxx
         OtaService.hxx
-
+        WebUIController.hxx
         AppCoordinator.icc
         ConfigStore.icc
         SystemScheduler.icc
         OtaService.icc
+        WebUIController.icc
 )

@@ -18,7 +18,6 @@ inline ConfigStructure makeDefaultConfig() {
                                      .txPin = static_cast<int8_t>(CONFIG_DALI2MQTT_DALI_TX_PIN)};
 
     cfg.daliPollIntervalMs = CONFIG_DALI2MQTT_DALI_DEFAULT_POLL_INTERVAL_MS;
-    cfg.hassDiscoveryEnabled = false;
     cfg.otaCheckIntervalDays = 3;
     cfg.telemetryIntervalSec = 60;
 

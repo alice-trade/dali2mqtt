@@ -14,7 +14,7 @@
 #include "system/SyslogService.hxx"
 #include "system/SystemControls.hxx"
 #include "system/SystemScheduler.hxx"
-#include "webui/WebUI.hxx"
+#include "system/WebUIController.hxx"
 #include <atomic>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -35,7 +35,7 @@ class AppCoordinator {
         DaliService& dali;
         MqttClient& mqttClient;
         MqttBridge& mqttBridge;
-        WebUI& webServer;
+        WebUIController& webUi;
         QueueHandle_t systemQueue{nullptr};
     };
 

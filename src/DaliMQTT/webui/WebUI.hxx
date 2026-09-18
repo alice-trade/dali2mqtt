@@ -10,10 +10,8 @@
 
 namespace daliMQTT {
 
-struct Application;
-
 class WebUI {
-  public:
+public:
     explicit WebUI(ApiContext& apiCtx);
     ~WebUI();
 
@@ -25,7 +23,7 @@ class WebUI {
 
     [[nodiscard]] inline bool isRunning() const noexcept;
 
-  private:
+private:
     static esp_err_t staticFileGetHandler(httpd_req_t* req);
     static esp_err_t checkAuthentication(httpd_req_t* req, const ApiContext* ctx);
     static void setContentTypeByFilename(httpd_req_t* req, const char* filepath);

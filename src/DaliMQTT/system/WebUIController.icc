@@ -1,0 +1,54 @@
+// Copyright (c) 2026 Alice-Trade Inc.
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#ifndef DALIMQTT_WEBUICONTROLLER_ICC
+#define DALIMQTT_WEBUICONTROLLER_ICC
+
+namespace daliMQTT {
+
+#if defined(CONFIG_DALI2MQTT_ENABLE_WEBUI)
+
+inline WebUIController::WebUIController(ConfigStore& cfg, NetworkPlatform& net,
+                                        DaliDeviceRegistry& reg, MqttClient& mqtt, OtaService& ota)
+    : m_apiCtx(cfg, net, reg, mqtt, ota), m_webServer(m_apiCtx) {}
+
+inline esp_err_t WebUIController::start() {
+    return m_webServer.start();
+}
+
+inline void WebUIController::stop() {
+    m_webServer.stop();
+}
+
+constexpr bool WebUIController::isEnabled() noexcept {
+    return true;
+}
+
+inline bool WebUIController::isRunning() const noexcept {
+    return m_webServer.isRunning();
+}
+
+#else
+
+inline WebUIController::WebUIController(ConfigStore&, NetworkPlatform&,
+                                        DaliDeviceRegistry&, MqttClient&, OtaService&) {}
+
+inline esp_err_t WebUIController::start() {
+    return ESP_OK;
+}
+
+inline void WebUIController::stop() {}
+
+constexpr bool WebUIController::isEnabled() noexcept {
+    return false;
+}
+
+inline bool WebUIController::isRunning() const noexcept {
+    return false;
+}
+
+#endif
+
+} // namespace daliMQTT
+
+#endif // DALIMQTT_WEBUICONTROLLER_ICC

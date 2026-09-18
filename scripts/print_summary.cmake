@@ -36,13 +36,11 @@ else()
     set(_SUMMARY_DEPLOY "${_CLR_GREEN}Interactive${_CLR_RESET}")
 endif()
 
-#[[
 if(CONFIG_DALI2MQTT_ENABLE_WEBUI)
-]]
     set(_SUMMARY_WEBUI "${_CLR_GREEN}Enabled${_CLR_RESET}")
-#[[else()
+else()
     set(_SUMMARY_WEBUI "${_CLR_YELLOW}Disabled${_CLR_RESET}")
-endif()]]
+endif()
 
 if(CONFIG_DALI2MQTT_MQTT_HOMEASSISTANT_DISCOVERY_ENABLED)
     set(_SUMMARY_HASS "${_CLR_GREEN}Enabled${_CLR_RESET} (by default)")
