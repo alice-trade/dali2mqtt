@@ -113,17 +113,35 @@ esp_err_t ApiHandlers::setConfig(httpd_req_t* req) {
     if (checkAuth(req, ctx) != ESP_OK)
         return ESP_FAIL;
 
-    char buf[768]; // FIXME Certs fail with save overflowing stack!
-    const int ret = httpd_req_recv(req, buf, std::min<size_t>(req->content_len, sizeof(buf) - 1));
-    if (ret <= 0)
+    if (req->content_len == 0 || req->content_len > 4096) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Payload too large or empty");
         return ESP_FAIL;
-    buf[ret] = '\0';
+    }
+
+    auto buf = std::make_unique<char[]>(req->content_len + 1);
+
+    size_t received = 0;
+    int timeouts = 0;
+
+    while (received < req->content_len) {
+        const int ret = httpd_req_recv(req, buf.get() + received, req->content_len - received);
+        if (ret <= 0) {
+            if (ret == HTTPD_SOCK_ERR_TIMEOUT && ++timeouts < 3) {
+                continue;
+            }
+            httpd_resp_send_408(req);
+            return ESP_FAIL;
+        }
+        received += ret;
+    }
+    buf[received] = '\0';
 
     JsonDocument doc;
-    if (deserializeJson(doc, buf) != DeserializationError::Ok) {
+    if (deserializeJson(doc, buf.get()) != DeserializationError::Ok) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
         return ESP_FAIL;
     }
+
 
     auto newCfg = *ctx->config.get();
 
@@ -142,9 +160,14 @@ esp_err_t ApiHandlers::setConfig(httpd_req_t* req) {
     if (doc["mqtt_base_topic"].is<const char*>())
         newCfg.mqttBaseTopic = doc["mqtt_base_topic"].as<const char*>();
     if (doc["mqtt_ca_cert"].is<const char*>()) {
-        const auto cert = doc["mqtt_ca_cert"].as<const char*>();
-        if (strcmp(cert, "***") != 0) {
-            newCfg.mqttCaCert = cert;
+        const std::string_view cert = doc["mqtt_ca_cert"].as<const char*>();
+        if (cert != "***") {
+            if (cert.length() <= newCfg.mqttCaCert.max_size()) {
+                newCfg.mqttCaCert = cert.data();
+            } else {
+                httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Certificate exceeds maximum size (2048)");
+                return ESP_FAIL;
+            }
         }
     }
     if (doc["http_domain"].is<const char*>())

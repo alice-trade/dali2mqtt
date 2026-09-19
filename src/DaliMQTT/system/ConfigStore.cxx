@@ -93,9 +93,10 @@ esp_err_t ConfigStore::load() {
         size_t certSize = 0;
         if (nvs_get_str(nvs.get(), "mqtt_cert", nullptr, &certSize) == ESP_OK && certSize > 1) {
             if (certSize <= cfg->mqttCaCert.max_size() + 1) {
-                char certBuf[1536];
-                if (nvs_get_str(nvs.get(), "mqtt_cert", certBuf, &certSize) == ESP_OK) {
-                    cfg->mqttCaCert = certBuf;
+                auto certBuf = std::make_unique<char[]>(certSize);
+
+                if (nvs_get_str(nvs.get(), "mqtt_cert", certBuf.get(), &certSize) == ESP_OK) {
+                    cfg->mqttCaCert = certBuf.get();
                 }
             }
         }

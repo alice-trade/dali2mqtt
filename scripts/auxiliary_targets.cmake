@@ -34,3 +34,14 @@ else()
     message(STATUS "Cppcheck not found. Target 'cppcheck' is disabled.")
 endif()
 # ---------------------
+
+# ESP-IDF Diagnostics
+if(IDF_PY_EXE)
+    add_custom_target(diag
+            COMMAND ${IDF_PY_EXE} -B ${CMAKE_BINARY_DIR} diag
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+            COMMENT "Generating ESP-IDF diagnostic report directory..."
+            USES_TERMINAL
+    )
+endif()
+# ---------------------
