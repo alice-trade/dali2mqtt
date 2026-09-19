@@ -17,7 +17,7 @@ void HomeAssistantDiscovery::publishAll(const ConfigStructure& config) const {
     if (!config.hassDiscoveryEnabled || !m_mqtt.isConnected())
         return;
 
-    ESP_LOGI(TAG, "Publishing Home Assistant MQTT Discovery (Prefix: %s)...", config.clientId.c_str());
+    ESP_LOGI(TAG, "Publishing Home Assistant MQTT Discovery (Prefix: %s)...", config.hassDiscoveryPrefix.c_str());
 
     const auto devices = m_registry.getDevicesSnapshot();
     for (const auto& dev : devices) {
@@ -47,7 +47,7 @@ void HomeAssistantDiscovery::publishLight(const ControlGear& gear, const ConfigS
     snprintf(uniqueId, sizeof(uniqueId), "dali_%s_b%d_la_%s", config.clientId.c_str(), busId, addrStr.data());
 
     char discTopic[128];
-    snprintf(discTopic, sizeof(discTopic), "homeassistant/light/%s/config", uniqueId);
+    snprintf(discTopic, sizeof(discTopic), "%s/light/%s/config", config.hassDiscoveryPrefix.c_str(), uniqueId);
 
     char stateTopic[128], cmdTopic[128], avTopic[128];
     snprintf(stateTopic, sizeof(stateTopic), "%s/light/%s/state", config.mqttBaseTopic.c_str(), addrStr.data());
@@ -96,7 +96,7 @@ void HomeAssistantDiscovery::publishLight(const ControlGear& gear, const ConfigS
              addrStr.data());
 
     char faultDiscTopic[128];
-    snprintf(faultDiscTopic, sizeof(faultDiscTopic), "homeassistant/binary_sensor/%s/config", faultUniqueId);
+    snprintf(faultDiscTopic, sizeof(faultDiscTopic), "%s/binary_sensor/%s/config", config.hassDiscoveryPrefix.c_str(), faultUniqueId);
 
     JsonDocument faultDoc;
     faultDoc["name"] = "Lamp Fault";
@@ -120,7 +120,7 @@ void HomeAssistantDiscovery::publishGroup(const uint8_t busId, const uint8_t gro
     snprintf(uniqueId, sizeof(uniqueId), "dali_%s_b%d_grp_%d", config.clientId.c_str(), busId, groupId);
 
     char discTopic[128];
-    snprintf(discTopic, sizeof(discTopic), "homeassistant/light/%s/config", uniqueId);
+    snprintf(discTopic, sizeof(discTopic), "%s/light/%s/config", config.hassDiscoveryPrefix.c_str(), uniqueId);
 
     char stateTopic[128], cmdTopic[128], avTopic[128];
     snprintf(stateTopic, sizeof(stateTopic), "%s/light/bus/%d/group/%d/state", config.mqttBaseTopic.c_str(), busId,
@@ -155,7 +155,7 @@ void HomeAssistantDiscovery::publishSceneSelector(const uint8_t busId, const Con
     snprintf(uniqueId, sizeof(uniqueId), "dali_%s_b%d_scenes", config.clientId.c_str(), busId);
 
     char discTopic[128];
-    snprintf(discTopic, sizeof(discTopic), "homeassistant/select/%s/config", uniqueId);
+    snprintf(discTopic, sizeof(discTopic), "%s/select/%s/config", config.hassDiscoveryPrefix.c_str(), uniqueId);
 
     char cmdTopic[128], avTopic[128];
     snprintf(cmdTopic, sizeof(cmdTopic), "%s/scene/bus/%d/set", config.mqttBaseTopic.c_str(), busId);
@@ -189,7 +189,7 @@ void HomeAssistantDiscovery::publishOtaUpdateEntity(const ConfigStructure& confi
     snprintf(uniqueId, sizeof(uniqueId), "dali_%s_fw_update", config.clientId.c_str());
 
     char discTopic[128];
-    snprintf(discTopic, sizeof(discTopic), "homeassistant/update/%s/config", uniqueId);
+    snprintf(discTopic, sizeof(discTopic), "%s/update/%s/config", config.hassDiscoveryPrefix.c_str(), uniqueId);
 
     char stateTopic[128], cmdTopic[128];
     snprintf(stateTopic, sizeof(stateTopic), "%s/update/state", config.mqttBaseTopic.c_str());

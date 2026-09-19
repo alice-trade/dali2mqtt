@@ -26,25 +26,30 @@ inline ConfigStructure makeDefaultConfig() {
 #else
     cfg.hassDiscoveryEnabled = false;
 #endif
+#if defined(CONFIG_DALI2MQTT_MQTT_HASS_DISCOVERY_PREFIX)
+    cfg.hassDiscoveryPrefix = CONFIG_DALI2MQTT_MQTT_HASS_DISCOVERY_PREFIX;
+#else
+    cfg.hassDiscoveryPrefix = "homeassistant";
+#endif
 
 #if defined(CONFIG_DALI2MQTT_PRECONFIGURED)
-    #if defined(CONFIG_DALI2MQTT_MQTT_BROKER_URI)
-        cfg.mqttUri = CONFIG_DALI2MQTT_MQTT_BROKER_URI;
-    #endif
-    #if defined(CONFIG_DALI2MQTT_MQTT_USER)
-        cfg.mqttUser = CONFIG_DALI2MQTT_MQTT_USER;
-    #endif
-    #if defined(CONFIG_DALI2MQTT_MQTT_PASS)
-        cfg.mqttPass = CONFIG_DALI2MQTT_MQTT_PASS;
-    #endif
+#if defined(CONFIG_DALI2MQTT_MQTT_BROKER_URI)
+    cfg.mqttUri = CONFIG_DALI2MQTT_MQTT_BROKER_URI;
+#endif
+#if defined(CONFIG_DALI2MQTT_MQTT_USER)
+    cfg.mqttUser = CONFIG_DALI2MQTT_MQTT_USER;
+#endif
+#if defined(CONFIG_DALI2MQTT_MQTT_PASS)
+    cfg.mqttPass = CONFIG_DALI2MQTT_MQTT_PASS;
+#endif
 
-    #if defined(CONFIG_DALI2MQTT_NET_WIFI) && defined(CONFIG_DALI2MQTT_WIFI_STA_SSID)
-        cfg.wifiSsid = CONFIG_DALI2MQTT_WIFI_STA_SSID;
-        #if defined(CONFIG_DALI2MQTT_WIFI_STA_PASS)
-            cfg.wifiPass = CONFIG_DALI2MQTT_WIFI_STA_PASS;
-        #endif
-    #endif
-    
+#if defined(CONFIG_DALI2MQTT_NET_WIFI) && defined(CONFIG_DALI2MQTT_WIFI_STA_SSID)
+    cfg.wifiSsid = CONFIG_DALI2MQTT_WIFI_STA_SSID;
+#if defined(CONFIG_DALI2MQTT_WIFI_STA_PASS)
+    cfg.wifiPass = CONFIG_DALI2MQTT_WIFI_STA_PASS;
+#endif
+#endif
+
     cfg.configuredFlag = NetworkPlatform::isConfigured(cfg) && cfg.isMqttConfigured();
 #endif
 

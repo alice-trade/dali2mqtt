@@ -115,7 +115,10 @@ esp_err_t WebUI::checkAuthentication(httpd_req_t* req, const ApiContext* ctx) {
 esp_err_t WebUI::staticFileGetHandler(httpd_req_t* req) {
     char filepath[544];
     snprintf(filepath, sizeof(filepath), "/littlefs%s", (strcmp(req->uri, "/") == 0) ? "/index.html" : req->uri);
-
+    if (std::string_view(req->uri).find("..") != std::string_view::npos) {
+        httpd_resp_send_err(req, HTTPD_403_FORBIDDEN, "Access Denied");
+        return ESP_FAIL;
+    }
     struct stat st{};
     if (stat(filepath, &st) != 0) {
         snprintf(filepath, sizeof(filepath), "/littlefs/index.html");

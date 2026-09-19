@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "system/OtaService.hxx"
+#include <esp_littlefs.h>
 #include <ArduinoJson.h>
 #include <algorithm>
 #include <cstring>
@@ -87,14 +88,29 @@ void OtaService::otaTaskRunner(void* arg) {
 
     if (m_updateWebFs) {
         etl::string<160> fsUrl = m_targetUrl;
+        bool fsUrlResolved = false;
+
         const size_t pos = fsUrl.find("firmware.bin");
         if (pos != etl::string<160>::npos) {
             fsUrl.replace(pos, 12, "web_storage.bin");
+            fsUrlResolved = true;
+        } else {
+            const size_t lastSlash = fsUrl.rfind('/');
+            if (lastSlash != etl::string<160>::npos) {
+                fsUrl.resize(lastSlash + 1);
+                fsUrl.append("web_storage.bin");
+                fsUrlResolved = true;
+            }
         }
 
-        err = performFsOta(fsUrl.c_str());
-        if (err != ESP_OK) {
-            ESP_LOGW(TAG, "WebUI LittleFS update skipped/failed: %s", esp_err_to_name(err));
+        if (fsUrlResolved && fsUrl != m_targetUrl) {
+            ESP_LOGI(TAG, "Attempting WebUI FS update from: %s", fsUrl.c_str());
+            err = performFsOta(fsUrl.c_str());
+            if (err != ESP_OK) {
+                ESP_LOGW(TAG, "WebUI LittleFS update failed: %s (Continuing reboot)", esp_err_to_name(err));
+            }
+        } else {
+            ESP_LOGW(TAG, "Could not resolve distinct web_storage URL. Skipping FS OTA to prevent partition corruption.");
         }
     }
 
@@ -142,8 +158,10 @@ esp_err_t OtaService::performAppOta(const char* appUrl) {
 esp_err_t OtaService::performFsOta(const char* fsUrl) {
     const esp_partition_t* part =
         esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, FS_PARTITION_LABEL);
-    if (!part)
+    if (!part) {
+        ESP_LOGE(TAG, "Partition '%s' not found", FS_PARTITION_LABEL);
         return ESP_ERR_NOT_FOUND;
+    }
 
     esp_http_client_config_t httpCfg{};
     httpCfg.url = fsUrl;
@@ -156,29 +174,51 @@ esp_err_t OtaService::performFsOta(const char* fsUrl) {
         return ESP_FAIL;
 
     if (esp_http_client_open(client, 0) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to open HTTP connection to %s", fsUrl);
         esp_http_client_cleanup(client);
         return ESP_FAIL;
     }
 
     const int contentLen = esp_http_client_fetch_headers(client);
+    const int statusCode = esp_http_client_get_status_code(client);
+
+    if (statusCode != 200) {
+        ESP_LOGE(TAG, "HTTP server returned error status: %d", statusCode);
+        esp_http_client_close(client);
+        esp_http_client_cleanup(client);
+        return ESP_ERR_HTTP_INVALID_TRANSPORT;
+    }
+
     if (contentLen <= 0 || contentLen > static_cast<int>(part->size)) {
+        ESP_LOGE(TAG, "Invalid content length: %d (partition size: %u)", contentLen, (unsigned)part->size);
         esp_http_client_close(client);
         esp_http_client_cleanup(client);
         return ESP_ERR_INVALID_SIZE;
     }
 
     notifyProgress(OtaStatus::InProgress, 82, "Erasing WebUI storage...");
-    ESP_RETURN_ON_ERROR(esp_partition_erase_range(part, 0, part->size), TAG, "Partition erase failed");
+
+    esp_vfs_littlefs_unregister(FS_PARTITION_LABEL);
+
+    esp_err_t err = esp_partition_erase_range(part, 0, part->size);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Partition erase failed: %s", esp_err_to_name(err));
+        esp_http_client_close(client);
+        esp_http_client_cleanup(client);
+        return err;
+    }
 
     char streamBuffer[STREAM_BUFFER_SIZE];
     int bytesRead = 0;
     int totalWritten = 0;
 
     while ((bytesRead = esp_http_client_read(client, streamBuffer, sizeof(streamBuffer))) > 0) {
-        if (esp_partition_write(part, totalWritten, streamBuffer, bytesRead) != ESP_OK) {
+        err = esp_partition_write(part, totalWritten, streamBuffer, bytesRead);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Flash write failed at offset %d: %s", totalWritten, esp_err_to_name(err));
             esp_http_client_close(client);
             esp_http_client_cleanup(client);
-            return ESP_FAIL;
+            return err;
         }
         totalWritten += bytesRead;
         const uint8_t pct = static_cast<uint8_t>(80 + (totalWritten * 18) / contentLen);
@@ -188,6 +228,20 @@ esp_err_t OtaService::performFsOta(const char* fsUrl) {
 
     esp_http_client_close(client);
     esp_http_client_cleanup(client);
+
+    if (totalWritten != contentLen) {
+        ESP_LOGE(TAG, "Download truncated: written %d of %d bytes", totalWritten, contentLen);
+        return ESP_ERR_IMAGE_INVALID;
+    }
+
+    esp_vfs_littlefs_conf_t conf = {
+        .base_path = "/littlefs",
+        .partition_label = FS_PARTITION_LABEL,
+        .format_if_mount_failed = true,
+        .dont_mount = false,
+    };
+    esp_vfs_littlefs_register(&conf);
+
     return ESP_OK;
 }
 

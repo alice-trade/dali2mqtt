@@ -28,7 +28,7 @@ esp_err_t SyslogService::start(const char* serverAddr) {
     if (!m_ringBuf)
         return ESP_ERR_NO_MEM;
 
-    const BaseType_t res = xTaskCreate(syslogTaskRunner, "syslog_task", 3072, this, 4, &m_taskHandle);
+    const BaseType_t res = xTaskCreate(syslogTaskRunner, "syslog_task", 4096, this, 4, &m_taskHandle);
     if (res != pdPASS) {
         vRingbufferDelete(m_ringBuf);
         m_ringBuf = nullptr;

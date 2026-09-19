@@ -85,6 +85,7 @@ esp_err_t ApiHandlers::getConfig(httpd_req_t* req) {
     doc["ota_check_interval_days"] = cfg->otaCheckIntervalDays;
     doc["ota_url"] = cfg->otaBaseUrl.c_str();
     doc["hass_discovery_enabled"] = cfg->hassDiscoveryEnabled;
+    doc["hass_discovery_prefix"]  = cfg->hassDiscoveryPrefix.c_str();
     doc["syslog_server"] = cfg->syslogServer.c_str();
     doc["syslog_enabled"] = cfg->syslogEnabled;
 
@@ -112,7 +113,7 @@ esp_err_t ApiHandlers::setConfig(httpd_req_t* req) {
     if (checkAuth(req, ctx) != ESP_OK)
         return ESP_FAIL;
 
-    char buf[768];
+    char buf[768]; // FIXME Certs fail with save overflowing stack!
     const int ret = httpd_req_recv(req, buf, std::min<size_t>(req->content_len, sizeof(buf) - 1));
     if (ret <= 0)
         return ESP_FAIL;
@@ -167,6 +168,9 @@ esp_err_t ApiHandlers::setConfig(httpd_req_t* req) {
         newCfg.syslogEnabled = doc["syslog_enabled"].as<bool>();
     if (doc["hass_discovery_enabled"].is<bool>())
         newCfg.hassDiscoveryEnabled = doc["hass_discovery_enabled"].as<bool>();
+    if (doc["hass_discovery_prefix"].is<const char*>()) {
+        newCfg.hassDiscoveryPrefix = doc["hass_discovery_prefix"].as<const char*>();
+    }
     if (doc["dali_poll_interval_ms"].is<uint32_t>())
         newCfg.daliPollIntervalMs = doc["dali_poll_interval_ms"].as<uint32_t>();
 

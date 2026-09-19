@@ -221,7 +221,7 @@ esp_err_t DaliBusEngine::executeTransaction(const TransactionRequest& request, u
     xQueueSend(m_phyEventQueue, &kick, 0);
 
     TransactionResponse resp{};
-    const BaseType_t res = xQueueReceive(m_respQueue, &resp, pdMS_TO_TICKS(300));
+    const BaseType_t res = xQueueReceive(m_respQueue, &resp, pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_TRANSACTION_TIMEOUT_MS));
     xSemaphoreGiveRecursive(m_busMutex);
 
     if (res != pdTRUE) {

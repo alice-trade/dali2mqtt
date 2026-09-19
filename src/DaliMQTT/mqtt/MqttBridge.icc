@@ -17,8 +17,12 @@ inline bool MqttBridge::enqueueIncomingMessage(const char* topic, const int topi
     if (data && dataLen > 0) {
         msg.payload.assign(data, dataLen);
     }
-
-    return xQueueSend(m_cmdQueue, &msg, 0) == pdTRUE;
+    const BaseType_t res = xQueueSend(m_cmdQueue, &msg, pdMS_TO_TICKS(100));
+    if (res != pdTRUE) {
+        ESP_LOGE("MqttBridge", "CMD Queue overflow! Command dropped for topic: %.*s", topicLen, topic);
+        return false;
+    }
+    return true;
 }
 
 } // namespace daliMQTT

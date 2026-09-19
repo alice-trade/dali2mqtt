@@ -6,6 +6,7 @@
 #include "utils/DaliSensorMath.hxx"
 #include <ArduinoJson.h>
 #include <esp_log.h>
+#include <charconv>
 
 namespace daliMQTT {
 
@@ -44,7 +45,6 @@ esp_err_t MqttBridge::start() {
             return ESP_ERR_NO_MEM;
         }
     }
-
     ESP_LOGI(TAG, "MQTT Bridge initialized (Base Topic: %s)", m_baseTopic.c_str());
     return ESP_OK;
 }
@@ -140,7 +140,10 @@ void MqttBridge::onMqttConnectedBridge(void* ctx) {
 
     if (cfg->hassDiscoveryEnabled) {
         self->publishHomeAssistantDiscovery();
-        self->m_mqtt.subscribe("homeassistant/status");
+
+        char haStatusTopic[64];
+        snprintf(haStatusTopic, sizeof(haStatusTopic), "%s/status", cfg->hassDiscoveryPrefix.c_str());
+        self->m_mqtt.subscribe(haStatusTopic);
     }
 }
 
@@ -334,9 +337,13 @@ void MqttBridge::handleHomeAssistantStatus(std::string_view payload) const {
 void MqttBridge::routeIncomingCommand(std::string_view topic, std::string_view payload) const {
     const auto cfg = m_config.get();
 
-    if (cfg->hassDiscoveryEnabled && topic == "homeassistant/status") {
-        handleHomeAssistantStatus(payload);
-        return;
+    if (cfg->hassDiscoveryEnabled) {
+        char haStatusTopic[64];
+        snprintf(haStatusTopic, sizeof(haStatusTopic), "%s/status", cfg->hassDiscoveryPrefix.c_str());
+        if (topic == haStatusTopic) {
+            handleHomeAssistantStatus(payload);
+            return;
+        }
     }
 
     if (!topic.starts_with(m_baseTopic.c_str())) {
@@ -431,26 +438,41 @@ void MqttBridge::handleLightCommand(std::string_view targetPath, std::string_vie
         targetPath.remove_prefix(4);
         const auto grpPos = targetPath.find("/group/");
         if (grpPos != std::string_view::npos) {
-            const uint8_t busId = targetPath[0] - '0';
-            const uint8_t groupId = static_cast<uint8_t>(atoi(targetPath.substr(grpPos + 7).data()));
+            uint8_t busId = 0;
+            const auto busPart = targetPath.substr(0, grpPos);
+            auto [p1, ec1] = std::from_chars(busPart.data(), busPart.data() + busPart.size(), busId);
 
-            if (brightness.has_value())
-                m_daliRegistry.setGroupBrightness(busId, groupId, *brightness);
-            else if (powerState.has_value())
-                m_daliRegistry.setGroupPower(busId, groupId, *powerState);
+            uint8_t groupId = 0;
+            const auto grpPart = targetPath.substr(grpPos + 7);
+            auto [p2, ec2] = std::from_chars(grpPart.data(), grpPart.data() + grpPart.size(), groupId);
+
+            if (ec1 == std::errc{} && ec2 == std::errc{} && groupId < 16) {
+                if (brightness.has_value())
+                    m_daliRegistry.setGroupBrightness(busId, groupId, *brightness);
+                else if (powerState.has_value())
+                    m_daliRegistry.setGroupPower(busId, groupId, *powerState);
+            }
             return;
         }
 
         const auto shortPos = targetPath.find("/short/");
         if (shortPos != std::string_view::npos) {
-            const uint8_t busId = targetPath[0] - '0';
-            const uint8_t sa = static_cast<uint8_t>(atoi(targetPath.substr(shortPos + 7).data()));
-            auto longAddrOpt = m_daliRegistry.getLongAddress(DaliInternalAddr(busId, sa));
-            if (longAddrOpt) {
-                if (brightness.has_value())
-                    m_daliRegistry.setBrightness(*longAddrOpt, *brightness);
-                else if (powerState.has_value())
-                    m_daliRegistry.setPower(*longAddrOpt, *powerState);
+            uint8_t busId = 0;
+            const auto busPart = targetPath.substr(0, shortPos);
+            auto [p1, ec1] = std::from_chars(busPart.data(), busPart.data() + busPart.size(), busId);
+
+            uint8_t sa = 0;
+            const auto shortPart = targetPath.substr(shortPos + 7);
+            auto [p2, ec2] = std::from_chars(shortPart.data(), shortPart.data() + shortPart.size(), sa);
+
+            if (ec1 == std::errc{} && ec2 == std::errc{} && sa < 64) {
+                auto longAddrOpt = m_daliRegistry.getLongAddress(DaliInternalAddr(busId, sa));
+                if (longAddrOpt) {
+                    if (brightness.has_value())
+                        m_daliRegistry.setBrightness(*longAddrOpt, *brightness);
+                    else if (powerState.has_value())
+                        m_daliRegistry.setPower(*longAddrOpt, *powerState);
+                }
             }
             return;
         }
@@ -498,12 +520,18 @@ void MqttBridge::handleGroupConfigCommand(std::string_view payload) const {
 }
 
 void MqttBridge::handleSceneCommand(std::string_view busStr, std::string_view payload) const {
-    const uint8_t busId = busStr.empty() ? 0 : static_cast<uint8_t>(busStr[0] - '0');
+    uint8_t busId = 0;
+    if (!busStr.empty()) {
+        std::from_chars(busStr.data(), busStr.data() + busStr.size(), busId);
+    }
 
     if (payload.starts_with("Scene ")) {
-        const int sceneId = atoi(payload.substr(6).data());
-        if (sceneId >= 0 && sceneId < 16) {
-            m_daliRegistry.activateScene(busId, static_cast<uint8_t>(sceneId));
+        const auto scenePart = payload.substr(6);
+        uint8_t sceneId = 0;
+        auto [ptr, ec] = std::from_chars(scenePart.data(), scenePart.data() + scenePart.size(), sceneId);
+
+        if (ec == std::errc{} && sceneId < 16) {
+            m_daliRegistry.activateScene(busId, sceneId);
         }
         return;
     }

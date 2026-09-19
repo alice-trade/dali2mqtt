@@ -19,14 +19,13 @@ SystemControls::~SystemControls() {
 esp_err_t SystemControls::init(const gpio_num_t bootButtonPin) {
     m_buttonPin = bootButtonPin;
 
-    m_resetTimer = xTimerCreate("btn_rst_tmr", pdMS_TO_TICKS(BUTTON_LONG_PRESS_MS), pdFALSE, this, onButtonHeldTimer);
+    m_resetTimer = xTimerCreate("btn_poll_tmr", pdMS_TO_TICKS(100), pdTRUE, this, onButtonHeldTimer);
     if (!m_resetTimer) {
-        ESP_LOGE(TAG, "Failed to create reset button timer");
         return ESP_ERR_NO_MEM;
     }
 
     gpio_config_t ioConf{};
-    ioConf.intr_type = GPIO_INTR_ANYEDGE;
+    ioConf.intr_type = GPIO_INTR_NEGEDGE;
     ioConf.mode = GPIO_MODE_INPUT;
     ioConf.pin_bit_mask = (1ULL << m_buttonPin);
     ioConf.pull_up_en = GPIO_PULLUP_ENABLE;
@@ -61,28 +60,36 @@ void SystemControls::setResetCallback(ResetActionCallback cb, void* ctx) noexcep
 
 void SystemControls::onButtonHeldTimer(TimerHandle_t xTimer) {
     const auto* self = static_cast<SystemControls*>(pvTimerGetTimerID(xTimer));
+    if (!self) return;
+
     if (gpio_get_level(self->m_buttonPin) == 0) {
-        ESP_LOGW(TAG, "BOOT Button held for 5 seconds. Triggering Factory Reset!");
-        if (self->m_resetCb) {
-            self->m_resetCb(self->m_resetCtx);
+        const uint32_t nowMs = static_cast<uint32_t>(esp_timer_get_time() / 1000);
+        const uint32_t heldDurationMs = nowMs - self->m_lastPressTsMs;
+
+        if (heldDurationMs >= BUTTON_LONG_PRESS_MS) {
+            xTimerStop(self->m_resetTimer, 0);
+            ESP_LOGW(TAG, "BOOT Button held for 5 seconds. Factory Reset triggered!");
+            if (self->m_resetCb) {
+                self->m_resetCb(self->m_resetCtx);
+            }
         }
+    } else {
+        xTimerStop(self->m_resetTimer, 0);
     }
 }
 
 void IRAM_ATTR SystemControls::gpioButtonIsr(void* arg) {
-    const auto* self = static_cast<SystemControls*>(arg);
-    BaseType_t highTaskWoken = pdFALSE;
+    auto* self = static_cast<SystemControls*>(arg);
+    const uint32_t nowMs = static_cast<uint32_t>(esp_timer_get_time() / 1000);
 
-    if (gpio_get_level(self->m_buttonPin) == 0) {
+    if (nowMs - self->m_lastPressTsMs > 250) {
+        self->m_lastPressTsMs = nowMs;
+        BaseType_t highTaskWoken = pdFALSE;
         xTimerStartFromISR(self->m_resetTimer, &highTaskWoken);
-    } else {
-        xTimerStopFromISR(self->m_resetTimer, &highTaskWoken);
+        if (highTaskWoken) {
+            portYIELD_FROM_ISR();
+        }
     }
-#ifndef traceISR_EXIT_TO_SCHEDULER
-#define traceISR_EXIT_TO_SCHEDULER()
-#endif
-    if (highTaskWoken)
-        portYIELD_FROM_ISR();
 }
 
 } // namespace daliMQTT

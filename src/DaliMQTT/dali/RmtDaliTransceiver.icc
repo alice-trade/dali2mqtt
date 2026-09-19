@@ -14,7 +14,7 @@ struct RmtDaliTransceiver::Timing {
     static constexpr uint32_t RX_NOISE_FILTER_NS = 1'500;
     static constexpr uint32_t RX_IDLE_THRESH_NS = 1'250'000;
 
-    static constexpr int64_t FWD_TO_FWD_DELAY_US = 20'000;
+    static constexpr int64_t FWD_TO_FWD_DELAY_US = CONFIG_DALI2MQTT_DALI_INTER_FRAME_DELAY_MS * 1000LL;
     static constexpr int64_t TX_TIMEOUT_US = 35'000;
 
     static constexpr uint8_t LEVEL_IDLE = 0;

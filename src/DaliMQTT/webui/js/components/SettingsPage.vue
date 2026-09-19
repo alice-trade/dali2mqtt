@@ -31,6 +31,7 @@ interface ConfigData {
   dali_poll_interval_ms?: number;
   buses?: DaliBusConfig[];
   hass_discovery_enabled?: boolean;
+  hass_discovery_prefix?: string;
 }
 
 const props = defineProps<{
@@ -52,6 +53,7 @@ const config = ref<ConfigData>({
   dali_poll_interval_ms: 200000,
   buses: [{ enabled: false, rx_pin: -1, tx_pin: -1 }],
   hass_discovery_enabled: false,
+  hass_discovery_prefix: 'homeassistant',
 });
 
 const daliPollSeconds = ref(200.0);
@@ -261,6 +263,11 @@ onMounted(loadConfig);
               Home Assistant Discovery
             </label>
             <small>Automatically publish configuration topics for Home Assistant.</small>
+            <div v-if="config.hass_discovery_enabled" style="margin-top: 0.5rem; margin-left: 1rem;">
+              <label for="hass_prefix">Discovery Prefix</label>
+              <input type="text" id="hass_prefix" v-model="config.hass_discovery_prefix" placeholder="homeassistant">
+              <small>Default prefix is "homeassistant". Change only if modified in HA configuration.yaml.</small>
+            </div>
           </section>
 
           <!-- DALI -->

@@ -43,7 +43,7 @@ message("DALI-2-MQTT v${PROJVER} (${PROJBRANCH})")
 set(targets "esp32s3" "esp32c6" "esp32c3" "esp32s2" "esp32")
 
 option(IGNORE_PLATFORM_REQS "Ignore platform checks" OFF)
-if("${TARGET}" IN_LIST targets OR NOT IGNORE_PLATFORM_REQS)
+if("${TARGET}" IN_LIST targets OR IGNORE_PLATFORM_REQS)
     message(NOTICE "Target platform: " ${TARGET})
     message(NOTICE "Build type: " ${CMAKE_BUILD_TYPE})
     message(STATUS "Performing configuration stage")

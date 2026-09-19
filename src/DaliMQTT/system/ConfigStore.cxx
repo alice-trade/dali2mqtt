@@ -43,7 +43,7 @@ esp_err_t ConfigStore::mountLittleFs() {
     esp_vfs_littlefs_conf_t conf = {
         .base_path = "/littlefs",
         .partition_label = FS_PARTITION_LABEL,
-        .format_if_mount_failed = false,
+        .format_if_mount_failed = true,
         .dont_mount = false,
     };
     return esp_vfs_littlefs_register(&conf);
@@ -88,6 +88,7 @@ esp_err_t ConfigStore::load() {
         readStr("http_pass", cfg->httpPass);
         readStr("ota_url", cfg->otaBaseUrl);
         readStr("syslog_srv", cfg->syslogServer);
+        readStr("ha_prefix", cfg->hassDiscoveryPrefix);
 
         size_t certSize = 0;
         if (nvs_get_str(nvs.get(), "mqtt_cert", nullptr, &certSize) == ESP_OK && certSize > 1) {
@@ -155,6 +156,7 @@ esp_err_t ConfigStore::save(const ConfigStructure& newConfig) {
     writeStr("http_pass", newConfig.httpPass);
     writeStr("ota_url", newConfig.otaBaseUrl);
     writeStr("syslog_srv", newConfig.syslogServer);
+    writeStr("ha_prefix", newConfig.hassDiscoveryPrefix);
 
     const bool isComplete = NetworkPlatform::isConfigured(newConfig) && newConfig.isMqttConfigured();
     nvs_set_u8(nvs.get(), "configured", isComplete ? 1 : 0);

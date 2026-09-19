@@ -7,7 +7,7 @@ menu "DALI MQTT Bridge Settings"
                     (Broker URI, Wi-Fi/Eth settings) are populated in Kconfig/sdkconfig.
                     If valid, the firmware will compile in 'configured' state and skip
                     provisioning mode entirely on boot.
-    menu "Network Interface Selection"
+    menu "Network Configuration"
 
         choice DALI2MQTT_NETWORK_TYPE
             prompt "Network Interface"
@@ -21,7 +21,21 @@ menu "DALI MQTT Bridge Settings"
             config DALI2MQTT_NET_ETHERNET
                 bool "Ethernet (LAN8720 / W5500)"
         endchoice
+        menu "WiFi AP Credentials"
+            depends on DALI2MQTT_NET_WIFI
 
+            config DALI2MQTT_WIFI_AP_SSID
+                string "WiFi AP SSID"
+                default "DALI-MQTT-Bridge"
+                help
+                    Default WiFi AP network name (SSID).
+
+            config DALI2MQTT_WIFI_AP_PASS
+                string "WiFi AP Password"
+                default "bridge123"
+                help
+                    Default WiFi AP network password.
+        endmenu
         menu "Wi-Fi Station (Client) Configuration"
             depends on DALI2MQTT_NET_WIFI && DALI2MQTT_PRECONFIGURED
 
@@ -48,10 +62,10 @@ menu "DALI MQTT Bridge Settings"
                     Choose your Ethernet PHY. For ESP32-S3/C3/C6 use SPI (W5500).
 
                 config DALI2MQTT_ETH_TYPE_SPI_W5500
-                    bool "W5500 (SPI) - Recommended for S3/C3/C6/Classic"
+                    bool "W5500 (SPI)"
 
                 config DALI2MQTT_ETH_TYPE_INTERNAL_RMII
-                    bool "Internal EMAC (RMII: LAN8720 / IP101) - ESP32 Classic Only"
+                    bool "Internal EMAC (RMII: LAN8720 / IP101)"
                     depends on IDF_TARGET_ESP32
             endchoice
 
@@ -123,7 +137,7 @@ menu "DALI MQTT Bridge Settings"
 
     config DALI2MQTT_DALI_TRANSACTION_TIMEOUT_MS
         int "DALI Transaction Timeout (ms)"
-        default 100
+        default 300
         range 50 1000
         help
             Timeout in milliseconds for waiting for a DALI backward frame.
@@ -142,25 +156,6 @@ menu "DALI MQTT Bridge Settings"
         help
             Delay between polling different DALI addresses within one poll cycle.
 
-    comment "Debug Options"
-
-    config DALI2MQTT_SNIFFER_DEBUG_PUBLISH_MQTT
-                        bool "Enable Sniffer debug messages publish to MQTT"
-                        default n
-                        help
-                             Enable sending raw DALI frames captured by the sniffer to MQTT.
-                                        Topic: <mqtt_base>/debug/sniffer_raw
-
-                                        Payload Schema (JSON):
-                                        {
-                                            "type": "forward" | "backward",  // Frame direction
-                                            "len":  <int>,                   // Bit length (8, 16, 24)
-                                            "data": <uint32>,                // Raw integer value
-                                            "hex":  "<HEX_STRING>",          // Hexadecimal representation
-                                            "ts":   <uint32>                 // ESP log timestamp (ms)
-                                        }
-
-
     comment "Task Configuration"
 
     config DALI2MQTT_DALI_POLL_TASK_STACK_SIZE
@@ -172,8 +167,8 @@ menu "DALI MQTT Bridge Settings"
 
         config DALI2MQTT_DALI_POLL_TASK_PRIORITY
             int "DALI Poll Task Priority"
-            default 5
-            range 1 24 # tskIDLE_PRIORITY + 1 to configMAX_PRIORITIES - 1
+            default 3
+            range 1 7
             help
                 Priority of the DALI polling task.
 
@@ -205,6 +200,13 @@ menu "DALI MQTT Bridge Settings"
                 Automatically publish MQTT discovery configuration topics for Home Assistant
                 on startup. Can still be toggled later in WebUI.
 
+    config DALI2MQTT_MQTT_HASS_DISCOVERY_PREFIX
+        string "Home Assistant Discovery Prefix"
+        depends on DALI2MQTT_MQTT_HOMEASSISTANT_DISCOVERY_ENABLED
+        default "homeassistant"
+        help
+            Prefix topic for Home Assistant MQTT Discovery and birth/LWT status messages.
+
     config DALI2MQTT_MQTT_BASE_TOPIC
         string "MQTT Base Topic"
         default "dali_bridge"
@@ -217,54 +219,6 @@ menu "DALI MQTT Bridge Settings"
         help
             Sub-topic for availability status (appended to Base Topic).
 
-    config DALI2MQTT_MQTT_LIGHT_CMD_SUBTOPIC
-        string "MQTT Light Command Sub-Topic"
-        default "/light/+/+/set"
-        help
-            Sub-topic pattern for light commands (appended to Base Topic).
-
-    config DALI2MQTT_MQTT_LIGHT_STATE_SUBTOPIC
-        string "MQTT Light State Sub-Topic Prefix"
-        default "/light"
-        help
-            Sub-topic prefix for light states (e.g., /light/group/0/state).
-
-    config DALI2MQTT_MQTT_SCENE_CMD_SUBTOPIC
-        string "MQTT Scene Command Sub-Topic"
-        default "/scene/set"
-        help
-            Sub-topic for activating DALI scenes (appended to Base Topic).
-
-    config DALI2MQTT_MQTT_CONFIG_SET_SUBTOPIC
-        string "MQTT Config Set Sub-Topic"
-        default "/config/set"
-        help
-            Sub-topic for setting configuration (appended to Base Topic).
-
-    config DALI2MQTT_MQTT_CONFIG_GET_SUBTOPIC
-        string "MQTT Config Get Sub-Topic"
-        default "/config/get"
-        help
-            Sub-topic for requesting configuration (appended to Base Topic).
-
-    config DALI2MQTT_MQTT_CONFIG_RESP_SUBTOPIC
-        string "MQTT Config Response Sub-Topic"
-        default "/config/get/response"
-        help
-            Sub-topic for publishing configuration response (appended to Base Topic).
-
-    config DALI2MQTT_MQTT_GROUP_SET_SUBTOPIC
-        string "MQTT Group Management Set Sub-Topic"
-        default "/config/group/set"
-        help
-            Sub-topic for setting group membership (appended to Base Topic).
-
-    config DALI2MQTT_MQTT_GROUP_RES_SUBTOPIC
-        string "MQTT Group Management Result Sub-Topic"
-        default "/config/group/result"
-        help
-            Sub-topic for group management result (appended to Base Topic).
-
     config DALI2MQTT_MQTT_PAYLOAD_ONLINE
         string "MQTT Payload Online"
         default "online"
@@ -276,36 +230,6 @@ menu "DALI MQTT Bridge Settings"
         default "offline"
         help
             Payload for offline availability status (LWT).
-    endmenu
-
-    menu "WiFi AP Credentials"
-
-    config DALI2MQTT_WIFI_AP_SSID
-        string "WiFi AP SSID"
-        default "DALI-MQTT-Bridge"
-        help
-            Default WiFi AP network name (SSID).
-
-    config DALI2MQTT_WIFI_AP_PASS
-        string "WiFi AP Password"
-        default "bridge123"
-        help
-            Default WiFi AP network password.
-
-    config DALI2MQTT_WIFI_MAX_RETRY
-        int "WiFi Maximum Connection Retries"
-        default 10
-        range 5 30
-        help
-            Number of times to retry connecting to WiFi before failing and entering deep sleep.
-            The counter is stored in NVS and persists across reboots. It is reset upon successful connection.
-
-    config DALI2MQTT_WIFI_DEEP_SLEEP_S
-        int "Deep Sleep Duration (seconds)"
-        default 300
-        help
-            Duration in seconds to stay in deep sleep after exceeding WiFi connection retries.
-
     endmenu
 
     menu "NVS Configuration"

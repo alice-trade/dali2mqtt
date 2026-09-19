@@ -42,7 +42,8 @@ esp_err_t DaliDeviceRegistry::init() {
 
 void DaliDeviceRegistry::start() {
     if (!m_pollTaskHandle) {
-        xTaskCreate(pollTaskRunner, "dali_poll_task", 4096, this, 3, &m_pollTaskHandle);
+        xTaskCreate(pollTaskRunner, "dali_poll_task", CONFIG_DALI2MQTT_DALI_POLL_TASK_STACK_SIZE, this,
+                    CONFIG_DALI2MQTT_DALI_POLL_TASK_PRIORITY, &m_pollTaskHandle);
     }
 }
 
@@ -413,11 +414,11 @@ esp_err_t DaliDeviceRegistry::setRgb(const DaliLongAddress_t longAddr, const uin
     return err;
 }
 
-esp_err_t DaliDeviceRegistry::setRgbwaf(const DaliLongAddress_t longAddr,
-                                        const uint8_t r, const uint8_t g, const uint8_t b,
-                                        const uint8_t w, const uint8_t a, const uint8_t f) {
+esp_err_t DaliDeviceRegistry::setRgbwaf(const DaliLongAddress_t longAddr, const uint8_t r, const uint8_t g,
+                                        const uint8_t b, const uint8_t w, const uint8_t a, const uint8_t f) {
     const auto intAddrOpt = getInternalAddress(longAddr);
-    if (!intAddrOpt) return ESP_ERR_NOT_FOUND;
+    if (!intAddrOpt)
+        return ESP_ERR_NOT_FOUND;
 
     const uint8_t shortAddr = intAddrOpt->shortAddr();
     DaliBusLock bus_lock(m_bus);
@@ -435,7 +436,8 @@ esp_err_t DaliDeviceRegistry::setRgbwaf(const DaliLongAddress_t longAddr,
     m_bus.sendCommand(DaliAddressType::Short, shortAddr, static_cast<OpCode>(DT8OpCode::SetTempWAF));
 
     m_bus.sendSpecialCommand(SpecialOpCode::EnableDeviceTypeX, 8);
-    const esp_err_t err = m_bus.sendCommand(DaliAddressType::Short, shortAddr, static_cast<OpCode>(DT8OpCode::Activate));
+    const esp_err_t err =
+        m_bus.sendCommand(DaliAddressType::Short, shortAddr, static_cast<OpCode>(DT8OpCode::Activate));
 
     if (err == ESP_OK) {
         ControlGear copyGear;
@@ -445,7 +447,8 @@ esp_err_t DaliDeviceRegistry::setRgbwaf(const DaliLongAddress_t longAddr,
             for (auto& dev : m_devices) {
                 if (getIdentity(dev).longAddress == longAddr) {
                     if (auto* gear = etl::get_if<ControlGear>(&dev)) {
-                        if (!gear->color.has_value()) gear->color = ColorFeatures();
+                        if (!gear->color.has_value())
+                            gear->color = ColorFeatures();
                         gear->color->currentRgb = DaliRGB{r, g, b};
                         copyGear = *gear;
                         found = true;
@@ -454,7 +457,8 @@ esp_err_t DaliDeviceRegistry::setRgbwaf(const DaliLongAddress_t longAddr,
                 }
             }
         }
-        if (found) notifyDeviceChange(copyGear);
+        if (found)
+            notifyDeviceChange(copyGear);
     }
     return err;
 }
@@ -548,7 +552,7 @@ esp_err_t DaliDeviceRegistry::refreshGroupAssignmentsFromBus() {
                 freshAssignments[*longAddrOpt] = GroupMask(mask);
             }
         }
-        vTaskDelay(pdMS_TO_TICKS(15));
+        vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_POLL_DELAY_MS));
     }
 
     {
@@ -579,7 +583,7 @@ esp_err_t DaliDeviceRegistry::saveSceneLevels(const uint8_t, const uint8_t scene
             const auto storeOp = static_cast<OpCode>(0x40 + sceneId);
             m_bus.sendCommand(DaliAddressType::Short, sa, storeOp, true);
         }
-        vTaskDelay(pdMS_TO_TICKS(15));
+        vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_POLL_DELAY_MS));
     }
     return ESP_OK;
 }
@@ -596,7 +600,7 @@ SceneLevels DaliDeviceRegistry::querySceneLevels(const uint8_t, const uint8_t sc
         if (res.has_value()) {
             levels[sa] = *res;
         }
-        vTaskDelay(pdMS_TO_TICKS(15));
+        vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_POLL_DELAY_MS));
     }
     return levels;
 }
@@ -659,7 +663,7 @@ void DaliDeviceRegistry::pollTaskRunner(void* arg) {
 
         if (targetAddr.has_value()) {
             pollSingleDevice(*targetAddr);
-            vTaskDelay(pdMS_TO_TICKS(15));
+            vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_POLL_DELAY_MS));
             continue;
         }
 
@@ -897,7 +901,7 @@ void DaliDeviceRegistry::scanBus() {
             ESP_LOGI(TAG, "Input Device detected at SA %d", sa);
         }
 
-        vTaskDelay(pdMS_TO_TICKS(15));
+        vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_POLL_DELAY_MS));
     }
 
     {
@@ -929,7 +933,6 @@ void DaliDeviceRegistry::scanBus() {
 void DaliDeviceRegistry::commissionNewDevices() {
     ESP_LOGI(TAG, "Starting DALI Commissioning (Control Gear)...");
     ScanCommissionGuard guard(m_scanCommissionActive, m_bus);
-
 
     m_bus.sendDevice24BitCommand(0xFF, 0x1D, true);
     vTaskDelay(pdMS_TO_TICKS(50));
@@ -1039,7 +1042,7 @@ void DaliDeviceRegistry::commission24BitDevices() {
 
     m_bus.sendSpecial24BitCommand(0x00, 0x00, false); // Terminate
     m_bus.sendSpecial24BitCommand(0x01, 0x00, true);
-    m_bus.sendSpecial24BitCommand(0x02, 0x00, true);  // Randomise (Send Twice)
+    m_bus.sendSpecial24BitCommand(0x02, 0x00, true); // Randomise (Send Twice)
 
     vTaskDelay(pdMS_TO_TICKS(100));
 
@@ -1170,45 +1173,44 @@ esp_err_t DaliDeviceRegistry::saveAddressMapToNvs() {
     if (!nvs)
         return ESP_FAIL;
 
+    std::lock_guard<std::mutex> lock(m_registryMutex);
+
     size_t count = 0;
-    {
-        std::lock_guard<std::mutex> lock(m_registryMutex);
-        for (const auto& dev : m_devices) {
-            if (count >= m_nvsBlobScratchpad.size())
-                break;
+    for (const auto& dev : m_devices) {
+        if (count >= m_nvsBlobScratchpad.size())
+            break;
 
-            AddressMapBlobItem& item = m_nvsBlobScratchpad[count];
-            item = {};
+        AddressMapBlobItem& item = m_nvsBlobScratchpad[count];
+        item = {};
 
-            const auto& id = getIdentity(dev);
-            item.longAddress = id.longAddress;
-            item.internalAddress = id.internalAddress.value;
-            strncpy(item.gtin, id.gtin.c_str(), sizeof(item.gtin) - 1);
+        const auto& id = getIdentity(dev);
+        item.longAddress = id.longAddress;
+        item.internalAddress = id.internalAddress.value;
+        strncpy(item.gtin, id.gtin.c_str(), sizeof(item.gtin) - 1);
 
-            auto grpIt = m_groupAssignments.find(id.longAddress);
-            if (grpIt != m_groupAssignments.end()) {
-                item.groupMask = static_cast<uint16_t>(grpIt->second.to_ulong());
-            } else {
-                item.groupMask = 0;
-            }
-
-            if (const auto* gear = etl::get_if<ControlGear>(&dev)) {
-                item.isInput = false;
-                item.deviceType = gear->deviceType.value_or(0xFF);
-                item.minLevel = gear->minLevel;
-                item.maxLevel = gear->maxLevel;
-                item.powerOnLevel = gear->powerOnLevel;
-                item.systemFailureLevel = gear->systemFailureLevel;
-                if (gear->color.has_value()) {
-                    item.supportsRgb = gear->color->supportsRgb;
-                    item.supportsTc = gear->color->supportsTc;
-                }
-            } else {
-                item.isInput = true;
-                item.deviceType = 0xFF;
-            }
-            count++;
+        auto grpIt = m_groupAssignments.find(id.longAddress);
+        if (grpIt != m_groupAssignments.end()) {
+            item.groupMask = static_cast<uint16_t>(grpIt->second.to_ulong());
+        } else {
+            item.groupMask = 0;
         }
+
+        if (const auto* gear = etl::get_if<ControlGear>(&dev)) {
+            item.isInput = false;
+            item.deviceType = gear->deviceType.value_or(0xFF);
+            item.minLevel = gear->minLevel;
+            item.maxLevel = gear->maxLevel;
+            item.powerOnLevel = gear->powerOnLevel;
+            item.systemFailureLevel = gear->systemFailureLevel;
+            if (gear->color.has_value()) {
+                item.supportsRgb = gear->color->supportsRgb;
+                item.supportsTc = gear->color->supportsTc;
+            }
+        } else {
+            item.isInput = true;
+            item.deviceType = 0xFF;
+        }
+        count++;
     }
 
     esp_err_t err =
@@ -1216,8 +1218,16 @@ esp_err_t DaliDeviceRegistry::saveAddressMapToNvs() {
     if (err == ESP_OK) {
         err = nvs_commit(nvs.get());
     }
+
+    if (err == ESP_OK) {
+        ESP_LOGI(TAG, "Successfully saved %zu devices to NVS blob", count);
+    } else {
+        ESP_LOGE(TAG, "Failed to save devices to NVS: %s", esp_err_to_name(err));
+    }
+
     return err;
 }
+
 
 void DaliDeviceRegistry::handleDeferredNvsFlush(const int64_t nowMs) {
     constexpr int64_t FLUSH_DEBOUNCE_MS = 60'000;
@@ -1259,7 +1269,9 @@ StaticMetadata DaliDeviceRegistry::queryDeviceMetadataFromBus(const uint8_t sa) 
             const uint8_t val = *colourTypeOpt;
             ColorFeatures cf;
             cf.supportsTc = (val & 0x02) != 0;
-            cf.supportsRgb = (val & 0xE0) != 0 || (val & 0x08) != 0;
+            const uint8_t rgbwafChannels = (val >> 5) & 0x07;
+            cf.supportsRgb = (rgbwafChannels >= 3);
+
             if (cf.supportsTc || cf.supportsRgb) {
                 meta.color = cf;
                 meta.deviceType = 8;

@@ -40,7 +40,11 @@ struct ConfigStructure {
     uint8_t otaCheckIntervalDays{};
     uint32_t telemetryIntervalSec{};
     uint32_t daliPollIntervalMs{300000};
+
     bool hassDiscoveryEnabled{false};
+    etl::string<32> hassDiscoveryPrefix{};
+
+
     bool configuredFlag{false};
 
     [[nodiscard]] bool isMqttConfigured() const noexcept {

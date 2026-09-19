@@ -6,7 +6,7 @@ namespace daliMQTT {
 inline NetworkStatus EthernetBackend::getStatus() const noexcept {
     return m_status.load(std::memory_order_relaxed);
 }
-inline void setEventQueue(QueueHandle_t queue) noexcept {
+inline void EthernetBackend::setEventQueue(QueueHandle_t queue) noexcept {
     m_eventQueue = queue;
 }
 

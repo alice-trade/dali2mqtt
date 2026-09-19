@@ -22,7 +22,7 @@ namespace daliMQTT {
 
 class MqttBridge {
   public:
-    static constexpr size_t CMD_QUEUE_CAPACITY = 8;
+    static constexpr size_t CMD_QUEUE_CAPACITY = 24;
 
     MqttBridge(MqttClient& mqtt,
                DaliDeviceRegistry& daliRegistry,

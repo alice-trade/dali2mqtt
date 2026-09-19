@@ -30,6 +30,7 @@ class SystemControls {
 
     gpio_num_t m_buttonPin{GPIO_NUM_0};
     TimerHandle_t m_resetTimer{nullptr};
+    volatile uint32_t m_lastPressTsMs{0};
 
     ResetActionCallback m_resetCb{nullptr};
     void* m_resetCtx{nullptr};
