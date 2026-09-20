@@ -40,7 +40,7 @@ static void test_mqtt_bridge_queue_bounds() {
     longTopic[sizeof(longTopic) - 1] = '\0';
     TEST_ASSERT_FALSE(bridge.enqueueIncomingMessage(longTopic, strlen(longTopic), payload, strlen(payload)));
 
-    char longPayload[400];
+    char longPayload[800];
     memset(longPayload, 'x', sizeof(longPayload));
     longPayload[sizeof(longPayload) - 1] = '\0';
     TEST_ASSERT_FALSE(bridge.enqueueIncomingMessage(topic, strlen(topic), longPayload, strlen(longPayload)));

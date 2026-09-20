@@ -1,11 +1,11 @@
 //  Copyright (c) 2026 Alice-Trade Inc.
 //  SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <unity.h>
-#include <memory>
-#include "dali/RmtDaliTransceiver.hxx"
 #include "dali/DaliBusEngine.hxx"
 #include "dali/DaliDeviceRegistry.hxx"
+#include "dali/RmtDaliTransceiver.hxx"
+#include <memory>
+#include <unity.h>
 
 using namespace daliMQTT;
 
@@ -13,12 +13,10 @@ static void test_rmt_transceiver_init_lifecycle() {
     auto transceiver = std::make_unique<RmtDaliTransceiver>();
     TEST_ASSERT_FALSE(transceiver->isInitialized());
 
-    RmtTransceiverConfig cfg{
-        .rxPin = static_cast<gpio_num_t>(CONFIG_DALI2MQTT_DALI_RX_PIN),
-        .txPin = static_cast<gpio_num_t>(CONFIG_DALI2MQTT_DALI_TX_PIN),
-        .invertRx = true,
-        .invertTx = false
-    };
+    RmtTransceiverConfig cfg{.rxPin = static_cast<gpio_num_t>(CONFIG_DALI2MQTT_DALI_RX_PIN),
+                             .txPin = static_cast<gpio_num_t>(CONFIG_DALI2MQTT_DALI_TX_PIN),
+                             .invertRx = true,
+                             .invertTx = false};
 
     esp_err_t err = transceiver->init(cfg);
     TEST_ASSERT_EQUAL(ESP_OK, err);
@@ -28,12 +26,10 @@ static void test_rmt_transceiver_init_lifecycle() {
 
 static void test_bus_engine_lifecycle_and_timeout() {
     auto transceiver = std::make_unique<RmtDaliTransceiver>();
-    RmtTransceiverConfig cfg{
-        .rxPin = static_cast<gpio_num_t>(CONFIG_DALI2MQTT_DALI_RX_PIN),
-        .txPin = static_cast<gpio_num_t>(CONFIG_DALI2MQTT_DALI_TX_PIN),
-        .invertRx = true,
-        .invertTx = false
-    };
+    RmtTransceiverConfig cfg{.rxPin = static_cast<gpio_num_t>(CONFIG_DALI2MQTT_DALI_RX_PIN),
+                             .txPin = static_cast<gpio_num_t>(CONFIG_DALI2MQTT_DALI_TX_PIN),
+                             .invertRx = true,
+                             .invertTx = false};
     TEST_ASSERT_EQUAL(ESP_OK, transceiver->init(cfg));
 
     auto busEngine = std::make_unique<DaliBusEngine>(*transceiver, 0);
@@ -43,18 +39,16 @@ static void test_bus_engine_lifecycle_and_timeout() {
     TEST_ASSERT_TRUE(busEngine->isInitialized());
     TEST_ASSERT_EQUAL_UINT8(0, busEngine->getBusId());
 
-    auto response = busEngine->query(DaliAddressType::Short, 0, OpCode::QueryStatus);
+    auto response = busEngine->queryGear(DaliAddressType::Short, 0, OpCode::QueryStatus);
     TEST_ASSERT_FALSE(response.has_value());
 }
 
 static void test_device_registry_nvs_persistence() {
     auto transceiver = std::make_unique<RmtDaliTransceiver>();
-    RmtTransceiverConfig cfg{
-        .rxPin = static_cast<gpio_num_t>(CONFIG_DALI2MQTT_DALI_RX_PIN),
-        .txPin = static_cast<gpio_num_t>(CONFIG_DALI2MQTT_DALI_TX_PIN),
-        .invertRx = true,
-        .invertTx = false
-    };
+    RmtTransceiverConfig cfg{.rxPin = static_cast<gpio_num_t>(CONFIG_DALI2MQTT_DALI_RX_PIN),
+                             .txPin = static_cast<gpio_num_t>(CONFIG_DALI2MQTT_DALI_TX_PIN),
+                             .invertRx = true,
+                             .invertTx = false};
     transceiver->init(cfg);
     auto busEngine = std::make_unique<DaliBusEngine>(*transceiver, 0);
     busEngine->start();
@@ -109,7 +103,6 @@ static void test_device_registry_group_state() {
     TEST_ASSERT_EQUAL_UINT8(254, stateValid.lastLevel);
 }
 
-
 static void test_dali_sniffer_frame_processing() {
     auto transceiver = std::make_unique<RmtDaliTransceiver>();
     auto busEngine = std::make_unique<DaliBusEngine>(*transceiver, 0);
@@ -129,24 +122,17 @@ static void test_dali_sniffer_frame_processing() {
     static uint8_t s_cbFiredLevel = 0;
     static DaliLongAddress_t s_cbFiredAddr = 0;
 
-    registry->setDeviceStateCallback([](const DeviceStateChangeEvent& ev, void*) {
-        s_cbFiredLevel = ev.level;
-        s_cbFiredAddr = ev.longAddress;
-    }, nullptr);
+    registry->setDeviceStateCallback(
+        [](const DeviceStateChangeEvent& ev, void*) {
+            s_cbFiredLevel = ev.level;
+            s_cbFiredAddr = ev.longAddress;
+        },
+        nullptr);
 
-
-    DaliRawFrame dacpFrame{
-        .data = (0x0A << 8) | 180,
-        .bits = 16,
-        .type = DaliFrameType::Forward16
-    };
+    DaliRawFrame dacpFrame{.data = (0x0A << 8) | 180, .bits = 16, .type = DaliFrameType::Forward16};
     registry->processSnifferFrame(dacpFrame);
 
-    DaliRawFrame grpFrame{
-        .data = 0x8705,
-        .bits = 16,
-        .type = DaliFrameType::Forward16
-    };
+    DaliRawFrame grpFrame{.data = 0x8705, .bits = 16, .type = DaliFrameType::Forward16};
     registry->processSnifferFrame(grpFrame);
 
     auto gState = registry->getGroupState(0, 3);
@@ -161,18 +147,16 @@ static void test_dali_input_device_24bit_event() {
     static uint8_t s_btnShortAddr = 0xFF;
     static uint16_t s_eventCode = 0xFFFF;
 
-    registry->setInputEventCallback([](const InputDeviceEvent& ev, void*) {
-        s_btnShortAddr = ev.shortAddress;
-        s_eventCode = ev.eventCode;
-    }, nullptr);
+    registry->setInputEventCallback(
+        [](const InputDeviceEvent& ev, void*) {
+            s_btnShortAddr = ev.shortAddress;
+            s_eventCode = ev.eventCode;
+        },
+        nullptr);
 
     constexpr uint32_t rawEventFrame = (10 << 17) | (1 << 10) | 0x02;
 
-    const DaliRawFrame inputFrame{
-        .data = rawEventFrame,
-        .bits = 24,
-        .type = DaliFrameType::Forward24
-    };
+    const DaliRawFrame inputFrame{.data = rawEventFrame, .bits = 24, .type = DaliFrameType::Forward24};
 
     registry->processInputDeviceFrame(inputFrame);
 

@@ -25,7 +25,6 @@ public:
 
 private:
     static esp_err_t staticFileGetHandler(httpd_req_t* req);
-    static esp_err_t checkAuthentication(httpd_req_t* req, const ApiContext* ctx);
     static void setContentTypeByFilename(httpd_req_t* req, const char* filepath);
 
     ApiContext& m_apiCtx;

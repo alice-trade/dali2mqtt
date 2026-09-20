@@ -424,12 +424,12 @@ void MqttBridge::handleLightCommand(std::string_view targetPath, std::string_vie
 
     if (targetPath == "broadcast") {
         if (brightness.has_value())
-            m_daliBus.sendDACP(DaliAddressType::Broadcast, 0, *brightness);
+            m_daliBus.sendDAPC(DaliAddressType::Broadcast, 0, *brightness);
         else if (powerState.has_value()) {
             if (*powerState)
-                m_daliBus.sendCommand(DaliAddressType::Broadcast, 0, OpCode::RecallMaxLevel);
+                m_daliBus.sendGearCommand(DaliAddressType::Broadcast, 0, OpCode::RecallMaxLevel);
             else
-                m_daliBus.sendCommand(DaliAddressType::Broadcast, 0, OpCode::Off);
+                m_daliBus.sendGearCommand(DaliAddressType::Broadcast, 0, OpCode::Off);
         }
         return;
     }
@@ -573,7 +573,7 @@ void MqttBridge::handleRawDaliCommand(std::string_view payload) const {
             snprintf(resTopic, sizeof(resTopic), "%s/cmd/res", m_baseTopic.c_str());
             m_mqtt.publish(resTopic, resPayload, 0, false);
         } else {
-            m_daliBus.sendCommand(DaliAddressType::Short, addr, static_cast<OpCode>(cmd), doc["twice"].as<bool>());
+            m_daliBus.sendGearCommand(DaliAddressType::Short, addr, static_cast<OpCode>(cmd), doc["twice"].as<bool>());
         }
     }
 }

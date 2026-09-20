@@ -221,7 +221,8 @@ esp_err_t DaliBusEngine::executeTransaction(const TransactionRequest& request, u
     xQueueSend(m_phyEventQueue, &kick, 0);
 
     TransactionResponse resp{};
-    const BaseType_t res = xQueueReceive(m_respQueue, &resp, pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_TRANSACTION_TIMEOUT_MS));
+    const BaseType_t res =
+        xQueueReceive(m_respQueue, &resp, pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_TRANSACTION_TIMEOUT_MS));
     xSemaphoreGiveRecursive(m_busMutex);
 
     if (res != pdTRUE) {
@@ -252,13 +253,13 @@ uint32_t DaliBusEngine::findAddressBinarySearch(const bool is24BitInputDevice) c
 
     auto sendSearchAddr = [&](const uint32_t addr) {
         if (is24BitInputDevice) {
-            sendSpecial24BitCommand(0x05, static_cast<uint8_t>((addr >> 16) & 0xFF), false);
-            sendSpecial24BitCommand(0x06, static_cast<uint8_t>((addr >> 8) & 0xFF), false);
-            sendSpecial24BitCommand(0x07, static_cast<uint8_t>(addr & 0xFF), false);
+            sendDeviceSpecial(0x05, static_cast<uint8_t>((addr >> 16) & 0xFF), false);
+            sendDeviceSpecial(0x06, static_cast<uint8_t>((addr >> 8) & 0xFF), false);
+            sendDeviceSpecial(0x07, static_cast<uint8_t>(addr & 0xFF), false);
         } else {
-            sendSpecialCommand(SpecialOpCode::SearchAddrH, static_cast<uint8_t>((addr >> 16) & 0xFF), false);
-            sendSpecialCommand(SpecialOpCode::SearchAddrM, static_cast<uint8_t>((addr >> 8) & 0xFF), false);
-            sendSpecialCommand(SpecialOpCode::SearchAddrL, static_cast<uint8_t>(addr & 0xFF), false);
+            sendGearSpecial(SpecialOpCode::SearchAddrH, static_cast<uint8_t>((addr >> 16) & 0xFF), false);
+            sendGearSpecial(SpecialOpCode::SearchAddrM, static_cast<uint8_t>((addr >> 8) & 0xFF), false);
+            sendGearSpecial(SpecialOpCode::SearchAddrL, static_cast<uint8_t>(addr & 0xFF), false);
         }
     };
 

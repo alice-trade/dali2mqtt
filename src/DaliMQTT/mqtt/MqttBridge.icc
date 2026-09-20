@@ -8,7 +8,9 @@ namespace daliMQTT {
 
 inline bool MqttBridge::enqueueIncomingMessage(const char* topic, const int topicLen, const char* data,
                                                const int dataLen) const {
-    if (!m_cmdQueue || topicLen <= 0 || topicLen >= 96 || dataLen >= 384    ) {
+     if (!m_cmdQueue || topicLen <= 0 ||
+        topicLen >= static_cast<int>(decltype(MqttIncomingMessage::topic)::MAX_SIZE) ||
+        dataLen >= static_cast<int>(decltype(MqttIncomingMessage::payload)::MAX_SIZE)) {
         return false;
     }
 

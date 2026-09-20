@@ -68,50 +68,6 @@ esp_err_t WebUI::stop() {
     return ESP_OK;
 }
 
-esp_err_t WebUI::checkAuthentication(httpd_req_t* req, const ApiContext* ctx) {
-    auto sendUnauthorized = [req]() {
-        httpd_resp_set_status(req, "401 Unauthorized");
-        httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"DALI Bridge\"");
-        httpd_resp_send(req, "Authentication required", HTTPD_RESP_USE_STRLEN);
-        return ESP_FAIL;
-    };
-
-    char authHdr[128];
-    if (httpd_req_get_hdr_value_str(req, "Authorization", authHdr, sizeof(authHdr)) != ESP_OK) {
-        return sendUnauthorized();
-    }
-
-    std::string_view authSv(authHdr);
-    if (!authSv.starts_with("Basic ")) {
-        return sendUnauthorized();
-    }
-    authSv.remove_prefix(6);
-
-    unsigned char decoded[128]{0};
-    size_t decodedLen = 0;
-    if (mbedtls_base64_decode(decoded, sizeof(decoded) - 1, &decodedLen,
-                              reinterpret_cast<const unsigned char*>(authSv.data()), authSv.length()) != 0) {
-        return sendUnauthorized();
-    }
-
-    decoded[decodedLen] = '\0';
-    std::string_view creds(reinterpret_cast<char*>(decoded));
-    const size_t colonPos = creds.find(':');
-    if (colonPos == std::string_view::npos) {
-        return sendUnauthorized();
-    }
-
-    const auto cfg = ctx->config.get();
-    const auto user = creds.substr(0, colonPos);
-    const auto pass = creds.substr(colonPos + 1);
-
-    if (user == cfg->httpUser.c_str() && pass == cfg->httpPass.c_str()) {
-        return ESP_OK;
-    }
-
-    return sendUnauthorized();
-}
-
 esp_err_t WebUI::staticFileGetHandler(httpd_req_t* req) {
     char filepath[544];
     snprintf(filepath, sizeof(filepath), "/littlefs%s", (strcmp(req->uri, "/") == 0) ? "/index.html" : req->uri);

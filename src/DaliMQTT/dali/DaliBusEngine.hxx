@@ -36,15 +36,17 @@ class DaliBusEngine {
 
     esp_err_t start();
 
-    inline esp_err_t sendDACP(DaliAddressType addrType, uint8_t addr, uint8_t level) const;
-    inline esp_err_t sendCommand(DaliAddressType addrType, uint8_t addr, OpCode opcode, bool sendTwice = false) const;
-    inline esp_err_t sendSpecialCommand(SpecialOpCode opcode, uint8_t data, bool sendTwice = false) const;
-    inline esp_err_t sendInputDeviceCommand(uint8_t shortAddr, uint8_t instance, uint8_t opcode) const;
-    inline esp_err_t sendSpecial24BitCommand(uint8_t inst, uint8_t opcode, bool sendTwice) const;
-    inline esp_err_t sendDevice24BitCommand(uint8_t addrByte, uint8_t opcode, bool sendTwice = true) const;
+ inline esp_err_t sendDAPC(DaliAddressType type, uint8_t addr, uint8_t level) const;
+    inline esp_err_t sendGearCommand(DaliAddressType type, uint8_t addr, OpCode opcode, bool sendTwice = false) const;
+    inline esp_err_t sendGearSpecial(SpecialOpCode opcode, uint8_t data, bool sendTwice = false) const;
+    inline esp_err_t sendDeviceCommand(uint8_t shortAddr, uint8_t opcode, bool sendTwice = false) const;
+    inline esp_err_t sendInstanceCommand(uint8_t shortAddr, uint8_t instance, uint8_t opcode, bool sendTwice = false) const;
+    inline esp_err_t sendDeviceSpecial(uint8_t specialOp, uint8_t data, bool sendTwice = false) const;
 
-    inline std::optional<uint8_t> query(DaliAddressType addrType, uint8_t addr, OpCode opcode) const;
-    inline std::optional<uint8_t> querySpecial(SpecialOpCode opcode, uint8_t data) const;
+    inline std::optional<uint8_t> queryGear(DaliAddressType type, uint8_t addr, OpCode opcode) const;
+    inline std::optional<uint8_t> queryGearSpecial(SpecialOpCode opcode, uint8_t data) const;
+    inline std::optional<uint8_t> queryDevice(uint8_t shortAddr, uint8_t opcode) const;
+    inline std::optional<uint8_t> queryInstance(uint8_t shortAddr, uint8_t instance, uint8_t opcode) const;
     std::optional<uint8_t> queryRaw(uint32_t rawData, uint8_t bits = 16) const;
     bool readMemoryBlock(uint8_t shortAddr, uint8_t bank, uint8_t startOffset, uint8_t* outBuffer, uint8_t length) const;
     inline esp_err_t setDtr0(uint8_t value) const;

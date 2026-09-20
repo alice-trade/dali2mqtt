@@ -37,103 +37,91 @@ constexpr uint32_t DaliBusEngine::makeFrame24(const uint8_t addrByte, const uint
     return (static_cast<uint32_t>(addrByte) << 16) | (static_cast<uint32_t>(instByte) << 8) | opcodeByte;
 }
 
-inline esp_err_t DaliBusEngine::sendDACP(const DaliAddressType addrType, const uint8_t addr,
-                                         const uint8_t level) const {
-    const uint8_t addrByte = makeAddressByte(addrType, addr, false);
-    TransactionRequest req{.data = makeFrame16(addrByte, level),
-                           .bits = 16,
-                           .isQuery = false,
-                           .sendTwice = false,
-                           .acceptAnyReplyAsYes = false};
-    return executeTransaction(req, nullptr);
+inline esp_err_t DaliBusEngine::sendDAPC(const DaliAddressType type, const uint8_t addr, const uint8_t level) const {
+    const uint8_t addrByte = makeAddressByte(type, addr, false);
+    return executeTransaction({.data = makeFrame16(addrByte, level), .bits = 16}, nullptr);
 }
 
-inline esp_err_t DaliBusEngine::sendCommand(const DaliAddressType addrType, const uint8_t addr, const OpCode opcode,
-                                            const bool sendTwice) const {
-    const uint8_t addrByte = makeAddressByte(addrType, addr, true);
-    TransactionRequest req{.data = makeFrame16(addrByte, static_cast<uint8_t>(opcode)),
-                           .bits = 16,
-                           .isQuery = false,
-                           .sendTwice = sendTwice,
-                           .acceptAnyReplyAsYes = false};
-    return executeTransaction(req, nullptr);
+inline esp_err_t DaliBusEngine::sendGearCommand(const DaliAddressType type, const uint8_t addr, const OpCode opcode,
+                                                const bool sendTwice) const {
+    const uint8_t addrByte = makeAddressByte(type, addr, true);
+    return executeTransaction(
+        {.data = makeFrame16(addrByte, static_cast<uint8_t>(opcode)), .bits = 16, .sendTwice = sendTwice}, nullptr);
 }
 
-inline esp_err_t DaliBusEngine::sendSpecialCommand(const SpecialOpCode opcode, const uint8_t data,
-                                                   const bool sendTwice) const {
-    const TransactionRequest req{.data = makeFrame16(static_cast<uint8_t>(opcode), data),
-                                 .bits = 16,
-                                 .isQuery = false,
-                                 .sendTwice = sendTwice,
-                                 .acceptAnyReplyAsYes = false};
-    return executeTransaction(req, nullptr);
+inline esp_err_t DaliBusEngine::sendGearSpecial(const SpecialOpCode opcode, const uint8_t data,
+                                                const bool sendTwice) const {
+    return executeTransaction(
+        {.data = makeFrame16(static_cast<uint8_t>(opcode), data), .bits = 16, .sendTwice = sendTwice}, nullptr);
 }
 
-inline esp_err_t DaliBusEngine::sendSpecial24BitCommand(const uint8_t inst, const uint8_t opcode,
-                                                        const bool sendTwice) const {
-    const TransactionRequest req{.data = makeFrame24(0xC1, inst, opcode),
-                                 .bits = 24,
-                                 .isQuery = false,
-                                 .sendTwice = sendTwice,
-                                 .acceptAnyReplyAsYes = false};
-    return executeTransaction(req, nullptr);
+inline esp_err_t DaliBusEngine::sendDeviceCommand(const uint8_t shortAddr, const uint8_t opcode,
+                                                  const bool sendTwice) const {
+    const uint8_t addrByte = (shortAddr == 0xFF) ? 0xFF : static_cast<uint8_t>((shortAddr << 1) | 0x01);
+    return executeTransaction({.data = makeFrame24(addrByte, 0xFE, opcode), .bits = 24, .sendTwice = sendTwice},
+                              nullptr);
 }
 
-inline esp_err_t DaliBusEngine::sendInputDeviceCommand(const uint8_t shortAddr, const uint8_t instance,
-                                                       const uint8_t opcode) const {
+inline esp_err_t DaliBusEngine::sendInstanceCommand(const uint8_t shortAddr, const uint8_t instance,
+                                                    const uint8_t opcode, const bool sendTwice) const {
     const uint8_t addrByte = static_cast<uint8_t>((shortAddr << 1) | 0x01);
-    const TransactionRequest req{.data = makeFrame24(addrByte, instance, opcode),
-                                 .bits = 24,
-                                 .isQuery = false,
-                                 .sendTwice = false,
-                                 .acceptAnyReplyAsYes = false};
-    return executeTransaction(req, nullptr);
+    return executeTransaction({.data = makeFrame24(addrByte, instance, opcode), .bits = 24, .sendTwice = sendTwice},
+                              nullptr);
 }
 
-inline esp_err_t DaliBusEngine::sendDevice24BitCommand(const uint8_t addrByte, const uint8_t opcode,
-                                                       const bool sendTwice) const {
-    const TransactionRequest req{.data = makeFrame24(addrByte, 0xFE, opcode),
-                                 .bits = 24,
-                                 .isQuery = false,
-                                 .sendTwice = sendTwice,
-                                 .acceptAnyReplyAsYes = false};
-    return executeTransaction(req, nullptr);
+inline esp_err_t DaliBusEngine::sendDeviceSpecial(const uint8_t specialOp, const uint8_t data,
+                                                  const bool sendTwice) const {
+    return executeTransaction({.data = makeFrame24(0xC1, specialOp, data), .bits = 24, .sendTwice = sendTwice},
+                              nullptr);
 }
 
-inline std::optional<uint8_t> DaliBusEngine::query(const DaliAddressType addrType, const uint8_t addr,
-                                                   const OpCode opcode) const {
-    const uint8_t addrByte = makeAddressByte(addrType, addr, true);
+inline std::optional<uint8_t> DaliBusEngine::queryDevice(const uint8_t shortAddr, const uint8_t opcode) const {
+    const uint8_t addrByte = static_cast<uint8_t>((shortAddr << 1) | 0x01);
+    return queryRaw(makeFrame24(addrByte, 0xFE, opcode), 24);
+}
+
+inline std::optional<uint8_t> DaliBusEngine::queryInstance(const uint8_t shortAddr, const uint8_t instance,
+                                                           const uint8_t opcode) const {
+    const uint8_t addrByte = static_cast<uint8_t>((shortAddr << 1) | 0x01);
+    return queryRaw(makeFrame24(addrByte, instance, opcode), 24);
+}
+
+inline std::optional<uint8_t> DaliBusEngine::queryGear(const DaliAddressType type, const uint8_t addr,
+                                                       const OpCode opcode) const {
+    const uint8_t addrByte = makeAddressByte(type, addr, true);
     return queryRaw(makeFrame16(addrByte, static_cast<uint8_t>(opcode)), 16);
 }
 
-inline std::optional<uint8_t> DaliBusEngine::querySpecial(const SpecialOpCode opcode, const uint8_t data) const {
+inline std::optional<uint8_t> DaliBusEngine::queryGearSpecial(const SpecialOpCode opcode, const uint8_t data) const {
     return queryRaw(makeFrame16(static_cast<uint8_t>(opcode), data), 16);
 }
 
 inline esp_err_t DaliBusEngine::setDtr0(const uint8_t value) const {
-    return sendSpecialCommand(SpecialOpCode::Dtr0, value, false);
+    return sendGearSpecial(SpecialOpCode::Dtr0, value, false);
 }
 
 inline esp_err_t DaliBusEngine::setDtr1(const uint8_t value) const {
-    return sendSpecialCommand(SpecialOpCode::Dtr1, value, false);
+    return sendGearSpecial(SpecialOpCode::Dtr1, value, false);
 }
 
 inline esp_err_t DaliBusEngine::setDtr2(const uint8_t value) const {
-    return sendSpecialCommand(SpecialOpCode::Dtr2, value, false);
+    return sendGearSpecial(SpecialOpCode::Dtr2, value, false);
 }
 
 inline std::optional<uint8_t> DaliBusEngine::readMemoryLocation(const uint8_t shortAddr, const uint8_t bank,
                                                                 const uint8_t offset) const {
     DaliBusLock lock(*this);
-    if (setDtr1(bank) != ESP_OK) return std::nullopt;
-    if (setDtr0(offset) != ESP_OK) return std::nullopt;
-    return query(DaliAddressType::Short, shortAddr, OpCode::ReadMemoryLocation);
+    if (setDtr1(bank) != ESP_OK)
+        return std::nullopt;
+    if (setDtr0(offset) != ESP_OK)
+        return std::nullopt;
+    return queryGear(DaliAddressType::Short, shortAddr, OpCode::ReadMemoryLocation);
 }
 
-inline bool DaliBusEngine::readMemoryBlock(const uint8_t shortAddr, const uint8_t bank,
-                                           const uint8_t startOffset, uint8_t* outBuffer,
-                                           const uint8_t length) const {
-    if (!outBuffer || length == 0) return false;
+inline bool DaliBusEngine::readMemoryBlock(const uint8_t shortAddr, const uint8_t bank, const uint8_t startOffset,
+                                           uint8_t* outBuffer, const uint8_t length) const {
+    if (!outBuffer || length == 0)
+        return false;
 
     DaliBusLock lock(*this);
 
@@ -142,7 +130,7 @@ inline bool DaliBusEngine::readMemoryBlock(const uint8_t shortAddr, const uint8_
     }
 
     for (uint8_t i = 0; i < length; ++i) {
-        auto valOpt = query(DaliAddressType::Short, shortAddr, OpCode::ReadMemoryLocation);
+        auto valOpt = queryGear(DaliAddressType::Short, shortAddr, OpCode::ReadMemoryLocation);
         if (!valOpt.has_value()) {
             return false;
         }
