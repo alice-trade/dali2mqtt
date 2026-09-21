@@ -21,7 +21,6 @@ inline bool MqttBridge::enqueueIncomingMessage(const char* topic, const int topi
     }
     const BaseType_t res = xQueueSend(m_cmdQueue, &msg, pdMS_TO_TICKS(100));
     if (res != pdTRUE) {
-        ESP_LOGE("MqttBridge", "CMD Queue overflow! Command dropped for topic: %.*s", topicLen, topic);
         return false;
     }
     return true;

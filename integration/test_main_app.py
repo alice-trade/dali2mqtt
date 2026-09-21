@@ -9,7 +9,7 @@ from pytest_embedded import Dut
 @pytest.mark.esp32c6
 @pytest.mark.esp32c3
 def test_main_firmware_boot_and_provisioning(dut: Dut) -> None:
-    dut.expect(r'DALI-to-MQTT Bridge v\.\d+\.\d+\.\d+', timeout=10)
+    dut.expect(r'DALI-to-MQTT Bridge (Core )?v\.\d+\.\d+\.\d+', timeout=10)
     dut.expect_exact('NVS and FS initialized successfully.', timeout=5)
 
     res = dut.expect([

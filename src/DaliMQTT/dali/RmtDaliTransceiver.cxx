@@ -188,7 +188,7 @@ void RmtDaliTransceiver::taskRunner(void* arg) {
             if (isBusActive) {
                 if (m_lineActiveStartUs == 0) {
                     m_lineActiveStartUs = nowUs;
-                } else if ((nowUs - m_lineActiveStartUs) >= 500'000) { // 500ms по IEC 62386-101
+                } else if ((nowUs - m_lineActiveStartUs) >= 500'000) {
                     m_isBusStuckActive.store(true, std::memory_order_relaxed);
                 }
             } else {

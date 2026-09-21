@@ -239,6 +239,12 @@ menu "DALI MQTT Bridge Settings"
         default "dali_cfg"
         help
             Namespace used for storing configuration in NVS.
+
+    config DALI2MQTT_NVS_DALI_NAMESPACE
+            string "NVS Dali Map Namespace"
+            default "dali_reg"
+            help
+                Namespace used for storing DALI Maps in NVS.
     endmenu
 
     menu "Web UI Configuration"

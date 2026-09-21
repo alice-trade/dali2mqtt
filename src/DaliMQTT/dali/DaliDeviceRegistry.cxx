@@ -12,10 +12,7 @@
 namespace daliMQTT {
 
 static constexpr char TAG[] = "DaliRegistry";
-#ifndef DALIMQTT_REG_NVS_NAMESPACE
-#define DALIMQTT_REG_NVS_NAMESPACE "dali_reg"
-#endif
-static constexpr char NVS_NAMESPACE[] = DALIMQTT_REG_NVS_NAMESPACE;
+static constexpr char NVS_NAMESPACE[] = CONFIG_DALI2MQTT_NVS_DALI_NAMESPACE;
 static constexpr char NVS_MAP_KEY[] = "addr_map";
 
 DaliDeviceRegistry::DaliDeviceRegistry(DaliBusEngine& busEngine) : m_bus(busEngine) {

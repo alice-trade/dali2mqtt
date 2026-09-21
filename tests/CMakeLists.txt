@@ -20,7 +20,7 @@ target_sources(${TEST_APP_NAME} PRIVATE
 )
 target_compile_definitions(${TEST_APP_NAME} PRIVATE
         CONFIG_DALI2MQTT_NVS_NAMESPACE="tst_cfg"
-        DALIMQTT_REG_NVS_NAMESPACE="tst_reg"
+        CONFIG_DALI2MQTT_NVS_DALI_NAMESPACE="tst_reg"
 )
 target_link_libraries(${TEST_APP_NAME} PRIVATE
         DaliMQTT-Core

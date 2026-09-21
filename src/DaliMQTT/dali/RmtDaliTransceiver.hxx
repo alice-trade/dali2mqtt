@@ -11,6 +11,7 @@
 #include <driver/rmt_rx.h>
 #include <driver/rmt_tx.h>
 #include <esp_err.h>
+#include <esp_timer.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 #include <freertos/task.h>

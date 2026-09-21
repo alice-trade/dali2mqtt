@@ -62,7 +62,7 @@ class OtaService {
     std::atomic<bool> m_isUpdating{false};
     std::atomic<OtaStatus> m_status{OtaStatus::Idle};
 
-    etl::string<160> m_targetUrl{};
+    etl::string<256> m_targetUrl{};
     bool m_updateWebFs{true};
     mutable std::mutex m_infoMutex{};
     OtaVersionInfo m_versionInfo{};

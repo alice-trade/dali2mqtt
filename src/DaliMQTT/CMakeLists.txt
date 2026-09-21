@@ -1,25 +1,30 @@
 # Copyright (c) 2025-2026 Alice-Trade Inc.
 # SPDX-License-Identifier: GPL-3.0-or-later
+
+# DaliMQTT-Core Build Script
+# All required variables should be set up up to this file
 add_library(DaliMQTT-Core STATIC)
 
 target_compile_options(DaliMQTT-Core PRIVATE
         -Wall
         -Wextra
         -Wshadow
-        -Wnon-virtual-dtor
+        -Wdouble-promotion
+        -Wimplicit-fallthrough
+        -Wnull-dereference
+        -Wmissing-declarations
         -Wunused
-        -Woverloaded-virtual
         -Wformat=2
         -Wno-missing-field-initializers
 )
 
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/pch.hxx")
-    target_precompile_headers(DaliMQTT-Core PUBLIC pch.hxx)
+    target_precompile_headers(DaliMQTT-Core PRIVATE pch.hxx)
 endif()
 string(TIMESTAMP PROJ_BUILD_TIMESTAMP "%Y-%m-%dT%H:%M:%SZ")
 
 # Target definitions
-target_compile_definitions(DaliMQTT-Core PUBLIC
+target_compile_definitions(DaliMQTT-Core PRIVATE
         $<$<CONFIG:Debug>:_DEBUG_DALIMQTT_>
         DALIMQTT_VERSION=\"${PROJVER}\"
 )
