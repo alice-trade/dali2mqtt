@@ -31,4 +31,5 @@ include(${PROJDIR}/scripts/size_components.cmake)
 include(${PROJDIR}/scripts/make_webui.cmake)
 
 include(${PROJDIR}/scripts/build_tests.cmake)
+include(scripts/auxiliary_targets.cmake)
 include(${PROJDIR}/scripts/print_summary.cmake)
