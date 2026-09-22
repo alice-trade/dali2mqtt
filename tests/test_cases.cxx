@@ -12,8 +12,12 @@
 static constexpr char TAG[] = "TestRunner";
 
 void run_config_store_tests();
-void run_dali_hardware_and_registry_tests();
+void run_system_services_and_ota_tests();
+void run_dali_frame_and_encoding_tests();
+void run_dali_registry_and_engine_tests();
+void run_dali_input_events_tests();
 void run_mqtt_and_bridge_tests();
+void run_mqtt_command_routing_tests();
 void run_wifi_and_system_tests();
 void run_http_stream_tests();
 
@@ -34,8 +38,12 @@ static void unity_test_task(void* pvParameters) {
     UNITY_BEGIN();
 
     run_config_store_tests();
-    run_dali_hardware_and_registry_tests();
+    run_system_services_and_ota_tests();
+    run_dali_registry_and_engine_tests();
+    run_dali_frame_and_encoding_tests();
+    run_dali_input_events_tests();
     run_mqtt_and_bridge_tests();
+    run_mqtt_command_routing_tests();
     run_wifi_and_system_tests();
     run_http_stream_tests();
 

@@ -13,7 +13,11 @@ add_executable(${TEST_APP_NAME}
 
 target_sources(${TEST_APP_NAME} PRIVATE
         system/ConfigStore.test.cxx
-        dali/DaliHardwareAndRegistry.test.cxx
+        system/SystemServices.test.cxx
+        dali/DaliFrame.test.cxx
+        dali/DaliRegistry.test.cxx
+        dali/DaliInputEvents.test.cxx
+        mqtt/MqttCommandRouting.test.cxx
         mqtt/MqttBridge.test.cxx
         wifi/WifiSystem.test.cxx
         webui/HttpStream.test.cxx
