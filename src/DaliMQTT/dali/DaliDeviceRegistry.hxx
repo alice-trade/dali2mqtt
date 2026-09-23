@@ -109,7 +109,7 @@ class DaliDeviceRegistry {
     inline void setDeviceStateCallback(DeviceStateCallback cb, void* ctx) noexcept;
     inline void setGroupStateCallback(GroupStateCallback cb, void* ctx) noexcept;
     inline void setInputEventCallback(InputEventCallback cb, void* ctx) noexcept;
-
+    inline void setDeviceAttributesCallback(DeviceAttributesCallback cb, void* ctx) noexcept;
     void requestSync(DaliInternalAddr addr, uint32_t delayMs = 0);
     void requestBroadcastSync(uint32_t baseDelayMs, uint32_t staggerStepMs);
 
@@ -175,6 +175,9 @@ class DaliDeviceRegistry {
 
     InputEventCallback m_inputEventCb{nullptr};
     void* m_inputEventCtx{nullptr};
+
+    DeviceAttributesCallback m_attributesCb{nullptr};
+    void* m_attributesCtx{nullptr};
 
     TaskHandle_t m_pollTaskHandle{nullptr};
     uint8_t m_roundRobinIndex{0};

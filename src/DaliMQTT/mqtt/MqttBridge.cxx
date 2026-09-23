@@ -2,18 +2,21 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "mqtt/MqttBridge.hxx"
+
+#include "system/ConfigJson.hxx"
 #include "utils/DaliLongAddrConversions.hxx"
 #include "utils/DaliSensorMath.hxx"
+#include "utils/NvsHandle.hxx"
 #include <ArduinoJson.h>
-#include <esp_log.h>
 #include <charconv>
+#include <esp_log.h>
 
 namespace daliMQTT {
 
 static constexpr char TAG[] = "MqttBridge";
 
 MqttBridge::MqttBridge(MqttClient& mqtt, DaliDeviceRegistry& daliRegistry, DaliBusEngine& daliBus, ConfigStore& config,
-                       OtaService& ota,  const NetworkPlatform& network)
+                       OtaService& ota, const NetworkPlatform& network)
     : m_mqtt(mqtt), m_daliRegistry(daliRegistry), m_daliBus(daliBus), m_config(config), m_ota(ota), m_network(network),
       m_discovery(m_mqtt, m_daliRegistry) {
     m_cmdQueue = xQueueCreate(CMD_QUEUE_CAPACITY, sizeof(MqttIncomingMessage));
@@ -32,6 +35,7 @@ esp_err_t MqttBridge::start() {
     m_daliRegistry.setDeviceStateCallback(&onDaliDeviceStateChanged, this);
     m_daliRegistry.setGroupStateCallback(&onDaliGroupStateChanged, this);
     m_daliRegistry.setInputEventCallback(&onDaliInputEvent, this);
+    m_daliRegistry.setDeviceAttributesCallback(&onDaliDeviceAttributesLoaded, this);
 
     m_ota.setProgressCallback(&onOtaProgressChanged, this);
     m_ota.setVersionCallback(&onOtaVersionReceived, this);
@@ -114,6 +118,20 @@ void MqttBridge::onMqttConnectedBridge(void* ctx) {
     self->m_mqtt.subscribe(topicBuf);
 
     snprintf(topicBuf, sizeof(topicBuf), "%s/config/group/set", self->m_baseTopic.c_str());
+    self->m_mqtt.subscribe(topicBuf);
+    snprintf(topicBuf, sizeof(topicBuf), "%s/config/group/get", self->m_baseTopic.c_str());
+    self->m_mqtt.subscribe(topicBuf);
+    snprintf(topicBuf, sizeof(topicBuf), "%s/config/group/refresh", self->m_baseTopic.c_str());
+    self->m_mqtt.subscribe(topicBuf);
+
+    snprintf(topicBuf, sizeof(topicBuf), "%s/config/scene/get", self->m_baseTopic.c_str());
+    self->m_mqtt.subscribe(topicBuf);
+    snprintf(topicBuf, sizeof(topicBuf), "%s/config/scene/set", self->m_baseTopic.c_str());
+    self->m_mqtt.subscribe(topicBuf);
+
+    snprintf(topicBuf, sizeof(topicBuf), "%s/config/names/get", self->m_baseTopic.c_str());
+    self->m_mqtt.subscribe(topicBuf);
+    snprintf(topicBuf, sizeof(topicBuf), "%s/config/names/set", self->m_baseTopic.c_str());
     self->m_mqtt.subscribe(topicBuf);
 
     snprintf(topicBuf, sizeof(topicBuf), "%s/config/bus/scan", self->m_baseTopic.c_str());
@@ -230,19 +248,19 @@ void MqttBridge::replayAllCachedStates() const {
     const auto devices = m_daliRegistry.getDevicesSnapshot();
     for (const auto& dev : devices) {
         if (const auto* gear = etl::get_if<ControlGear>(&dev)) {
-            DeviceStateChangeEvent ev{
-                .longAddress = gear->longAddress,
-                .internalAddress = gear->internalAddress,
-                .level = gear->currentLevel,
-                .statusByte = gear->statusByte,
-                .available = gear->available
-            };
+            DeviceStateChangeEvent ev{.longAddress = gear->longAddress,
+                                      .internalAddress = gear->internalAddress,
+                                      .level = gear->currentLevel,
+                                      .statusByte = gear->statusByte,
+                                      .available = gear->available};
             if (gear->color.has_value()) {
                 ev.colorTemp = gear->color->currentTc;
                 ev.rgb = gear->color->currentRgb;
             }
-
             onDaliDeviceStateChanged(ev, const_cast<MqttBridge*>(this));
+            if (gear->staticDataLoaded) {
+                publishDeviceAttributes(*gear);
+            }
             vTaskDelay(pdMS_TO_TICKS(2));
         }
     }
@@ -250,19 +268,17 @@ void MqttBridge::replayAllCachedStates() const {
     for (uint8_t busId = 0; busId < DaliDeviceRegistry::BUS_COUNT; ++busId) {
         for (uint8_t g = 0; g < 16; ++g) {
             DaliGroupState gState = m_daliRegistry.getGroupState(busId, g);
-            GroupStateChangeEvent ev{
-                .busId = busId,
-                .groupId = g,
-                .level = gState.currentLevel,
-                .colorTemp = gState.colorTemp,
-                .rgb = gState.rgb
-            };
+            GroupStateChangeEvent ev{.busId = busId,
+                                     .groupId = g,
+                                     .level = gState.currentLevel,
+                                     .colorTemp = gState.colorTemp,
+                                     .rgb = gState.rgb};
             onDaliGroupStateChanged(ev, const_cast<MqttBridge*>(this));
 
             vTaskDelay(pdMS_TO_TICKS(2));
         }
     }
-
+    publishAllDeviceGroups();
     ESP_LOGI(TAG, "Replay complete.");
 }
 
@@ -360,27 +376,29 @@ void MqttBridge::routeIncomingCommand(std::string_view topic, std::string_view p
         subTopic.remove_prefix(11);
         handleSceneCommand(subTopic, payload);
     } else if (subTopic == "/config/get") {
-        char resTopic[128];
-        snprintf(resTopic, sizeof(resTopic), "%s/config/get/response", m_baseTopic.c_str());
-        JsonDocument doc;
-        doc["mqtt_base"] = cfg->mqttBaseTopic.c_str();
-        doc["client_id"] = cfg->clientId.c_str();
-        doc["dali_poll"] = cfg->daliPollIntervalMs;
-        doc["hass_disc"] = cfg->hassDiscoveryEnabled;
-        char resBuf[256];
-        serializeJson(doc, resBuf, sizeof(resBuf));
-        m_mqtt.publish(resTopic, resBuf, 0, false);
+        handleConfigGetCommand();
+    } else if (subTopic == "/config/set") {
+        handleConfigSetCommand(payload);
     } else if (subTopic == "/config/group/set") {
         handleGroupConfigCommand(payload);
+    } else if (subTopic == "/config/group/get") {
+        handleGroupConfigGetCommand();
+    } else if (subTopic == "/config/group/refresh") {
+        handleGroupRefreshCommand();
+    }  else if (subTopic == "/config/scene/get") {
+        handleSceneConfigGetCommand(payload);
+    } else if (subTopic == "/config/scene/set") {
+        handleSceneConfigSetCommand(payload);
+    } else if (subTopic == "/config/names/get") {
+        handleNamesGetCommand();
+    } else if (subTopic == "/config/names/set") {
+        handleNamesSetCommand(payload);
     } else if (subTopic == "/config/bus/scan") {
-        ESP_LOGI(TAG, "MQTT Bus Scan initiated");
-        m_daliRegistry.scanBus();
+        handleBusScanCommand();
     } else if (subTopic == "/config/bus/initialize") {
-        ESP_LOGI(TAG, "MQTT Bus Commissioning initiated");
-        m_daliRegistry.commissionNewDevices();
+        handleBusInitializeCommand();
     } else if (subTopic == "/config/input_device/initialize") {
-        ESP_LOGI(TAG, "MQTT Input Device Commissioning initiated");
-        m_daliRegistry.commission24BitDevices();
+        handleInputDeviceInitializeCommand();
     } else if (subTopic == "/config/discovery/publish") {
         publishHomeAssistantDiscovery();
     } else if (subTopic == "/cmd/send") {
@@ -500,6 +518,39 @@ void MqttBridge::handleLightCommand(std::string_view targetPath, std::string_vie
         m_daliRegistry.setPower(longAddr, *powerState);
     }
 }
+void MqttBridge::handleGroupConfigGetCommand() const {
+    const auto assignments = m_daliRegistry.getGroupAssignments();
+
+    JsonDocument doc;
+    for (const auto& [longAddr, groups] : assignments) {
+        const auto laStr = utils::longAddressToString(longAddr);
+        auto grpArr = doc[laStr.data()].to<JsonArray>();
+        for (int i = 0; i < 16; ++i) {
+            if (groups.test(i)) {
+                grpArr.add(i);
+            }
+        }
+    }
+
+    char resTopic[128];
+    snprintf(resTopic, sizeof(resTopic), "%s/config/group/get/response", m_baseTopic.c_str());
+    char resBuf[1024];
+    serializeJson(doc, resBuf, sizeof(resBuf));
+    m_mqtt.publish(resTopic, resBuf, 0, false);
+}
+
+void MqttBridge::handleGroupRefreshCommand() const {
+    ESP_LOGI(TAG, "MQTT requested group refresh from DALI bus...");
+        xTaskCreate(
+        [](void* arg) {
+            auto* self = static_cast<const MqttBridge*>(arg);
+            self->m_daliRegistry.refreshGroupAssignmentsFromBus();
+            self->publishAllDeviceGroups();
+            self->handleGroupConfigGetCommand();
+            vTaskDelete(nullptr);
+        },
+        "mqtt_grp_ref", 4096, const_cast<MqttBridge*>(this), 4, nullptr);
+}
 
 void MqttBridge::handleGroupConfigCommand(std::string_view payload) const {
     JsonDocument doc;
@@ -516,7 +567,13 @@ void MqttBridge::handleGroupConfigCommand(std::string_view payload) const {
     const uint8_t group = doc["group"].as<uint8_t>();
     const bool assigned = (strcmp(doc["state"].as<const char*>(), "add") == 0);
 
-    m_daliRegistry.setDeviceGroupMembership(*longAddrOpt, group, assigned);
+    if (m_daliRegistry.setDeviceGroupMembership(*longAddrOpt, group, assigned) == ESP_OK) {
+        const auto assignments = m_daliRegistry.getGroupAssignments();
+        auto it = assignments.find(*longAddrOpt);
+        if (it != assignments.end()) {
+            publishDeviceGroups(*longAddrOpt, it->second);
+        }
+    }
 }
 
 void MqttBridge::handleSceneCommand(std::string_view busStr, std::string_view payload) const {
@@ -637,6 +694,332 @@ void MqttBridge::publishTelemetry() const {
 
     snprintf(topic, sizeof(topic), "%s/ip_addr", m_baseTopic.c_str());
     m_mqtt.publish(topic, m_network.getIpAddress().c_str(), 0, true);
+}
+
+void MqttBridge::handleConfigGetCommand() const {
+    JsonDocument doc;
+    ConfigJson::serialize(*m_config.get(), doc, /*maskSecrets=*/true);
+
+    char resTopic[128];
+    snprintf(resTopic, sizeof(resTopic), "%s/config/get/response", m_baseTopic.c_str());
+    char resBuf[1024];
+    serializeJson(doc, resBuf, sizeof(resBuf));
+    m_mqtt.publish(resTopic, resBuf, 0, false);
+}
+
+void MqttBridge::handleConfigSetCommand(std::string_view payload) const {
+    JsonDocument doc;
+    if (deserializeJson(doc, payload.data(), payload.size()) != DeserializationError::Ok) {
+        return;
+    }
+
+    auto newCfg = *m_config.get();
+    const auto result = ConfigJson::apply(doc, newCfg);
+
+    char resTopic[128];
+    snprintf(resTopic, sizeof(resTopic), "%s/config/set/response", m_baseTopic.c_str());
+
+    if (!result.success) {
+        char errBuf[128];
+        snprintf(errBuf, sizeof(errBuf), R"({"status":"error","message":"%s"})", result.errorMessage);
+        m_mqtt.publish(resTopic, errBuf, 0, false);
+        return;
+    }
+
+    const esp_err_t err = m_config.save(newCfg);
+
+    char resPayload[128];
+    snprintf(resPayload, sizeof(resPayload),
+             R"({"status":"%s","reboot":%s})",
+             (err == ESP_OK) ? "ok" : "error",
+             result.requiresReboot ? "true" : "false");
+    m_mqtt.publish(resTopic, resPayload, 0, false);
+
+    if (err != ESP_OK) return;
+
+    if (result.hassDiscoveryToggled && !result.requiresReboot) {
+        publishHomeAssistantDiscovery();
+    }
+
+    if (result.requiresReboot) {
+        ESP_LOGW(TAG, "Critical configuration changed via MQTT. Rebooting in 1s...");
+        xTaskCreate(
+            [](void*) {
+                vTaskDelay(pdMS_TO_TICKS(1000));
+                esp_restart();
+            },
+            "mqtt_reboot_task", 2048, nullptr, 5, nullptr);
+    }
+}
+
+void MqttBridge::handleSceneConfigGetCommand(std::string_view payload) const {
+    JsonDocument reqDoc;
+    if (deserializeJson(reqDoc, payload.data(), payload.size()) != DeserializationError::Ok)
+        return;
+
+    if (!reqDoc["scene"].is<int>())
+        return;
+
+    const uint8_t sceneId = reqDoc["scene"].as<uint8_t>();
+    const uint8_t busId = reqDoc["bus"].is<int>() ? reqDoc["bus"].as<uint8_t>() : 0;
+
+    const auto levels = m_daliRegistry.querySceneLevels(busId, sceneId);
+
+    JsonDocument respDoc;
+    respDoc["bus"] = busId;
+    respDoc["scene"] = sceneId;
+    const auto lObj = respDoc["levels"].to<JsonObject>();
+
+    for (uint8_t sa = 0; sa < 64; ++sa) {
+        if (levels[sa] != 255) {
+            auto laOpt = m_daliRegistry.getLongAddress(DaliInternalAddr(busId, sa));
+            if (laOpt) {
+                lObj[utils::longAddressToString(*laOpt).data()] = levels[sa];
+            }
+        }
+    }
+
+    char resTopic[128];
+    snprintf(resTopic, sizeof(resTopic), "%s/config/scene/get/response", m_baseTopic.c_str());
+    char resBuf[1024];
+    serializeJson(respDoc, resBuf, sizeof(resBuf));
+    m_mqtt.publish(resTopic, resBuf, 0, false);
+}
+
+void MqttBridge::handleSceneConfigSetCommand(std::string_view payload) const {
+    JsonDocument doc;
+    if (deserializeJson(doc, payload.data(), payload.size()) != DeserializationError::Ok)
+        return;
+
+    if (!doc["scene"].is<int>())
+        return;
+
+    const uint8_t sceneId = doc["scene"].as<uint8_t>();
+    const uint8_t busId = doc["bus"].is<int>() ? doc["bus"].as<uint8_t>() : 0;
+
+    SceneLevels levels = m_daliRegistry.querySceneLevels(busId, sceneId);
+
+    if (doc["levels"].is<JsonObject>()) {
+        for (JsonPair kv : doc["levels"].as<JsonObject>()) {
+            auto laOpt = utils::stringToLongAddress(kv.key().c_str());
+            if (laOpt) {
+                auto intAddr = m_daliRegistry.getInternalAddress(*laOpt);
+                if (intAddr) {
+                    levels[intAddr->shortAddr()] = kv.value().as<uint8_t>();
+                }
+            }
+        }
+    }
+    else if (doc["address"].is<const char*>() && doc["level"].is<int>()) {
+        auto laOpt = utils::stringToLongAddress(doc["address"].as<const char*>());
+        if (laOpt) {
+            auto intAddr = m_daliRegistry.getInternalAddress(*laOpt);
+            if (intAddr) {
+                levels[intAddr->shortAddr()] = doc["level"].as<uint8_t>();
+            }
+        }
+    }
+
+    const esp_err_t err = m_daliRegistry.saveSceneLevels(busId, sceneId, levels);
+
+    char resTopic[128];
+    snprintf(resTopic, sizeof(resTopic), "%s/config/scene/set/response", m_baseTopic.c_str());
+    char resPayload[64];
+    snprintf(resPayload, sizeof(resPayload), R"({"status":"%s","scene":%d})", (err == ESP_OK) ? "ok" : "error", sceneId);
+    m_mqtt.publish(resTopic, resPayload, 0, false);
+}
+
+void MqttBridge::handleNamesGetCommand() const {
+    const NvsHandle nvs("dali_names", NVS_READONLY);
+    char buf[1024] = "{}";
+    if (nvs) {
+        size_t len = sizeof(buf);
+        nvs_get_str(nvs.get(), "names_json", buf, &len);
+    }
+
+    char resTopic[128];
+    snprintf(resTopic, sizeof(resTopic), "%s/config/names/get/response", m_baseTopic.c_str());
+    m_mqtt.publish(resTopic, buf, 0, false);
+}
+
+void MqttBridge::handleNamesSetCommand(std::string_view payload) const {
+    JsonDocument incoming;
+    if (deserializeJson(incoming, payload.data(), payload.size()) != DeserializationError::Ok)
+        return;
+
+    const NvsHandle readNvs("dali_names", NVS_READONLY);
+    char buf[1024] = "{}";
+    if (readNvs) {
+        size_t len = sizeof(buf);
+        nvs_get_str(readNvs.get(), "names_json", buf, &len);
+    }
+
+    JsonDocument currentNames;
+    deserializeJson(currentNames, buf);
+
+    for (JsonPair kv : incoming.as<JsonObject>()) {
+        currentNames[kv.key()] = kv.value();
+    }
+
+    char saveBuf[1024];
+    serializeJson(currentNames, saveBuf, sizeof(saveBuf));
+
+    NvsHandle writeNvs("dali_names", NVS_READWRITE);
+    esp_err_t err = ESP_FAIL;
+    if (writeNvs) {
+        nvs_set_str(writeNvs.get(), "names_json", saveBuf);
+        err = nvs_commit(writeNvs.get());
+    }
+
+    if (err == ESP_OK && m_config.get()->hassDiscoveryEnabled) {
+        publishHomeAssistantDiscovery();
+    }
+
+    char resTopic[128];
+    snprintf(resTopic, sizeof(resTopic), "%s/config/names/set/response", m_baseTopic.c_str());
+    char resPayload[64];
+    snprintf(resPayload, sizeof(resPayload), R"({"status":"%s"})", (err == ESP_OK) ? "ok" : "error");
+    m_mqtt.publish(resTopic, resPayload, 0, false);
+}
+
+void MqttBridge::publishBusSyncStatus(const char* status, const char* lastAction) const {
+    char topic[128];
+    snprintf(topic, sizeof(topic), "%s/config/bus/sync_status", m_baseTopic.c_str());
+
+    char payload[128];
+    if (lastAction) {
+        snprintf(payload, sizeof(payload), R"({"status":"%s","last_action":"%s"})", status, lastAction);
+    } else {
+        snprintf(payload, sizeof(payload), R"({"status":"%s"})", status);
+    }
+
+    m_mqtt.publish(topic, payload, 0, false);
+}
+
+void MqttBridge::handleBusScanCommand() const {
+    if (m_busOperationBusy.exchange(true)) {
+        ESP_LOGW(TAG, "Bus operation is already in progress. Ignoring scan request.");
+        return;
+    }
+
+    ESP_LOGI(TAG, "Starting MQTT-initiated asynchronous DALI bus scan...");
+    publishBusSyncStatus("scanning");
+
+    xTaskCreate(
+        [](void* arg) {
+            auto* self = static_cast<const MqttBridge*>(arg);
+            self->m_daliRegistry.scanBus();
+            self->m_daliRegistry.refreshGroupAssignmentsFromBus();
+
+            self->publishBusSyncStatus("idle", "scan_complete");
+            ESP_LOGI(TAG, "MQTT-initiated DALI scan finished.");
+            self->m_busOperationBusy.store(false);
+            vTaskDelete(nullptr);
+        },
+        "mqtt_scan_task", 4096, const_cast<MqttBridge*>(this), 4, nullptr);
+}
+
+void MqttBridge::handleBusInitializeCommand() const {
+    if (m_busOperationBusy.exchange(true)) {
+        ESP_LOGW(TAG, "Bus operation is already in progress. Ignoring commissioning request.");
+        return;
+    }
+
+    ESP_LOGI(TAG, "Starting MQTT-initiated DALI commissioning (Control Gear)...");
+    publishBusSyncStatus("initializing");
+
+    xTaskCreate(
+        [](void* arg) {
+            auto* self = static_cast<const MqttBridge*>(arg);
+            self->m_daliRegistry.commissionNewDevices();
+            self->m_daliRegistry.refreshGroupAssignmentsFromBus();
+
+            self->publishBusSyncStatus("idle", "init_complete");
+            ESP_LOGI(TAG, "MQTT-initiated DALI commissioning finished.");
+            self->m_busOperationBusy.store(false);
+            vTaskDelete(nullptr);
+        },
+        "mqtt_init_task", 4096, const_cast<MqttBridge*>(this), 4, nullptr);
+}
+
+void MqttBridge::handleInputDeviceInitializeCommand() const {
+    if (m_busOperationBusy.exchange(true)) {
+        ESP_LOGW(TAG, "Bus operation is already in progress. Ignoring input device init request.");
+        return;
+    }
+
+    ESP_LOGI(TAG, "Starting MQTT-initiated DALI commissioning (24-bit Input Devices)...");
+    publishBusSyncStatus("initializing");
+
+    xTaskCreate(
+        [](void* arg) {
+            auto* self = static_cast<const MqttBridge*>(arg);
+            self->m_daliRegistry.commission24BitDevices();
+            self->m_daliRegistry.refreshGroupAssignmentsFromBus();
+
+            self->publishBusSyncStatus("idle", "input_init_complete");
+            ESP_LOGI(TAG, "MQTT-initiated Input Device commissioning finished.");
+            self->m_busOperationBusy.store(false);
+            vTaskDelete(nullptr);
+        },
+        "mqtt_inp_init_task", 4096, const_cast<MqttBridge*>(this), 4, nullptr);
+}
+
+void MqttBridge::onDaliDeviceAttributesLoaded(const ControlGear& gear, void* ctx) {
+    const auto* self = static_cast<MqttBridge*>(ctx);
+    self->publishDeviceAttributes(gear);
+}
+
+void MqttBridge::publishDeviceAttributes(const ControlGear& gear) const {
+    const auto addrStr = utils::longAddressToString(gear.longAddress);
+
+    char topic[128];
+    snprintf(topic, sizeof(topic), "%s/light/%s/attributes", m_baseTopic.c_str(), addrStr.data());
+
+    JsonDocument doc;
+    doc["short_address"] = gear.internalAddress.shortAddr();
+    doc["bus"] = gear.internalAddress.bus();
+    if (gear.deviceType.has_value()) {
+        doc["device_type"] = *gear.deviceType;
+    }
+    if (!gear.gtin.empty()) {
+        doc["gtin"] = gear.gtin.c_str();
+    }
+    doc["dev_min_level"] = gear.minLevel;
+    doc["dev_max_level"] = gear.maxLevel;
+    doc["dev_power_on_level"] = gear.powerOnLevel;
+    doc["dev_system_failure_level"] = gear.systemFailureLevel;
+
+    char payload[384];
+    serializeJson(doc, payload, sizeof(payload));
+    m_mqtt.publish(topic, payload, 1, true);
+}
+
+void MqttBridge::publishDeviceGroups(const DaliLongAddress_t longAddr, const GroupMask& groups) const {
+    const auto addrStr = utils::longAddressToString(longAddr);
+
+    char topic[128];
+    snprintf(topic, sizeof(topic), "%s/light/%s/groups", m_baseTopic.c_str(), addrStr.data());
+
+    JsonDocument doc;
+    auto grpArr = doc["groups"].to<JsonArray>();
+    for (size_t i = 0; i < 16; ++i) {
+        if (groups.test(i)) {
+            grpArr.add(i);
+        }
+    }
+
+    char payload[128];
+    serializeJson(doc, payload, sizeof(payload));
+    m_mqtt.publish(topic, payload, 1, true);
+}
+
+void MqttBridge::publishAllDeviceGroups() const {
+    const auto assignments = m_daliRegistry.getGroupAssignments();
+    for (const auto& [longAddr, mask] : assignments) {
+        publishDeviceGroups(longAddr, mask);
+        vTaskDelay(pdMS_TO_TICKS(2));
+    }
 }
 
 } // namespace daliMQTT

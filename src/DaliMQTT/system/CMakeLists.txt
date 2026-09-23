@@ -1,6 +1,7 @@
 target_sources(DaliMQTT-Core PRIVATE
         AppCoordinator.cxx
         ConfigStore.cxx
+        ConfigJson.cxx
         SyslogService.cxx
         SystemControls.cxx
         SystemScheduler.cxx
@@ -9,6 +10,7 @@ target_sources(DaliMQTT-Core PRIVATE
         Application.hxx
         AppCoordinator.hxx
         ConfigStore.hxx
+        ConfigJson.hxx
         ConfigStructure.hxx
         SyslogService.hxx
         SystemControls.hxx

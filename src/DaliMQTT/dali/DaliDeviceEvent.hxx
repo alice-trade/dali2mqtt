@@ -22,6 +22,7 @@ struct DeviceStateChangeEvent {
 };
 
 using DeviceStateCallback = void (*)(const DeviceStateChangeEvent& event, void* userCtx);
+using DeviceAttributesCallback = void (*)(const ControlGear& gear, void* userCtx);
 
 } // namespace daliMQTT
 

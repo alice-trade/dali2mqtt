@@ -7,6 +7,7 @@
 #include "mqtt/MqttClient.hxx"
 #include "system/ConfigStore.hxx"
 #include "system/OtaService.hxx"
+#include "system/ConfigJson.hxx"
 #include "utils/DaliLongAddrConversions.hxx"
 #include "utils/NvsHandle.hxx"
 #include "webui/ApiContext.hxx"
@@ -69,39 +70,10 @@ esp_err_t ApiHandlers::getConfig(httpd_req_t* req) {
     if (checkAuth(req, ctx) != ESP_OK)
         return ESP_FAIL;
 
-    const auto cfg = ctx->config.get();
-
     JsonDocument doc;
-    doc["wifi_ssid"] = cfg->wifiSsid.c_str();
-    doc["mqtt_uri"] = cfg->mqttUri.c_str();
-    doc["mqtt_user"] = cfg->mqttUser.c_str();
-    doc["mqtt_base_topic"] = cfg->mqttBaseTopic.c_str();
-    doc["mqtt_ca_cert"] = cfg->mqttCaCert.empty() ? "" : "***";
-    doc["client_id"] = cfg->clientId.c_str();
-    doc["http_domain"] = cfg->httpDomain.c_str();
-    doc["http_user"] = cfg->httpUser.c_str();
-    doc["dali_poll_interval_ms"] = cfg->daliPollIntervalMs;
-    doc["telemetry_interval_sec"] = cfg->telemetryIntervalSec;
-    doc["ota_check_interval_days"] = cfg->otaCheckIntervalDays;
-    doc["ota_url"] = cfg->otaBaseUrl.c_str();
-    doc["hass_discovery_enabled"] = cfg->hassDiscoveryEnabled;
-    doc["hass_discovery_prefix"]  = cfg->hassDiscoveryPrefix.c_str();
-    doc["syslog_server"] = cfg->syslogServer.c_str();
-    doc["syslog_enabled"] = cfg->syslogEnabled;
+    ConfigJson::serialize(*ctx->config.get(), doc, /*maskSecrets=*/true);
 
-    const auto busesArr = doc["buses"].to<JsonArray>();
-    for (const auto& b : cfg->buses) {
-        auto bObj = busesArr.add<JsonObject>();
-        bObj["enabled"] = b.enabled;
-        bObj["rx_pin"] = b.rxPin;
-        bObj["tx_pin"] = b.txPin;
-    }
-
-    doc["wifi_password"] = "***";
-    doc["mqtt_pass"] = "***";
-    doc["http_pass"] = "***";
-
-    char buf[768];
+    char buf[1024];
     serializeJson(doc, buf, sizeof(buf));
     httpd_resp_set_type(req, "application/json");
     httpd_resp_send(req, buf, HTTPD_RESP_USE_STRLEN);
@@ -119,19 +91,10 @@ esp_err_t ApiHandlers::setConfig(httpd_req_t* req) {
     }
 
     auto buf = std::make_unique<char[]>(req->content_len + 1);
-
     size_t received = 0;
-    int timeouts = 0;
-
     while (received < req->content_len) {
         const int ret = httpd_req_recv(req, buf.get() + received, req->content_len - received);
-        if (ret <= 0) {
-            if (ret == HTTPD_SOCK_ERR_TIMEOUT && ++timeouts < 3) {
-                continue;
-            }
-            httpd_resp_send_408(req);
-            return ESP_FAIL;
-        }
+        if (ret <= 0) return ESP_FAIL;
         received += ret;
     }
     buf[received] = '\0';
@@ -142,60 +105,13 @@ esp_err_t ApiHandlers::setConfig(httpd_req_t* req) {
         return ESP_FAIL;
     }
 
-
     auto newCfg = *ctx->config.get();
+    auto result = ConfigJson::apply(doc, newCfg);
 
-    if (doc["wifi_ssid"].is<const char*>())
-        newCfg.wifiSsid = doc["wifi_ssid"].as<const char*>();
-    if (doc["wifi_password"].is<const char*>() && strcmp(doc["wifi_password"].as<const char*>(), "***") != 0) {
-        newCfg.wifiPass = doc["wifi_password"].as<const char*>();
+    if (!result.success) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, result.errorMessage);
+        return ESP_FAIL;
     }
-    if (doc["mqtt_uri"].is<const char*>())
-        newCfg.mqttUri = doc["mqtt_uri"].as<const char*>();
-    if (doc["mqtt_user"].is<const char*>())
-        newCfg.mqttUser = doc["mqtt_user"].as<const char*>();
-    if (doc["mqtt_pass"].is<const char*>() && strcmp(doc["mqtt_pass"].as<const char*>(), "***") != 0) {
-        newCfg.mqttPass = doc["mqtt_pass"].as<const char*>();
-    }
-    if (doc["mqtt_base_topic"].is<const char*>())
-        newCfg.mqttBaseTopic = doc["mqtt_base_topic"].as<const char*>();
-    if (doc["mqtt_ca_cert"].is<const char*>()) {
-        const std::string_view cert = doc["mqtt_ca_cert"].as<const char*>();
-        if (cert != "***") {
-            if (cert.length() <= newCfg.mqttCaCert.max_size()) {
-                newCfg.mqttCaCert = cert.data();
-            } else {
-                httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Certificate exceeds maximum size (2048)");
-                return ESP_FAIL;
-            }
-        }
-    }
-    if (doc["http_domain"].is<const char*>())
-        newCfg.httpDomain = doc["http_domain"].as<const char*>();
-    if (doc["http_user"].is<const char*>())
-        newCfg.httpUser = doc["http_user"].as<const char*>();
-    if (doc["http_pass"].is<const char*>() && strcmp(doc["http_pass"].as<const char*>(), "***") != 0) {
-        newCfg.httpPass = doc["http_pass"].as<const char*>();
-    }
-    if (doc["telemetry_interval_sec"].is<uint32_t>()) {
-        newCfg.telemetryIntervalSec = doc["telemetry_interval_sec"].as<uint32_t>();
-    }
-    if (doc["ota_check_interval_days"].is<uint8_t>()) {
-        newCfg.otaCheckIntervalDays = doc["ota_check_interval_days"].as<uint8_t>();
-    }
-    if (doc["ota_url"].is<const char*>())
-        newCfg.otaBaseUrl = doc["ota_url"].as<const char*>();
-    if (doc["syslog_server"].is<const char*>())
-        newCfg.syslogServer = doc["syslog_server"].as<const char*>();
-    if (doc["syslog_enabled"].is<bool>())
-        newCfg.syslogEnabled = doc["syslog_enabled"].as<bool>();
-    if (doc["hass_discovery_enabled"].is<bool>())
-        newCfg.hassDiscoveryEnabled = doc["hass_discovery_enabled"].as<bool>();
-    if (doc["hass_discovery_prefix"].is<const char*>()) {
-        newCfg.hassDiscoveryPrefix = doc["hass_discovery_prefix"].as<const char*>();
-    }
-    if (doc["dali_poll_interval_ms"].is<uint32_t>())
-        newCfg.daliPollIntervalMs = doc["dali_poll_interval_ms"].as<uint32_t>();
 
     ctx->config.save(newCfg);
 

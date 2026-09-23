@@ -3,6 +3,7 @@
 
 #include "mqtt/HomeAssistantDiscovery.hxx"
 #include "utils/DaliLongAddrConversions.hxx"
+#include "utils/DaliNamingUtils.hxx"
 #include <ArduinoJson.h>
 #include <esp_log.h>
 
@@ -49,24 +50,39 @@ void HomeAssistantDiscovery::publishLight(const ControlGear& gear, const ConfigS
     char discTopic[128];
     snprintf(discTopic, sizeof(discTopic), "%s/light/%s/config", config.hassDiscoveryPrefix.c_str(), uniqueId);
 
-    char stateTopic[128], cmdTopic[128], avTopic[128];
+    char stateTopic[128], cmdTopic[128], bridgeAvTopic[128];
     snprintf(stateTopic, sizeof(stateTopic), "%s/light/%s/state", config.mqttBaseTopic.c_str(), addrStr.data());
     snprintf(cmdTopic, sizeof(cmdTopic), "%s/light/%s/set", config.mqttBaseTopic.c_str(), addrStr.data());
-    snprintf(avTopic, sizeof(avTopic), "%s%s", config.mqttBaseTopic.c_str(), CONFIG_DALI2MQTT_MQTT_AVAILABILITY_TOPIC);
+    snprintf(bridgeAvTopic, sizeof(bridgeAvTopic), "%s%s", config.mqttBaseTopic.c_str(), CONFIG_DALI2MQTT_MQTT_AVAILABILITY_TOPIC);
+
+    const std::string customName = utils::getDeviceCustomName(addrStr.data());
+    char nameBuf[96];
+    if (!customName.empty()) {
+        snprintf(nameBuf, sizeof(nameBuf), "%s", customName.c_str());
+    } else {
+        snprintf(nameBuf, sizeof(nameBuf), "DALI Light %s (B%d:SA%d)", addrStr.data(), busId, shortAddr);
+    }
 
     JsonDocument doc;
-    char nameBuf[64];
-    snprintf(nameBuf, sizeof(nameBuf), "DALI Light %s (B%d:SA%d)", addrStr.data(), busId, shortAddr);
-
     doc["name"] = nameBuf;
     doc["unique_id"] = uniqueId;
     doc["schema"] = "json";
     doc["state_topic"] = stateTopic;
     doc["command_topic"] = cmdTopic;
     doc["brightness"] = true;
-    doc["availability_topic"] = avTopic;
-    doc["payload_available"] = CONFIG_DALI2MQTT_MQTT_PAYLOAD_ONLINE;
-    doc["payload_not_available"] = CONFIG_DALI2MQTT_MQTT_PAYLOAD_OFFLINE;
+    doc["availability_mode"] = "all";
+
+    auto avList = doc["availability"].to<JsonArray>();
+    auto bridgeAv = avList.add<JsonObject>();
+    bridgeAv["topic"] = bridgeAvTopic;
+    bridgeAv["payload_available"] = CONFIG_DALI2MQTT_MQTT_PAYLOAD_ONLINE;
+    bridgeAv["payload_not_available"] = CONFIG_DALI2MQTT_MQTT_PAYLOAD_OFFLINE;
+
+    auto deviceAv = avList.add<JsonObject>();
+    deviceAv["topic"] = stateTopic;
+    deviceAv["value_template"] = "{{ 'online' if value_json.available else 'offline' }}";
+    deviceAv["payload_available"] = "online";
+    deviceAv["payload_not_available"] = "offline";
 
     if (gear.color.has_value()) {
         const JsonArray modes = doc["supported_color_modes"].to<JsonArray>();
@@ -87,7 +103,7 @@ void HomeAssistantDiscovery::publishLight(const ControlGear& gear, const ConfigS
     devObj["name"] = nameBuf;
     devObj["via_device"] = config.clientId.c_str();
 
-    char payloadBuf[768];
+    char payloadBuf[1024];
     serializeJson(doc, payloadBuf, sizeof(payloadBuf));
     m_mqtt.publish(discTopic, payloadBuf, 1, true);
 
@@ -140,12 +156,43 @@ void HomeAssistantDiscovery::publishGroup(const uint8_t busId, const uint8_t gro
     doc["brightness"] = true;
     doc["availability_topic"] = avTopic;
 
+    bool groupSupportsTc = false;
+    bool groupSupportsRgb = false;
+
+    const auto devices = m_registry.getDevicesSnapshot();
+    const auto assignments = m_registry.getGroupAssignments();
+
+    for (const auto& [longAddr, mask] : assignments) {
+        if (mask.test(groupId)) {
+            for (const auto& dev : devices) {
+                if (const auto* gear = etl::get_if<ControlGear>(&dev)) {
+                    if (gear->longAddress == longAddr && gear->color.has_value()) {
+                        if (gear->color->supportsTc) groupSupportsTc = true;
+                        if (gear->color->supportsRgb) groupSupportsRgb = true;
+                    }
+                }
+            }
+        }
+    }
+
+    if (groupSupportsTc || groupSupportsRgb) {
+        const auto modes = doc["supported_color_modes"].to<JsonArray>();
+        if (groupSupportsTc) {
+            modes.add("color_temp");
+            doc["min_mireds"] = 153;
+            doc["max_mireds"] = 500;
+        }
+        if (groupSupportsRgb) {
+            modes.add("rgb");
+        }
+    }
+
     const auto devObj = doc["device"].to<JsonObject>();
     devObj["identifiers"].add(config.clientId.c_str());
     devObj["name"] = config.clientId.c_str();
     devObj["model"] = "ESP32 DALI Gateway";
 
-    char payloadBuf[384];
+    char payloadBuf[512];
     serializeJson(doc, payloadBuf, sizeof(payloadBuf));
     m_mqtt.publish(discTopic, payloadBuf, 1, true);
 }

@@ -123,12 +123,52 @@ void DaliDeviceRegistry::processSnifferFrame(const DaliRawFrame& frame) {
                     gState.lastLevel = dataByte;
             } else {
                 const auto op = static_cast<OpCode>(dataByte);
-                if (op == OpCode::Off || op == OpCode::StepDownAndOff)
+                constexpr uint8_t STEP_SIZE = 10;
+
+                switch (op) {
+                case OpCode::Off:
+                case OpCode::StepDownAndOff:
                     gState.currentLevel = 0;
-                else if (op == OpCode::RecallMaxLevel)
+                    break;
+
+                case OpCode::RecallMaxLevel:
                     gState.currentLevel = 254;
-                else if (op == OpCode::RecallMinLevel)
+                    break;
+
+                case OpCode::RecallMinLevel:
                     gState.currentLevel = 1;
+                    break;
+
+                case OpCode::OnAndStepUp:
+                    if (gState.currentLevel == 0) {
+                        gState.currentLevel = (gState.lastLevel > 0) ? gState.lastLevel : 254;
+                    } else {
+                        gState.currentLevel = static_cast<uint8_t>(std::min(254, gState.currentLevel + STEP_SIZE));
+                    }
+                    gState.lastLevel = gState.currentLevel;
+                    break;
+
+                case OpCode::Up:
+                case OpCode::StepUp:
+                    if (gState.currentLevel > 0) {
+                        gState.currentLevel = static_cast<uint8_t>(std::min(254, gState.currentLevel + STEP_SIZE));
+                        gState.lastLevel = gState.currentLevel;
+                    }
+                    break;
+
+                case OpCode::Down:
+                case OpCode::StepDown:
+                    if (gState.currentLevel > STEP_SIZE) {
+                        gState.currentLevel -= STEP_SIZE;
+                    } else if (gState.currentLevel > 0) {
+                        gState.currentLevel = 1;
+                    }
+                    gState.lastLevel = gState.currentLevel;
+                    break;
+
+                default:
+                    break;
+                }
             }
             updatedState = gState;
         }
@@ -175,6 +215,10 @@ void DaliDeviceRegistry::processSnifferFrame(const DaliRawFrame& frame) {
                 } else if (op == OpCode::RecallMinLevel) {
                     gear->currentLevel = gear->minLevel;
                     notify = true;
+                } else if (op == OpCode::OnAndStepUp && gear->currentLevel == 0) {
+                    gear->currentLevel = (gear->lastLevel > 0) ? gear->lastLevel : gear->maxLevel;
+                    notify = true;
+                    requestSync(gear->internalAddress, 400);
                 } else {
                     requestSync(gear->internalAddress, 300);
                 }
@@ -779,6 +823,9 @@ void DaliDeviceRegistry::pollSingleDevice(const DaliInternalAddr addr) {
     if (needFetchMetadata) {
         auto [minLevel, maxLevel, powerOnLevel, systemFailureLevel, deviceType, color, gtin] =
             queryDeviceMetadataFromBus(addr.shortAddr());
+        
+        ControlGear gearForAttributes;
+        bool hasGearForAttributes = false;
         {
             std::lock_guard<std::mutex> lock(m_registryMutex);
             for (auto& dev : m_devices) {
@@ -795,10 +842,16 @@ void DaliDeviceRegistry::pollSingleDevice(const DaliInternalAddr addr) {
 
                         m_nvsDirty = true;
                         m_lastNvsDirtyTsMs = esp_timer_get_time() / 1000;
+
+                        gearForAttributes = *gear;
+                        hasGearForAttributes = true;
                     }
                     break;
                 }
             }
+        }
+        if (hasGearForAttributes && m_attributesCb) {
+            m_attributesCb(gearForAttributes, m_attributesCtx);
         }
     }
 

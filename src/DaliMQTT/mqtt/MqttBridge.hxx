@@ -58,12 +58,32 @@ class MqttBridge {
     void routeIncomingCommand(std::string_view topic, std::string_view payload) const;
     void handleLightCommand(std::string_view targetPath, std::string_view payload) const;
     void handleGroupConfigCommand(std::string_view payload) const;
+    void handleGroupConfigGetCommand() const;
+    void handleGroupRefreshCommand() const;
     void handleSceneCommand(std::string_view busStr, std::string_view payload) const;
     void handleRawDaliCommand(std::string_view payload) const;
     void handleSyncCommand(std::string_view payload) const;
+    void handleConfigGetCommand() const;
+    void handleConfigSetCommand(std::string_view payload) const;
+    void handleSceneConfigGetCommand(std::string_view payload) const;
+    void handleSceneConfigSetCommand(std::string_view payload) const;
+    void handleNamesGetCommand() const;
+    void handleNamesSetCommand(std::string_view payload) const;
     void replayAllCachedStates() const;
     void publishOtaState(const char* latestVersion, const char* releaseUrl, bool inProgress, uint8_t pct) const;
     void handleHomeAssistantStatus(std::string_view payload) const;
+
+    void handleBusScanCommand() const;
+    void handleBusInitializeCommand() const;
+    void handleInputDeviceInitializeCommand() const;
+    void publishBusSyncStatus(const char* status, const char* lastAction = nullptr) const;
+    
+    static void onDaliDeviceAttributesLoaded(const ControlGear& gear, void* ctx);
+    void publishDeviceAttributes(const ControlGear& gear) const;
+    mutable std::atomic<bool> m_busOperationBusy{false};
+
+    void publishDeviceGroups(DaliLongAddress_t longAddr, const GroupMask& groups) const;
+    void publishAllDeviceGroups() const;
 
     MqttClient& m_mqtt;
     DaliDeviceRegistry& m_daliRegistry;

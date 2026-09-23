@@ -9,17 +9,14 @@ from pytest_embedded import Dut
 @pytest.mark.esp32c6
 @pytest.mark.esp32c3
 def test_main_firmware_boot_and_provisioning(dut: Dut) -> None:
-    dut.expect(r'DALI-to-MQTT Bridge (Core )?v\.\d+\.\d+\.\d+', timeout=10)
-    dut.expect_exact('NVS and FS initialized successfully.', timeout=5)
+    dut.expect(r'DALI-to-MQTT Bridge Core v\.\d+\.\d+\.\d+', timeout=10)
 
     res = dut.expect([
-        r'Device is configured\. Starting normal mode\.',
-        r'Device is not configured\. Starting provisioning mode\.'
-    ], timeout=10)
+        r'Connecting to (Wi-Fi|Ethernet) infrastructure\.\.\.',
+        r'Network not configured\. Starting Provisioning AP:'
+    ], timeout=15)
 
-    if res.group(0).startswith(b'Device is not configured'):
-        dut.expect_exact('AP Mode started.', timeout=5)
-        dut.expect_exact('Web service for provisioning is running.', timeout=5)
+    if b'Starting Provisioning AP' in res.group(0):
+        dut.expect_exact('Starting Web UI HTTP server...', timeout=5)
     else:
-        dut.expect_exact('Dali Adaptive Sync Task Started.', timeout=10)
-        dut.expect_exact('Application setup complete. Logic running in background tasks.', timeout=5)
+        dut.expect_exact('Starting Web UI HTTP server...', timeout=5)

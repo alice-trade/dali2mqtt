@@ -73,7 +73,10 @@ inline void DaliDeviceRegistry::setInputEventCallback(InputEventCallback cb, voi
     m_inputEventCb = cb;
     m_inputEventCtx = ctx;
 }
-
+inline void DaliDeviceRegistry::setDeviceAttributesCallback(DeviceAttributesCallback cb, void* ctx) noexcept {
+    m_attributesCb = cb;
+    m_attributesCtx = ctx;
+}
 } // namespace daliMQTT
 
 #endif // DALIMQTT_DALIDEVICEREGISTRY_ICC
