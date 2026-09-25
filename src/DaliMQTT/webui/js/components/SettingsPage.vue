@@ -61,7 +61,6 @@ const loading = ref(true);
 const message = ref('');
 const isError = ref(false);
 
-// Настройка вкладок меню
 const tabs = [
   { id: 'wifi', label: 'WiFi', icon: '📡' },
   { id: 'mqtt', label: 'MQTT', icon: '🌐' },
@@ -70,13 +69,15 @@ const tabs = [
   { id: 'logging', label: 'Maintenance', icon: '🔄' }
 ];
 const activeTab = ref(tabs[0].id);
+const networkType = ref('Wi-Fi');
 
 const loadConfig = async () => {
   loading.value = true;
   message.value = '';
   try {
-    const response = await api.getConfig();
-    config.value = response.data;
+    const [cfgRes, infoRes] = await Promise.all([api.getConfig(), api.getInfo()]);
+    config.value = cfgRes.data;
+    networkType.value = infoRes.data.network_type || 'Wi-Fi';
     if (config.value.dali_poll_interval_ms) {
       daliPollSeconds.value = config.value.dali_poll_interval_ms / 1000.0;
     }
@@ -87,6 +88,7 @@ const loadConfig = async () => {
     loading.value = false;
   }
 };
+
 
 const handleSystemOta = async () => {
   if (!confirm(`Start firmware update from ${config.value.ota_url}?`)) return;
@@ -116,9 +118,9 @@ const handleCertFileUpload = (event: Event) => {
 };
 
 const validateForm = (): boolean => {
-  if (!config.value.wifi_ssid) {
+  if (networkType.value !== 'Ethernet' && !config.value.wifi_ssid) {
     activeTab.value = 'wifi';
-    message.value = 'SSID is required.';
+    message.value = 'SSID is required for Wi-Fi.';
     return false;
   }
   if (!config.value.mqtt_uri) {

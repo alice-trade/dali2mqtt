@@ -39,20 +39,20 @@ apiClient.interceptors.response.use(
 
 
 export const api = {
-    // Config
     async getConfig() {
         return await apiClient.get('/api/config');
     },
     async saveConfig(configData: any) {
         return await apiClient.post('/api/config', configData);
     },
-    // Info
     async getInfo() {
         return await apiClient.get('/api/info');
     },
-    // DALI
     async getDaliDevices() {
         return await apiClient.get('/api/dali/devices');
+    },
+    async controlDevice(address: string, level?: number, state?: 'ON' | 'OFF') {
+        return await apiClient.post('/api/dali/device/control', { address, level, state });
     },
     async daliScan() {
         return await apiClient.post('/api/dali/scan');
@@ -62,6 +62,9 @@ export const api = {
     },
     async daliInitialize() {
         return await apiClient.post('/api/dali/initialize');
+    },
+    async daliInitializeControlDevices() {
+        return await apiClient.post('/api/dali/initialize-cd');
     },
     async getDaliNames() {
         return await apiClient.get('/api/dali/names');
@@ -84,7 +87,10 @@ export const api = {
     async getDaliScene(sceneId: number) {
         return await apiClient.get(`/api/dali/scenes?id=${sceneId}`);
     },
+    async checkOta() {
+        return await apiClient.post('/api/ota/check');
+    },
     async triggerSystemOta(url?: string) {
-        return await apiClient.post('/api/ota/pull', { url });
+        return await apiClient.post('/api/ota/install', {url});
     },
 };

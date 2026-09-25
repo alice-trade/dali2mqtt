@@ -86,6 +86,9 @@ void IRAM_ATTR SystemControls::gpioButtonIsr(void* arg) {
         self->m_lastPressTsMs = nowMs;
         BaseType_t highTaskWoken = pdFALSE;
         xTimerStartFromISR(self->m_resetTimer, &highTaskWoken);
+#ifndef traceISR_EXIT_TO_SCHEDULER
+#define traceISR_EXIT_TO_SCHEDULER()
+#endif
         if (highTaskWoken) {
             portYIELD_FROM_ISR();
         }

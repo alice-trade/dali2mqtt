@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "webui/ApiHandlers.hxx"
-#include "network/NetworkPlatform.hxx"
 #include "dali/DaliDeviceRegistry.hxx"
 #include "mqtt/MqttClient.hxx"
+#include "network/NetworkPlatform.hxx"
+#include "system/ConfigJson.hxx"
 #include "system/ConfigStore.hxx"
 #include "system/OtaService.hxx"
-#include "system/ConfigJson.hxx"
 #include "utils/DaliLongAddrConversions.hxx"
 #include "utils/NvsHandle.hxx"
 #include "webui/ApiContext.hxx"
@@ -71,7 +71,7 @@ esp_err_t ApiHandlers::getConfig(httpd_req_t* req) {
         return ESP_FAIL;
 
     JsonDocument doc;
-    ConfigJson::serialize(*ctx->config.get(), doc, /*maskSecrets=*/true);
+    ConfigJson::serialize(*ctx->config.get(), doc, true);
 
     char buf[1024];
     serializeJson(doc, buf, sizeof(buf));
@@ -94,7 +94,8 @@ esp_err_t ApiHandlers::setConfig(httpd_req_t* req) {
     size_t received = 0;
     while (received < req->content_len) {
         const int ret = httpd_req_recv(req, buf.get() + received, req->content_len - received);
-        if (ret <= 0) return ESP_FAIL;
+        if (ret <= 0)
+            return ESP_FAIL;
         received += ret;
     }
     buf[received] = '\0';
@@ -116,10 +117,18 @@ esp_err_t ApiHandlers::setConfig(httpd_req_t* req) {
     ctx->config.save(newCfg);
 
     httpd_resp_set_type(req, "application/json");
-    httpd_resp_send(req, R"({"status":"ok","message":"Settings saved. Restarting device..."})", HTTPD_RESP_USE_STRLEN);
-
-    vTaskDelay(pdMS_TO_TICKS(1000));
-    esp_restart();
+    if (result.requiresReboot) {
+        httpd_resp_send(req, R"({"status":"ok","message":"Settings saved. Restarting device..."})",
+                        HTTPD_RESP_USE_STRLEN);
+        xTaskCreate(
+            [](void*) {
+                vTaskDelay(pdMS_TO_TICKS(1000));
+                esp_restart();
+            },
+            "web_reboot", 2048, nullptr, 5, nullptr);
+    } else {
+        httpd_resp_send(req, R"({"status":"ok","message":"Settings saved successfully."})", HTTPD_RESP_USE_STRLEN);
+    }
     return ESP_OK;
 }
 
@@ -133,12 +142,26 @@ esp_err_t ApiHandlers::getInfo(httpd_req_t* req) {
 
     JsonDocument doc;
     doc["version"] = DALIMQTT_VERSION;
-    doc["chip_model"] = (chipInfo.model == CHIP_ESP32C6) ? "ESP32-C6" : "ESP32-S3";
+    doc["chip_model"] = (chipInfo.model == CHIP_ESP32C6)   ? "ESP32-C6"
+                        : (chipInfo.model == CHIP_ESP32S3) ? "ESP32-S3"
+                        : (chipInfo.model == CHIP_ESP32C3) ? "ESP32-C3"
+                        : (chipInfo.model == CHIP_ESP32S2) ? "ESP32-S2"
+                        : (chipInfo.model == CHIP_ESP32P4) ? "ESP32-P4"
+                        : (chipInfo.model == CHIP_ESP32C5) ? "ESP32-C5"
+                        : (chipInfo.model == CHIP_ESP32)   ? "ESP32"
+                                                           : "?";
+    doc["chip_cores"] = chipInfo.cores;
+    doc["firmware_verbosity_level"] = CONFIG_LOG_DEFAULT_LEVEL;
     doc["free_heap"] = esp_get_free_heap_size();
     doc["uptime_seconds"] = static_cast<double>(esp_timer_get_time() / 1'000'000);
     doc["ip"] = ctx->network.getIpAddress().c_str();
     doc["network_type"] = NetworkPlatform::getInterfaceName();
     doc["mqtt_status"] = ctx->mqttClient.isConnected() ? "Connected" : "Disconnected";
+    doc["net_status"] = ctx->network.isConnected() ? "Connected" : "Disconnected";
+    doc["dali_status"] = (g_daliStatus.load() == DaliOperationStatus::Idle)           ? "Idle"
+                         : (g_daliStatus.load() == DaliOperationStatus::Scanning)     ? "Scanning"
+                         : (g_daliStatus.load() == DaliOperationStatus::Initializing) ? "Initializing"
+                                                                                      : "Busy";
     doc["configured"] = ctx->config.isConfigured();
 
     const auto ota = ctx->ota.getVersionInfo();
@@ -175,16 +198,22 @@ esp_err_t ApiHandlers::getDaliDevices(httpd_req_t* req) {
         obj["driverId"] = id.internalAddress.bus();
         obj["short_address"] = id.internalAddress.shortAddr();
         obj["available"] = id.available;
+        if (!id.gtin.empty())
+            obj["gtin"] = id.gtin.c_str();
 
         if (const auto* gear = etl::get_if<ControlGear>(&dev)) {
             obj["type"] = "gear";
             obj["level"] = gear->currentLevel;
-            obj["dt"] = gear->deviceType.has_value() ? gear->deviceType.value() : 0;
+            obj["dt"] = gear->deviceType.value_or(0);
             obj["lamp_failure"] = (gear->statusByte & 0x02) != 0;
             obj["min"] = gear->minLevel;
             obj["max"] = gear->maxLevel;
             obj["on_level"] = gear->powerOnLevel;
             obj["fail_level"] = gear->systemFailureLevel;
+            if (gear->color.has_value()) {
+                obj["supports_tc"] = gear->color->supportsTc;
+                obj["supports_rgb"] = gear->color->supportsRgb;
+            }
         } else {
             obj["type"] = "input";
         }
@@ -197,6 +226,42 @@ esp_err_t ApiHandlers::getDaliDevices(httpd_req_t* req) {
     stream.flush();
 
     httpd_resp_send_chunk(req, nullptr, 0);
+    return ESP_OK;
+}
+
+esp_err_t ApiHandlers::controlDaliDevice(httpd_req_t* req) {
+    const auto* ctx = static_cast<ApiContext*>(req->user_ctx);
+    if (checkAuth(req, ctx) != ESP_OK)
+        return ESP_FAIL;
+
+    char body[128];
+    const int ret = httpd_req_recv(req, body, sizeof(body) - 1);
+    if (ret <= 0)
+        return ESP_FAIL;
+    body[ret] = '\0';
+
+    JsonDocument doc;
+    if (deserializeJson(doc, body) != DeserializationError::Ok || !doc["address"].is<const char*>()) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid arguments");
+        return ESP_FAIL;
+    }
+
+    auto laOpt = utils::stringToLongAddress(doc["address"].as<const char*>());
+    if (!laOpt) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid address");
+        return ESP_FAIL;
+    }
+
+    esp_err_t err = ESP_OK;
+    if (doc["level"].is<int>()) {
+        err = ctx->daliRegistry.setBrightness(*laOpt, static_cast<uint8_t>(std::clamp(doc["level"].as<int>(), 0, 254)));
+    } else if (doc["state"].is<const char*>()) {
+        const bool on = (strcmp(doc["state"].as<const char*>(), "ON") == 0);
+        err = ctx->daliRegistry.setPower(*laOpt, on);
+    }
+
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, (err == ESP_OK) ? R"({"status":"ok"})" : R"({"status":"error"})", HTTPD_RESP_USE_STRLEN);
     return ESP_OK;
 }
 
@@ -220,7 +285,7 @@ esp_err_t ApiHandlers::scanDaliBus(httpd_req_t* req) {
             g_daliStatus.store(DaliOperationStatus::Idle);
             vTaskDelete(nullptr);
         },
-        "web_scan_task", 4096, ctx, 4, nullptr);
+        "web_scan", 4096, ctx, 4, nullptr);
 
     httpd_resp_set_status(req, "202 Accepted");
     httpd_resp_send(req, R"({"status":"ok","message":"Scan initiated"})", HTTPD_RESP_USE_STRLEN);
@@ -247,32 +312,58 @@ esp_err_t ApiHandlers::initializeDaliBus(httpd_req_t* req) {
             g_daliStatus.store(DaliOperationStatus::Idle);
             vTaskDelete(nullptr);
         },
-        "web_init_task", 4096, ctx, 4, nullptr);
+        "web_init", 4096, ctx, 4, nullptr);
 
     httpd_resp_set_status(req, "202 Accepted");
     httpd_resp_send(req, R"({"status":"ok","message":"Commissioning initiated"})", HTTPD_RESP_USE_STRLEN);
     return ESP_OK;
 }
 
+esp_err_t ApiHandlers::initializeDaliInputs(httpd_req_t* req) {
+    auto* ctx = static_cast<ApiContext*>(req->user_ctx);
+    if (checkAuth(req, ctx) != ESP_OK)
+        return ESP_FAIL;
+
+    if (g_daliStatus.load() != DaliOperationStatus::Idle) {
+        httpd_resp_set_status(req, "409 Conflict");
+        httpd_resp_send(req, "Operation in progress", HTTPD_RESP_USE_STRLEN);
+        return ESP_OK;
+    }
+
+    g_daliStatus.store(DaliOperationStatus::Initializing);
+    xTaskCreate(
+        [](void* arg) {
+            auto* c = static_cast<ApiContext*>(arg);
+            c->daliRegistry.commission24BitDevices();
+            c->daliRegistry.refreshGroupAssignmentsFromBus();
+            g_daliStatus.store(DaliOperationStatus::Idle);
+            vTaskDelete(nullptr);
+        },
+        "web_inp_init", 4096, ctx, 4, nullptr);
+
+    httpd_resp_set_status(req, "202 Accepted");
+    httpd_resp_send(req, R"({"status":"ok","message":"Input device commissioning initiated"})", HTTPD_RESP_USE_STRLEN);
+    return ESP_OK;
+}
+
 esp_err_t ApiHandlers::getDaliStatus(httpd_req_t* req) {
-    auto statusStr = "idle";
+    auto s = "idle";
     switch (g_daliStatus.load()) {
     case DaliOperationStatus::Scanning:
-        statusStr = "scanning";
+        s = "scanning";
         break;
     case DaliOperationStatus::Initializing:
-        statusStr = "initializing";
+        s = "initializing";
         break;
     case DaliOperationStatus::RefreshingGroups:
-        statusStr = "refreshing_groups";
+        s = "refreshing_groups";
         break;
     default:
-        statusStr = "idle";
         break;
     }
 
     char buf[64];
-    snprintf(buf, sizeof(buf), R"({"status":"%s"})", statusStr);
+    snprintf(buf, sizeof(buf), R"({"status":"%s"})", s);
     httpd_resp_set_type(req, "application/json");
     httpd_resp_send(req, buf, HTTPD_RESP_USE_STRLEN);
     return ESP_OK;
@@ -353,18 +444,26 @@ esp_err_t ApiHandlers::setDaliGroups(httpd_req_t* req) {
 
     JsonDocument doc;
     if (deserializeJson(doc, buf) == DeserializationError::Ok && doc.is<JsonObject>()) {
+        const auto currentAssignments = ctx->daliRegistry.getGroupAssignments();
         for (JsonPair kv : doc.as<JsonObject>()) {
             auto laOpt = utils::stringToLongAddress(kv.key().c_str());
             if (!laOpt || !kv.value().is<JsonArray>())
                 continue;
 
-            for (uint8_t i = 0; i < 16; ++i) {
-                ctx->daliRegistry.setDeviceGroupMembership(*laOpt, i, false);
+            GroupMask newMask;
+            for (JsonVariant g : kv.value().as<JsonArray>()) {
+                if (g.is<uint8_t>() && g.as<uint8_t>() < 16)
+                    newMask.set(g.as<uint8_t>());
             }
 
-            for (JsonVariant g : kv.value().as<JsonArray>()) {
-                if (g.is<uint8_t>()) {
-                    ctx->daliRegistry.setDeviceGroupMembership(*laOpt, g.as<uint8_t>(), true);
+            GroupMask curMask;
+            auto it = currentAssignments.find(*laOpt);
+            if (it != currentAssignments.end())
+                curMask = it->second;
+
+            for (uint8_t i = 0; i < 16; ++i) {
+                if (newMask.test(i) != curMask.test(i)) {
+                    ctx->daliRegistry.setDeviceGroupMembership(*laOpt, i, newMask.test(i));
                 }
             }
         }
@@ -386,7 +485,7 @@ esp_err_t ApiHandlers::refreshDaliGroups(httpd_req_t* req) {
             g_daliStatus.store(DaliOperationStatus::Idle);
             vTaskDelete(nullptr);
         },
-        "web_grp_task", 4096, ctx, 4, nullptr);
+        "web_grp", 4096, ctx, 4, nullptr);
 
     httpd_resp_send(req, R"({"status":"ok"})", HTTPD_RESP_USE_STRLEN);
     return ESP_OK;
@@ -498,9 +597,9 @@ esp_err_t ApiHandlers::triggerOtaInstall(httpd_req_t* req) {
 
     const esp_err_t err = ctx->ota.startUpdate(strlen(customUrl) > 0 ? customUrl : nullptr, true);
     if (err == ESP_OK) {
-        httpd_resp_send(req, R"({"status":"ok","message":"Installation started"})", HTTPD_RESP_USE_STRLEN);
+        httpd_resp_send(req, R"({"status":"ok","message":"Update initiated"})", HTTPD_RESP_USE_STRLEN);
     } else {
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to start installation");
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Update start failed");
     }
     return ESP_OK;
 }

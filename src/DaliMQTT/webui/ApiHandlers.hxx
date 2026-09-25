@@ -37,12 +37,13 @@ struct HttpChunkStream {
 struct ApiHandlers {
     static esp_err_t getConfig(httpd_req_t* req);
     static esp_err_t setConfig(httpd_req_t* req);
-
     static esp_err_t getInfo(httpd_req_t* req);
 
     static esp_err_t getDaliDevices(httpd_req_t* req);
+    static esp_err_t controlDaliDevice(httpd_req_t* req);
     static esp_err_t scanDaliBus(httpd_req_t* req);
     static esp_err_t initializeDaliBus(httpd_req_t* req);
+    static esp_err_t initializeDaliInputs(httpd_req_t* req);
     static esp_err_t getDaliStatus(httpd_req_t* req);
 
     static esp_err_t getDaliNames(httpd_req_t* req);

@@ -79,8 +79,6 @@ class RmtDaliTransceiver {
 
     static constexpr size_t RMT_SYMBOLS_CAPACITY = 64;
 
-    static constexpr uint32_t EVT_RX_DONE_BUF0 = (1 << 0);
-    static constexpr uint32_t EVT_RX_DONE_BUF1 = (1 << 1);
     static constexpr uint32_t EVT_TX_QUEUED    = (1 << 2);
     volatile uint32_t m_rxSymbolCount[2]{0, 0};
 

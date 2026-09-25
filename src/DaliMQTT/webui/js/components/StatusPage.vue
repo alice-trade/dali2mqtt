@@ -32,11 +32,13 @@ const formatUptime = (totalSeconds: number) => {
 
 const displayOrder = [
   'version', 'chip_model', 'chip_cores', 'free_heap', 'uptime_seconds', 'firmware_verbosity_level',
-  'wifi_status', 'mqtt_status', 'dali_status'
+  'net_status', 'mqtt_status', 'dali_status'
 ];
 
 const formatKey = (key: string) => {
   if (key === 'uptime_seconds') return 'Uptime';
+  if (key === 'free_heap') return 'Free Memory';
+  if (key === 'ota') return 'Firmware Update';
   return key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 };
 
@@ -51,6 +53,24 @@ const formatLogLevel = (level: number) => {
   };
   return levels[level] || `Unknown (${level})`;
 };
+
+const formatValue = (key: string, val: any): string => {
+  if (val === null || val === undefined) return 'N/A';
+  if (key === 'uptime_seconds') return formatUptime(val);
+  if (key === 'firmware_verbosity_level') return formatLogLevel(Number(val));
+  if (key === 'free_heap') return `${(Number(val) / 1024).toFixed(1)} KB`;
+  if (typeof val === 'boolean') return val ? 'Yes' : 'No';
+
+  if (key === 'ota' && typeof val === 'object') {
+    if (val.is_updating) return 'Updating in progress...';
+    if (val.update_available) return `Update available (${val.latest_version})`;
+    return `Up to date (${val.installed_version || 'v' + info.value?.version})`;
+  }
+
+  if (typeof val === 'object') return JSON.stringify(val);
+  return String(val);
+};
+
 const orderedInfo = computed(() => {
   const currentInfo = info.value;
   if (!currentInfo) {
@@ -61,13 +81,15 @@ const orderedInfo = computed(() => {
       .filter(key => key in currentInfo)
       .map(key => ({
         key: formatKey(key),
-        value: key === 'uptime_seconds' ? formatUptime(currentInfo[key]) :
-            key === 'firmware_verbosity_level' ? formatLogLevel(currentInfo[key]) : currentInfo[key]
+        value: formatValue(key, currentInfo[key])
       }));
 
   const remaining = Object.entries(currentInfo)
       .filter(([key]) => !displayOrder.includes(key))
-      .map(([key, value]) => ({ key: formatKey(key), value }));
+      .map(([key, value]) => ({
+        key: formatKey(key),
+        value: formatValue(key, value)
+      }));
 
   return [...ordered, ...remaining];
 });
@@ -118,7 +140,6 @@ onMounted(loadInfo);
   justify-content: space-between;
   align-items: center;
 }
-
 
 .icon-button {
   padding: 0.5rem;

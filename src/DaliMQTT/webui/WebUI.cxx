@@ -28,29 +28,32 @@ esp_err_t WebUI::start() {
 
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.uri_match_fn = httpd_uri_match_wildcard;
-    config.max_uri_handlers = 19;
+    config.max_uri_handlers = 22;
     config.stack_size = 10240;
     config.lru_purge_enable = true;
 
     ESP_RETURN_ON_ERROR(httpd_start(&m_serverHandle, &config), TAG, "HTTP Server start failed");
 
-    const httpd_uri_t apiRoutes[] = {{"/api/config", HTTP_GET, ApiHandlers::getConfig, &m_apiCtx},
-                                     {"/api/config", HTTP_POST, ApiHandlers::setConfig, &m_apiCtx},
-                                     {"/api/info", HTTP_GET, ApiHandlers::getInfo, &m_apiCtx},
-                                     {"/api/dali/devices", HTTP_GET, ApiHandlers::getDaliDevices, &m_apiCtx},
-                                     {"/api/dali/scan", HTTP_POST, ApiHandlers::scanDaliBus, &m_apiCtx},
-                                     {"/api/dali/status", HTTP_GET, ApiHandlers::getDaliStatus, &m_apiCtx},
-                                     {"/api/dali/initialize", HTTP_POST, ApiHandlers::initializeDaliBus, &m_apiCtx},
-                                     {"/api/dali/names", HTTP_GET, ApiHandlers::getDaliNames, &m_apiCtx},
-                                     {"/api/dali/names", HTTP_POST, ApiHandlers::setDaliNames, &m_apiCtx},
-                                     {"/api/dali/groups", HTTP_GET, ApiHandlers::getDaliGroups, &m_apiCtx},
-                                     {"/api/dali/groups", HTTP_POST, ApiHandlers::setDaliGroups, &m_apiCtx},
-                                     {"/api/dali/groups/refresh", HTTP_POST, ApiHandlers::refreshDaliGroups, &m_apiCtx},
-                                     {"/api/dali/scenes", HTTP_GET, ApiHandlers::getDaliScenes, &m_apiCtx},
-                                     {"/api/dali/scenes", HTTP_POST, ApiHandlers::setDaliScenes, &m_apiCtx},
-                                     {"/api/ota/check", HTTP_POST, ApiHandlers::triggerOtaCheck, &m_apiCtx},
-                                     {"/api/ota/install", HTTP_POST, ApiHandlers::triggerOtaInstall, &m_apiCtx},
-                                     {"/*", HTTP_GET, staticFileGetHandler, &m_apiCtx}};
+    const httpd_uri_t apiRoutes[] = {
+        {"/api/config", HTTP_GET, ApiHandlers::getConfig, &m_apiCtx},
+        {"/api/config", HTTP_POST, ApiHandlers::setConfig, &m_apiCtx},
+        {"/api/info", HTTP_GET, ApiHandlers::getInfo, &m_apiCtx},
+        {"/api/dali/devices", HTTP_GET, ApiHandlers::getDaliDevices, &m_apiCtx},
+        {"/api/dali/device/control", HTTP_POST, ApiHandlers::controlDaliDevice, &m_apiCtx},
+        {"/api/dali/scan", HTTP_POST, ApiHandlers::scanDaliBus, &m_apiCtx},
+        {"/api/dali/status", HTTP_GET, ApiHandlers::getDaliStatus, &m_apiCtx},
+        {"/api/dali/initialize", HTTP_POST, ApiHandlers::initializeDaliBus, &m_apiCtx},
+        {"/api/dali/initialize-cd", HTTP_POST, ApiHandlers::initializeDaliInputs, &m_apiCtx},
+        {"/api/dali/names", HTTP_GET, ApiHandlers::getDaliNames, &m_apiCtx},
+        {"/api/dali/names", HTTP_POST, ApiHandlers::setDaliNames, &m_apiCtx},
+        {"/api/dali/groups", HTTP_GET, ApiHandlers::getDaliGroups, &m_apiCtx},
+        {"/api/dali/groups", HTTP_POST, ApiHandlers::setDaliGroups, &m_apiCtx},
+        {"/api/dali/groups/refresh", HTTP_POST, ApiHandlers::refreshDaliGroups, &m_apiCtx},
+        {"/api/dali/scenes", HTTP_GET, ApiHandlers::getDaliScenes, &m_apiCtx},
+        {"/api/dali/scenes", HTTP_POST, ApiHandlers::setDaliScenes, &m_apiCtx},
+        {"/api/ota/check", HTTP_POST, ApiHandlers::triggerOtaCheck, &m_apiCtx},
+        {"/api/ota/install", HTTP_POST, ApiHandlers::triggerOtaInstall, &m_apiCtx},
+        {"/*", HTTP_GET, staticFileGetHandler, &m_apiCtx}};
 
     for (const auto& route : apiRoutes) {
         httpd_register_uri_handler(m_serverHandle, &route);

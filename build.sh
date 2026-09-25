@@ -6,20 +6,33 @@
 
 set -e
 
+CLI_ARGS_COUNT=$#
 TARGET=""
 BUILD_TYPE=""
-COMMAND="app"
+COMMAND=""
+BUILD_DIR=""
+CUSTOM_BUILD_DIR=""
 BUILD_TESTS="ON"
 OFFLINE_DIR=""
+FORCE_INTERACTIVE=0
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
+C_BORDER='\033[38;5;67m'
+C_TITLE='\033[1;38;5;111m'
+C_ACTIVE='\033[1;38;5;51m'
+C_INACTIVE='\033[38;5;250m'
+C_SEL_BG='\033[48;5;237m'
+C_ACCENT='\033[1;38;5;48m'
+C_ERR='\033[38;5;196m'
 NC='\033[0m'
 
-function print_help() {
-    echo -e "${BLUE}DaliMQTT Build Helper${NC}"
+cleanup() {
+    printf "\e[?25h\e[0m"
+}
+trap cleanup EXIT
+trap 'cleanup; exit 130' SIGINT SIGTERM
+
+print_help() {
+    echo -e "${C_TITLE}DaliMQTT Build Helper${NC}"
     echo "Usage: ./build.sh [COMMAND] [OPTIONS]"
     echo ""
     echo "Commands:"
@@ -27,162 +40,234 @@ function print_help() {
     echo "  flash         Build and flash the firmware to the device"
     echo "  monitor       Open the ESP-IDF serial monitor"
     echo "  menuconfig    Open the Kconfig menu"
+    echo "  lint          Lints sources with clang-tidy"
+    echo "  cppcheck      Runs cppcheck static analysis"
     echo "  test-flash    Build and flash the test firmware"
     echo "  unit-test     Run embedded unit tests"
     echo "  integration   Run integration Pytest suite"
     echo "  clean         Remove the build directory for the selected target"
     echo ""
     echo "Options:"
-    echo "  -t, --target <target>    ESP32 target (esp32s3, esp32c6, esp32c3, esp32s2, esp32)."
-    echo "                           If omitted, an interactive menu will appear."
-    echo "  -b, --build-type <type>  CMake build type (Debug/Release)."
-    echo "                           If omitted, an interactive menu will appear."
-    echo "  --offline <dir>          Use offline assets directory for dependencies"
-    echo "  -h, --help               Show this help message"
-    echo ""
-    echo "Examples:"
-    echo "  ./build.sh flash -t esp32c6 -b Debug"
-    echo "  ./build.sh app"
-    echo "  ./build.sh app --offline ./assets"
+    echo "  -t, --target <chip>       esp32s3, esp32c6, esp32c3, esp32s2, esp32"
+    echo "  -b, --build-type <type>   Release, Debug"
+    echo "  -d, --build-dir <dir>     Custom build output directory"
+    echo "  --offline <dir>           Offline dependencies path"
+    echo "  -i, --interactive         Run graphical TUI"
+    echo "  -h, --help                Show help"
 }
-
-if [ $# -eq 0 ]; then
-    print_help
-    exit 0
-fi
 
 while [[ $# -gt 0 ]]; do
     case $1 in
-        app|flash|monitor|menuconfig|clean|test-flash|unit-test|integration)
-            COMMAND="$1"
-            shift
-            ;;
+        app|flash|monitor|menuconfig|clean|test-flash|unit-test|integration|lint|cppcheck)
+            COMMAND="$1"; shift ;;
         -t|--target)
-            TARGET="$2"
-            shift 2
-            ;;
+            TARGET="$2"; shift 2 ;;
         -b|--build-type)
-            BUILD_TYPE="$2"
-            shift 2
-            ;;
+            BUILD_TYPE="$2"; shift 2 ;;
+        -d|--build-dir)
+            CUSTOM_BUILD_DIR="$2"; shift 2 ;;
         --offline)
-            OFFLINE_DIR="$2"
-            shift 2
-            ;;
+            OFFLINE_DIR="$2"; shift 2 ;;
+        -i|--interactive)
+            FORCE_INTERACTIVE=1; shift ;;
         -h|--help)
-            print_help
-            exit 0
-            ;;
+            print_help; exit 0 ;;
         *)
-            echo -e "${RED}Unknown option: $1${NC}"
-            print_help
-            exit 1
-            ;;
+            echo -e "${C_ERR}Unknown argument: $1${NC}"; exit 1 ;;
     esac
 done
 
-if [ -z "$TARGET" ]; then
-    if [ -t 0 ]; then
-        echo -e "${YELLOW}Target platform was not specified.${NC}"
-        echo "Please select a target platform:"
+tui_header() {
+    printf "${C_BORDER}╭────────────────────────────────────────────╮${NC}\n"
+    printf "${C_BORDER}│${NC}  ${C_TITLE}DALI-to-MQTT Bridge${NC}                       ${C_BORDER}│${NC}\n"
+    printf "${C_BORDER}│${NC}  ${C_INACTIVE}Build Helper${NC}                              ${C_BORDER}│${NC}\n"
+    printf "${C_BORDER}╰────────────────────────────────────────────╯${NC}\n"
+}
 
-        platforms=("esp32s3" "esp32c6" "esp32c3" "esp32s2" "esp32" "Quit")
+tui_select() {
+    local title="$1"
+    local with_header="${2:-0}"
+    shift 2
+    local options=("$@")
+    local count=${#options[@]}
+    local selected=0
+    local width=46
+    local lines_to_clear=$((count + 2))
+    [ "$with_header" -eq 1 ] && lines_to_clear=$((lines_to_clear + 4))
 
-        PS3="Enter a number: "
-        select opt in "${platforms[@]}"; do
-            case $opt in
-                "esp32s3"|"esp32c6"|"esp32c3"|"esp32s2"|"esp32")
-                    TARGET="$opt"
-                    echo -e "Selected target: ${GREEN}$TARGET${NC}"
-                    break
-                    ;;
-                "Quit")
-                    echo -e "${YELLOW}Aborted.${NC}"
-                    exit 0
-                    ;;
-                *)
-                    echo -e "${RED}Invalid option. Please try again.${NC}"
-                    ;;
-            esac
+    printf "\e[?25l"
+
+    while true; do
+        [ "$with_header" -eq 1 ] && tui_header
+
+        printf "${C_BORDER}╭─${C_TITLE} %s ${C_BORDER}" "$title"
+        local title_len=${#title}
+        local pad_top=$((width - title_len - 5))
+        for ((i=0; i<pad_top; i++)); do printf "─"; done
+        printf "╮${NC}\n"
+
+        for ((i=0; i<count; i++)); do
+            local opt="${options[$i]}"
+            local opt_len=${#opt}
+            local pad_space=$((width - opt_len - 6))
+
+            if [ $i -eq $selected ]; then
+                printf "${C_BORDER}│${NC}${C_SEL_BG}${C_ACTIVE} ❯ %s" "$opt"
+                for ((j=0; j<pad_space; j++)); do printf " "; done
+                printf "${NC}${C_BORDER} │${NC}\n"
+            else
+                printf "${C_BORDER}│${NC}   ${C_INACTIVE}%s" "$opt"
+                for ((j=0; j<pad_space; j++)); do printf " "; done
+                printf "${NC}${C_BORDER} │${NC}\n"
+            fi
         done
+
+        printf "${C_BORDER}╰"
+        for ((i=0; i<width-2; i++)); do printf "─"; done
+        printf "╯${NC}\n"
+
+        IFS= read -rsn1 key
+        if [[ $key == $'\x1b' ]]; then
+            read -rsn2 -t 0.1 key2
+            key+="$key2"
+        fi
+
+        case "$key" in
+            $'\x1b[A'|$'\x1bOA'|k|K)
+                selected=$(( (selected - 1 + count) % count ))
+                ;;
+            $'\x1b[B'|$'\x1bOB'|j|J)
+                selected=$(( (selected + 1) % count ))
+                ;;
+            "")
+                printf "\e[%dA\e[0J" "$lines_to_clear"
+                TUI_RESULT="$selected"
+                return 0
+                ;;
+            q|Q)
+                cleanup
+                exit 0
+                ;;
+        esac
+
+        printf "\e[%dA" "$lines_to_clear"
+    done
+}
+
+tui_input() {
+    local prompt="$1"
+    local default_val="$2"
+    printf "\e[?25h"
+    printf "${C_BORDER}╭─${C_TITLE} %s ${C_BORDER}─────────────────────────────────╮${NC}\n" "$prompt"
+    printf "${C_BORDER}│${NC}  Default: ${C_INACTIVE}%s${NC}\n" "$default_val"
+    printf "${C_BORDER}│${NC}  ❯ "
+    read -r user_val
+    printf "${C_BORDER}╰─────────────────────────────────────────────╯${NC}\n"
+    printf "\e[4A\e[0J\e[?25l"
+    echo "${user_val:-$default_val}"
+}
+
+IS_INTERACTIVE=0
+if [ -t 0 ] && [ -t 1 ]; then
+    IS_INTERACTIVE=1
+fi
+
+RUN_TUI=0
+if [ $IS_INTERACTIVE -eq 1 ] && { [ $CLI_ARGS_COUNT -eq 0 ] || [ $FORCE_INTERACTIVE -eq 1 ]; }; then
+    RUN_TUI=1
+fi
+
+if [ $RUN_TUI -eq 1 ]; then
+    actions=("Build" "Flash" "Monitor" "Config" "Test" "Lint" "Clean" "Quit")
+    tui_select "Action" 1 "${actions[@]}"
+    case $TUI_RESULT in
+        0) COMMAND="app" ;;
+        1) COMMAND="flash" ;;
+        2) COMMAND="monitor" ;;
+        3) COMMAND="menuconfig" ;;
+        4)
+            test_ops=("Unit Test" "Integration" "Flash Test")
+            tui_select "Test" 0 "${test_ops[@]}"
+            case $TUI_RESULT in
+                0) COMMAND="unit-test" ;;
+                1) COMMAND="integration" ;;
+                2) COMMAND="test-flash" ;;
+            esac
+            ;;
+        5)
+            lint_ops=("Clang-Tidy" "Cppcheck")
+            tui_select "Lint" 0 "${lint_ops[@]}"
+            case $TUI_RESULT in
+                0) COMMAND="lint" ;;
+                1) COMMAND="cppcheck" ;;
+            esac
+            ;;
+        6) COMMAND="clean" ;;
+        7) cleanup; exit 0 ;;
+    esac
+fi
+
+[ -z "$COMMAND" ] && COMMAND="app"
+
+if [ -z "$TARGET" ]; then
+    if [ $IS_INTERACTIVE -eq 1 ]; then
+        targets=("esp32s3" "esp32c6" "esp32c3" "esp32s2" "esp32")
+        tui_select "Target" 0 "${targets[@]}"
+        TARGET="${targets[$TUI_RESULT]}"
     else
-        echo -e "${RED}FATAL ERROR: Target platform is not specified and the shell is not interactive.${NC}"
-        echo "You must specify the target explicitly using: -t <target> (e.g., ./build.sh app -t esp32s3)"
+        echo -e "${C_ERR}Target chip is required (-t)${NC}"
         exit 1
     fi
 fi
 
 if [ -z "$BUILD_TYPE" ]; then
-    if [ -t 0 ]; then
-        echo -e "\n${YELLOW}Build Type was not specified.${NC}"
-        echo "Please select a build type:"
-
-        btypes=("Release" "Debug")
-
-        PS3="Enter a number: "
-        select opt in "${btypes[@]}"; do
-            case $opt in
-                "Release"|"Debug")
-                    BUILD_TYPE="$opt"
-                    echo -e "Selected Build Type: ${GREEN}$BUILD_TYPE${NC}"
-                    break
-                    ;;
-                *)
-                    echo -e "${RED}Invalid option. Please try again.${NC}"
-                    ;;
-            esac
-        done
+    if [ $RUN_TUI -eq 1 ]; then
+        types=("Release" "Debug")
+        tui_select "Build Type" 0 "${types[@]}"
+        BUILD_TYPE="${types[$TUI_RESULT]}"
     else
-        echo -e "${YELLOW}Non-interactive shell. Defaulting to Release build.${NC}"
         BUILD_TYPE="Release"
     fi
 fi
 
-if [ -z "$TARGET" ] || [ -z "$BUILD_TYPE" ]; then
-    echo -e "\n${RED}Aborted: Missing target or build type.${NC}"
-    exit 1
+DEFAULT_BUILD_DIR="build_${TARGET}_${BUILD_TYPE,,}"
+
+if [ -z "$CUSTOM_BUILD_DIR" ] && [ $RUN_TUI -eq 1 ]; then
+    dir_ops=("Default (${DEFAULT_BUILD_DIR})" "Custom")
+    tui_select "Build Directory" 0 "${dir_ops[@]}"
+    if [ $TUI_RESULT -eq 1 ]; then
+        CUSTOM_BUILD_DIR=$(tui_input "Path" "$DEFAULT_BUILD_DIR")
+    fi
 fi
 
-BUILD_DIR="build_${TARGET}_${BUILD_TYPE,,}"
+BUILD_DIR="${CUSTOM_BUILD_DIR:-$DEFAULT_BUILD_DIR}"
+
+cleanup
 
 if [ -z "$IDF_PATH" ]; then
-    echo -e "${YELLOW}IDF_PATH is not set. Looking for export.sh...${NC}"
-    POSSIBLE_PATHS=(
-        "$HOME/esp/esp-idf/export.sh"
-        "$HOME/esp-idf/export.sh"
-        "/opt/esp-idf/export.sh"
-    )
-    FOUND=0
-    for p in "${POSSIBLE_PATHS[@]}"; do
+    for p in "$HOME/esp/esp-idf/export.sh" "$HOME/esp-idf/export.sh" "/opt/esp-idf/export.sh" "$IDF_PATH_USER/export.sh"; do
         if [ -f "$p" ]; then
-            echo -e "${GREEN}Found ESP-IDF at $p${NC}"
             source "$p"
-            FOUND=1
             break
         fi
     done
-    if [ $FOUND -eq 0 ]; then
-        echo -e "${RED}Error: Cannot find ESP-IDF export.sh.${NC}"
-        echo "Please source it manually: . /path/to/esp-idf/export.sh"
-        echo -e "\n${YELLOW}If you haven't installed ESP-IDF yet, download and install it:${NC}"
-        echo -e "${BLUE}https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/${NC}\n"
+    if [ -z "$IDF_PATH" ]; then
+        echo -e "${C_ERR}IDF_PATH not found${NC}"
         exit 1
     fi
-else
-    echo -e "${GREEN}ESP-IDF environment already active (IDF_PATH=$IDF_PATH)${NC}"
 fi
 
 TOOLCHAIN_FILE="$IDF_PATH/tools/cmake/toolchain-${TARGET}.cmake"
 if [ ! -f "$TOOLCHAIN_FILE" ]; then
-    echo -e "${RED}Error: Toolchain file for target '$TARGET' not found!${NC}"
-    echo "Expected: $TOOLCHAIN_FILE"
-    echo "Check if you typed the target name correctly."
+    echo -e "${C_ERR}Missing toolchain for ${TARGET}${NC}"
     exit 1
 fi
 
 if [ "$COMMAND" == "clean" ]; then
-    echo -e "${YELLOW}Cleaning build directory: $BUILD_DIR${NC}"
-    rm -rf "$BUILD_DIR"
+    if [ -d "$BUILD_DIR" ]; then
+        rm -rf "$BUILD_DIR"
+        echo -e "${C_ACCENT}Cleaned: ${BUILD_DIR}${NC}"
+    fi
     exit 0
 fi
 
@@ -195,58 +280,33 @@ CMAKE_ARGS=(
 )
 
 if [ -n "$OFFLINE_DIR" ]; then
-    echo -e "${YELLOW}Fetching offline flags from $OFFLINE_DIR...${NC}"
-    if [ ! -f "offline-fetch" ]; then
-        echo -e "${RED}Error: offline-fetch tool not found.${NC}"
-        exit 1
-    fi
+    [ ! -f "offline-fetch" ] && exit 1
     OFFLINE_FLAGS=$(python3 offline-fetch get-args "$OFFLINE_DIR" | grep "\-DFETCHCONTENT" || true)
     if [ -n "$OFFLINE_FLAGS" ]; then
         read -r -a OFFLINE_ARGS <<< "$OFFLINE_FLAGS"
         CMAKE_ARGS+=("${OFFLINE_ARGS[@]}")
-    else
-        echo -e "${RED}Error: Could not generate offline CMake flags.${NC}"
-        exit 1
     fi
 fi
 
-echo -e "\n${BLUE}=================================================${NC}"
-echo -e " Target     : ${GREEN}$TARGET${NC}"
-echo -e " Build Type : ${GREEN}$BUILD_TYPE${NC}"
-echo -e " Testing    : ${GREEN}$BUILD_TESTS${NC}"
-echo -e " Build Dir  : ${GREEN}$BUILD_DIR${NC}"
-echo -e "${BLUE}=================================================${NC}\n"
+printf "${C_BORDER}╭────────────────────────────────────────────╮${NC}\n"
+printf "${C_BORDER}│${NC}  Target : ${C_ACCENT}%-32s${NC}${C_BORDER}│${NC}\n" "$TARGET"
+printf "${C_BORDER}│${NC}  Config : %-32s${C_BORDER}│${NC}\n" "$BUILD_TYPE"
+printf "${C_BORDER}│${NC}  Action : ${C_ACTIVE}%-32s${NC}${C_BORDER}│${NC}\n" "$COMMAND"
+printf "${C_BORDER}│${NC}  Output : %-32s${C_BORDER}│${NC}\n" "$BUILD_DIR"
+printf "${C_BORDER}╰────────────────────────────────────────────╯${NC}\n"
 
 if [ ! -f "$BUILD_DIR/CMakeCache.txt" ]; then
-    echo -e "${YELLOW}First-time configuration for $TARGET ($BUILD_TYPE)...${NC}"
     cmake "${CMAKE_ARGS[@]}" .
 fi
 
 case $COMMAND in
-    app)
-        cmake --build "$BUILD_DIR"
-        ;;
-    flash)
-        cmake --build "$BUILD_DIR" --target flash
-        ;;
-    monitor)
-        cmake --build "$BUILD_DIR" --target monitor
-        ;;
-    menuconfig)
-        cmake --build "$BUILD_DIR" --target menuconfig
-        ;;
-    test-flash)
-        echo -e "${YELLOW}Building and flashing testing firmware...${NC}"
-        cmake --build "$BUILD_DIR" --target test-flash
-        ;;
-    unit-test)
-        echo -e "${YELLOW}Running unit tests Pytest suite...${NC}"
-        cmake --build "$BUILD_DIR" --target pytest-unit
-        ;;
-    integration)
-        echo -e "${YELLOW}Running integration Pytest suite...${NC}"
-        cmake --build "$BUILD_DIR" --target pytest-integration
-        ;;
+    app)         cmake --build "$BUILD_DIR" ;;
+    flash)       cmake --build "$BUILD_DIR" --target flash ;;
+    monitor)     cmake --build "$BUILD_DIR" --target monitor ;;
+    menuconfig)  cmake --build "$BUILD_DIR" --target menuconfig ;;
+    test-flash)  cmake --build "$BUILD_DIR" --target test-flash ;;
+    unit-test)   cmake --build "$BUILD_DIR" --target pytest-unit ;;
+    integration) cmake --build "$BUILD_DIR" --target pytest-integration ;;
+    lint)        cmake --build "$BUILD_DIR" --target clang-tidy ;;
+    cppcheck)    cmake --build "$BUILD_DIR" --target cppcheck ;;
 esac
-
-echo -e "\n${GREEN}Done${NC}"

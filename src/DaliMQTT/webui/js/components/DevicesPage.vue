@@ -13,8 +13,6 @@ interface DaliDevice {
   type: 'gear' | 'input';
   available: boolean;
   gtin?: string;
-
-  // Gear Specific
   level?: number;
   lamp_failure?: boolean;
   dt?: number | null;
@@ -22,41 +20,65 @@ interface DaliDevice {
   max?: number;
   on_level?: number;
   fail_level?: number;
+  supports_tc?: boolean;
+  supports_rgb?: boolean;
 }
 
 const devices = ref<DaliDevice[]>([]);
 const loading = ref(true);
 const currentTab = ref<'gear' | 'input'>('gear');
+const activeActionAddr = ref<string | null>(null);
 
-const getDeviceState = (d: DaliDevice) => {
-  if (!d.available) return 'Offline';
-  if (d.type === 'input') return 'Ready';
-  return (d.level !== undefined && d.level > 0) ? `ON (${Math.round((d.level / 254) * 100)}%)` : 'OFF';
-};
+const gears = computed(() => devices.value.filter(d => d.type === 'gear'));
+const inputs = computed(() => devices.value.filter(d => d.type === 'input'));
 
 const getDeviceTypeStr = (d: DaliDevice) => {
-  if (d.type === 'input') return 'Input Device';
-  const dt = d.dt;
-  if (dt === null || dt === undefined) return 'Standard';
-  if (dt === 6) return 'LED (Type 6)';
-  if (dt === 8) return 'RGB/W (Type 8)';
-  return `Type ${dt}`;
+  if (d.type === 'input') return 'Sensor / Input';
+  if (d.dt === 6) return 'LED (DT6)';
+  if (d.dt === 8) {
+    const modes: string[] = [];
+    if (d.supports_tc) modes.push('CCT');
+    if (d.supports_rgb) modes.push('RGB');
+    return `Color DT8 ${modes.length ? '(' + modes.join('/') + ')' : ''}`;
+  }
+  return d.dt !== null && d.dt !== undefined ? `Type ${d.dt}` : 'Standard';
 };
 
 const loadData = async () => {
   loading.value = true;
   try {
-    const devicesRes = await api.getDaliDevices();
-    devices.value = (devicesRes.data as DaliDevice[]).sort((a, b) => a.short_address - b.short_address);
+    const res = await api.getDaliDevices();
+    devices.value = (res.data as DaliDevice[]).sort((a, b) => a.short_address - b.short_address);
   } catch (e) {
-    console.error(e);
+    console.error('Failed to load devices', e);
   } finally {
     loading.value = false;
   }
 };
 
-const gears = computed(() => devices.value.filter(d => d.type === 'gear'));
-const inputs = computed(() => devices.value.filter(d => d.type === 'input'));
+const handlePowerToggle = async (d: DaliDevice, on: boolean) => {
+  activeActionAddr.value = d.long_address;
+  try {
+    await api.controlDevice(d.long_address, undefined, on ? 'ON' : 'OFF');
+    d.level = on ? (d.max || 254) : 0;
+  } catch (e) {
+    console.error('Control failed', e);
+  } finally {
+    activeActionAddr.value = null;
+  }
+};
+
+const handleLevelChange = async (d: DaliDevice, newLevel: number) => {
+  d.level = newLevel;
+  activeActionAddr.value = d.long_address;
+  try {
+    await api.controlDevice(d.long_address, newLevel);
+  } catch (e) {
+    console.error('Level control failed', e);
+  } finally {
+    activeActionAddr.value = null;
+  }
+};
 
 onMounted(loadData);
 </script>
@@ -65,104 +87,102 @@ onMounted(loadData);
   <article :aria-busy="loading">
     <div class="header-with-button">
       <h3>DALI Devices</h3>
-      <button @click="loadData" :disabled="loading" class="outline secondary icon-button" title="Refresh">
+      <button @click="loadData" :disabled="loading" class="outline secondary icon-btn" title="Refresh">
         ⟳
       </button>
     </div>
 
-    <!-- Tabs -->
     <div class="tabs">
-      <button
-          class="tab-button"
-          :class="{ active: currentTab === 'gear' }"
-          @click="currentTab = 'gear'">
+      <button class="tab-button" :class="{ active: currentTab === 'gear' }" @click="currentTab = 'gear'">
         Luminaires ({{ gears.length }})
       </button>
-      <button
-          class="tab-button"
-          :class="{ active: currentTab === 'input' }"
-          @click="currentTab = 'input'">
+      <button class="tab-button" :class="{ active: currentTab === 'input' }" @click="currentTab = 'input'">
         Input Devices ({{ inputs.length }})
       </button>
     </div>
 
-    <!-- Gear Table -->
     <div v-if="currentTab === 'gear'" class="table-container">
       <table class="striped" v-if="gears.length > 0">
         <thead>
         <tr>
-          <th>Addr</th>
-          <th>Type</th>
-          <th>State</th>
-          <th>Level</th>
-          <th>Details</th>
+          <th style="width: 15%;">Address</th>
+          <th style="width: 25%;">Type / GTIN</th>
+          <th style="width: 15%;">Status</th>
+          <th style="width: 30%;">Live Control</th>
+          <th style="width: 15%;">Parameters</th>
         </tr>
         </thead>
         <tbody>
         <tr v-for="d in gears" :key="d.long_address">
           <td>
-            <strong>{{ d.short_address }}</strong>
-            <br/>
-            <small>{{ d.long_address }}</small>
-            <br v-if="d.gtin"/>
+            <strong>A{{ d.short_address }}</strong><br />
+            <small class="addr-sub">{{ d.long_address }}</small>
+          </td>
+          <td>
+            <span>{{ getDeviceTypeStr(d) }}</span><br />
             <small v-if="d.gtin" class="gtin-text">GTIN: {{ d.gtin }}</small>
           </td>
-          <td>{{ getDeviceTypeStr(d) }}</td>
           <td>
               <span :class="{
                 'badge-on': d.available && (d.level || 0) > 0 && !d.lamp_failure,
                 'badge-off': d.available && (d.level || 0) === 0 && !d.lamp_failure,
-                'badge-fail': d.lamp_failure || !d.available
+                'badge-fail': !d.available || d.lamp_failure
               }">
-                {{ d.lamp_failure ? 'FAILURE' : getDeviceState(d) }}
+                {{ !d.available ? 'Offline' : d.lamp_failure ? 'FAULT' : (d.level || 0) > 0 ? 'ON' : 'OFF' }}
               </span>
           </td>
-          <td>{{ d.level }}</td>
+          <td>
+            <div class="control-box">
+              <button class="outline" :class="{ secondary: (d.level || 0) === 0 }"
+                      :disabled="!d.available || activeActionAddr === d.long_address"
+                      @click="handlePowerToggle(d, (d.level || 0) === 0)">
+                {{ (d.level || 0) > 0 ? 'OFF' : 'ON' }}
+              </button>
+              <input type="range" min="0" max="254" step="1"
+                     :value="d.level || 0"
+                     :disabled="!d.available || activeActionAddr === d.long_address"
+                     @change="handleLevelChange(d, Number(($event.target as HTMLInputElement).value))" />
+              <span class="level-indicator">{{ d.level || 0 }}</span>
+            </div>
+          </td>
           <td>
             <small v-if="d.min !== undefined">
-              Range: {{ d.min }}-{{ d.max }}<br/>
-              PowerOn: {{ d.on_level }}<br/>
+              Min: {{ d.min }} / Max: {{ d.max }}<br />
               Fail: {{ d.fail_level }}
             </small>
-            <small v-else class="muted">Loading info...</small>
+            <small v-else class="muted">Syncing...</small>
           </td>
         </tr>
         </tbody>
       </table>
-      <div v-else class="empty-msg">No luminaires found.</div>
+      <div v-else class="empty-msg">No luminaires detected on the bus.</div>
     </div>
 
-    <!-- Input Devices Table -->
     <div v-if="currentTab === 'input'" class="table-container">
       <table class="striped" v-if="inputs.length > 0">
         <thead>
         <tr>
-          <th>Addr</th>
-          <th>Identity</th>
+          <th>Address</th>
+          <th>Identifier / GTIN</th>
           <th>Status</th>
         </tr>
         </thead>
         <tbody>
         <tr v-for="d in inputs" :key="d.long_address">
-          <td><strong>{{ d.short_address }}</strong></td>
+          <td><strong>Input A{{ d.short_address }}</strong></td>
           <td>
-            <small>{{ d.long_address }}</small>
-            <br v-if="d.gtin"/>
+            <small class="addr-sub">{{ d.long_address }}</small><br />
             <small v-if="d.gtin" class="gtin-text">GTIN: {{ d.gtin }}</small>
           </td>
           <td>
-             <span :class="{ 'badge-input-ready': d.available, 'badge-fail': !d.available }">
-               {{ d.available ? 'Online' : 'Offline' }}
-             </span>
+              <span :class="{ 'badge-input-ready': d.available, 'badge-fail': !d.available }">
+                {{ d.available ? 'Online (Ready)' : 'Offline' }}
+              </span>
           </td>
         </tr>
         </tbody>
       </table>
-      <div v-else class="empty-msg">No input devices found.</div>
-    </div>
-
-    <div class="footer-note">
-      <small>Go to DALI Control to scan bus or re-address devices.</small>
+      <div v-else class="empty-msg">No control devices detected on the bus.</div>
     </div>
   </article>
 </template>
@@ -174,11 +194,11 @@ onMounted(loadData);
   align-items: center;
   margin-bottom: 1rem;
 }
-.icon-button {
-  padding: 0.25rem 0.75rem;
-  font-size: 1.2rem;
-  line-height: 1;
+.icon-btn {
+  padding: 0.25rem 0.6rem;
+  font-size: 1.1rem;
   width: auto;
+  margin: 0;
 }
 .tabs {
   display: flex;
@@ -203,19 +223,40 @@ onMounted(loadData);
 .table-container {
   overflow-x: auto;
 }
-small {
+.addr-sub {
   font-family: monospace;
   color: var(--pico-muted-color);
 }
 .gtin-text {
+  font-family: monospace;
   font-size: 0.75em;
   color: var(--pico-primary);
 }
-.badge-on { color: var(--pico-primary); font-weight: bold; }
+.control-box {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+.control-box button {
+  width: auto;
+  padding: 0.25rem 0.6rem;
+  margin: 0;
+  font-size: 0.8rem;
+}
+.control-box input[type="range"] {
+  margin: 0;
+  flex: 1;
+}
+.level-indicator {
+  font-family: monospace;
+  font-size: 0.85em;
+  min-width: 2.2rem;
+  text-align: right;
+}
+.badge-on { color: var(--pico-color-green-500); font-weight: bold; }
 .badge-off { color: var(--pico-muted-color); }
 .badge-fail { color: var(--pico-color-red-500); font-weight: bold; }
 .badge-input-ready { color: var(--pico-color-azure-500); font-weight: bold; }
 .empty-msg { text-align: center; padding: 2rem; color: var(--pico-muted-color); }
-.footer-note { margin-top: 1rem; text-align: right; }
 .muted { font-style: italic; }
 </style>
