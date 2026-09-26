@@ -1,9 +1,4 @@
 #!/usr/bin/env bash
-#
-# // Copyright (c) 2026 Alice-Trade Inc.
-# // SPDX-License-Identifier: GPL-3.0-or-later
-#
-
 set -e
 
 CLI_ARGS_COUNT=$#
@@ -244,8 +239,18 @@ BUILD_DIR="${CUSTOM_BUILD_DIR:-$DEFAULT_BUILD_DIR}"
 
 cleanup
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 if [ -z "$IDF_PATH" ]; then
-    for p in "$HOME/esp/esp-idf/export.sh" "$HOME/esp-idf/export.sh" "/opt/esp-idf/export.sh" "$IDF_PATH_USER/export.sh"; do
+    possible_paths=(
+        "$SCRIPT_DIR/esp-idf/export.sh"
+        "$SCRIPT_DIR/.esp-idf/export.sh"
+        "$HOME/esp/esp-idf/export.sh"
+        "$HOME/esp-idf/export.sh"
+        "/opt/esp-idf/export.sh"
+    )
+
+    for p in "${possible_paths[@]}"; do
         if [ -f "$p" ]; then
             source "$p"
             break
@@ -281,7 +286,7 @@ CMAKE_ARGS=(
 
 if [ -n "$OFFLINE_DIR" ]; then
     [ ! -f "offline-fetch" ] && exit 1
-    OFFLINE_FLAGS=$(python3 offline-fetch get-args "$OFFLINE_DIR" | grep "\-DFETCHCONTENT" || true)
+    OFFLINE_FLAGS=$(python3 offline-fetch.py get-args "$OFFLINE_DIR" | grep "\-DFETCHCONTENT" || true)
     if [ -n "$OFFLINE_FLAGS" ]; then
         read -r -a OFFLINE_ARGS <<< "$OFFLINE_FLAGS"
         CMAKE_ARGS+=("${OFFLINE_ARGS[@]}")

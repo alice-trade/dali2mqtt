@@ -207,7 +207,7 @@ The bridge reports its status in the topic:
 `{base_topic}/status`
 
 *   Payload `online`: Bridge is connected to MQTT.
-*   Payload `offline-fetch`: LWT (Last Will and Testament) message, sent by the broker if the bridge disconnects.
+*   Payload `offline`: LWT (Last Will and Testament) message, sent by the broker if the bridge disconnects.
 
 ## Development and Testing
 

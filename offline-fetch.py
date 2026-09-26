@@ -1,7 +1,4 @@
 #!/usr/bin/env python3
-#  // Copyright (c) 2026 Alice-Trade Inc.
-#  // SPDX-License-Identifier: GPL-3.0-or-later
-#
 
 import os
 import re

@@ -1,8 +1,3 @@
-<#
-// Copyright (c) 2026 Alice-Trade Inc.
-// SPDX-License-Identifier: GPL-3.0-or-later
-#>
-
 [CmdletBinding()]
 param (
     [Parameter(Position = 0)]
@@ -242,6 +237,9 @@ $BuildTests = "ON"
 
 if ([string]::IsNullOrEmpty($env:IDF_PATH)) {
     $possiblePaths = @(
+        "$PSScriptRoot\esp-idf\export.ps1",
+        "$PSScriptRoot\.esp-idf\export.ps1",
+        "$pwd\esp-idf\export.ps1"
         "$HOME\esp\esp-idf\export.ps1",
         "$HOME\esp-idf\export.ps1",
         "C:\Espressif\frameworks\esp-idf\export.ps1",
