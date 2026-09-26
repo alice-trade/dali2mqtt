@@ -9,7 +9,7 @@ The **dali2mqtt** firmware runs on an ESP32-S3/C6/etc. as a bridge between a DAL
 ```mermaid
 graph LR
     HA[Home Assistant] <--> MQTT((MQTT Broker))
-    JS[NodeJS / Dali2MQX] <--> MQTT
+    JS[Other Service] <--> MQTT
     MQTT <--> ESP[ESP32 DaliMQTT]
     ESP <--> DALI[DALI Bus]
     DALI <--> L1((Light 1))
@@ -244,10 +244,8 @@ cmake --build build --target cppcheck
 ├── src/DaliMQTT          # Firmware source code
 │   ├── system/           # System control flow
 │   ├── dali/             # High-level DALI API
-│   │   └── driver/       # Low-level DALI driver (gptimer, GPIO)
 │   ├── mqtt/             # MQTT client and Auto-Discovery logic
 │   ├── webui/            # Web UI source code (Vue.js + C++)
 │   ├── wifi/             # Wi-Fi connection manager
-│   └── main.cxx          # Application entry point
-└── tests/                # Source code for tests (incomplete)
+└── tests/                # Source code for unit tests
 ```

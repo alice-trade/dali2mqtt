@@ -28,7 +28,7 @@ esp_err_t WebUI::start() {
 
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.uri_match_fn = httpd_uri_match_wildcard;
-    config.max_uri_handlers = 22;
+    config.max_uri_handlers = 23;
     config.stack_size = 10240;
     config.lru_purge_enable = true;
 
@@ -53,6 +53,7 @@ esp_err_t WebUI::start() {
         {"/api/dali/scenes", HTTP_POST, ApiHandlers::setDaliScenes, &m_apiCtx},
         {"/api/ota/check", HTTP_POST, ApiHandlers::triggerOtaCheck, &m_apiCtx},
         {"/api/ota/install", HTTP_POST, ApiHandlers::triggerOtaInstall, &m_apiCtx},
+        {"/api/ota/upload", HTTP_POST, ApiHandlers::uploadOtaBin, &m_apiCtx},
         {"/*", HTTP_GET, staticFileGetHandler, &m_apiCtx}};
 
     for (const auto& route : apiRoutes) {

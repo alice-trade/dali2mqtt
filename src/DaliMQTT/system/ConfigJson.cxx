@@ -5,6 +5,33 @@
 #include <cstring>
 
 namespace daliMQTT {
+namespace {
+
+template <size_t N>
+bool assignStringSafe(etl::string<N>& dest, const char* src, const char* fieldKey, daliMQTT::ConfigApplyResult& res,
+                      const bool triggersReboot = true) {
+    if (!src)
+        return true;
+
+    const size_t len = strlen(src);
+    if (len > dest.max_size()) {
+        res.success = false;
+        res.errorMessage = fieldKey;
+        ESP_LOGE("ConfigJson", "Payload field '%s' length (%zu) exceeds capacity (%zu)", fieldKey, len,
+                 dest.max_size());
+        return false;
+    }
+
+    if (dest != src) {
+        dest = src;
+        if (triggersReboot) {
+            res.requiresReboot = true;
+        }
+    }
+    return true;
+}
+
+} // anonymous namespace
 
 void ConfigJson::serialize(const ConfigStructure& cfg, JsonDocument& doc, const bool maskSecrets) {
     doc["wifi_ssid"] = cfg.wifiSsid.c_str();
@@ -40,7 +67,6 @@ void ConfigJson::serialize(const ConfigStructure& cfg, JsonDocument& doc, const 
     }
 }
 
-
 ConfigApplyResult ConfigJson::apply(const JsonDocument& doc, ConfigStructure& target) {
     ConfigApplyResult res{};
 
@@ -48,73 +74,62 @@ ConfigApplyResult ConfigJson::apply(const JsonDocument& doc, ConfigStructure& ta
         return doc[key].is<const char*>() ? doc[key].as<const char*>() : nullptr;
     };
 
-    if (const char* ssid = getString("wifi_ssid")) {
-        if (target.wifiSsid != ssid) {
-            target.wifiSsid = ssid;
-            res.requiresReboot = true;
-        }
-    }
+    if (!assignStringSafe(target.wifiSsid, getString("wifi_ssid"), "wifi_ssid", res))
+        return res;
+
     if (const char* pass = getString("wifi_password")) {
         if (strcmp(pass, "***") != 0) {
-            target.wifiPass = pass;
-            res.requiresReboot = true;
+            if (!assignStringSafe(target.wifiPass, pass, "wifi_password", res))
+                return res;
         }
     }
 
-    if (const char* uri = getString("mqtt_uri")) {
-        if (target.mqttUri != uri) {
-            target.mqttUri = uri;
-            res.requiresReboot = true;
+    if (!assignStringSafe(target.mqttUri, getString("mqtt_uri"), "mqtt_uri", res))
+        return res;
+    if (!assignStringSafe(target.mqttUser, getString("mqtt_user"), "mqtt_user", res))
+        return res;
+    if (const char* mPass = getString("mqtt_pass")) {
+        if (strcmp(mPass, "***") != 0) {
+            if (!assignStringSafe(target.mqttPass, mPass, "mqtt_pass", res))
+                return res;
         }
     }
-    if (const char* user = getString("mqtt_user")) {
-        if (target.mqttUser != user) {
-            target.mqttUser = user;
-            res.requiresReboot = true;
-        }
-    }
-    if (const char* pass = getString("mqtt_pass")) {
-        if (strcmp(pass, "***") != 0) {
-            target.mqttPass = pass;
-            res.requiresReboot = true;
-        }
-    }
-    if (const char* base = getString("mqtt_base_topic")) {
-        if (target.mqttBaseTopic != base) {
-            target.mqttBaseTopic = base;
-            res.requiresReboot = true;
-        }
-    }
-    if (const char* cid = getString("client_id")) {
-        if (target.clientId != cid) {
-            target.clientId = cid;
-            res.requiresReboot = true;
-        }
-    }
+    if (!assignStringSafe(target.mqttBaseTopic, getString("mqtt_base_topic"), "mqtt_base_topic", res))
+        return res;
+    if (!assignStringSafe(target.clientId, getString("client_id"), "client_id", res))
+        return res;
+
     if (const char* cert = getString("mqtt_ca_cert")) {
         if (strcmp(cert, "***") != 0) {
-            if (strlen(cert) <= target.mqttCaCert.max_size()) {
-                target.mqttCaCert = cert;
-                res.requiresReboot = true;
-            } else {
-                res.success = false;
-                res.errorMessage = "Certificate exceeds maximum size";
+            if (!assignStringSafe(target.mqttCaCert, cert, "mqtt_ca_cert", res))
                 return res;
-            }
         }
     }
 
     if (const char* domain = getString("http_domain")) {
-        target.httpDomain = domain;
-    }
-    if (const char* hUser = getString("http_user")) {
-        target.httpUser = hUser;
-    }
-    if (const char* hPass = getString("http_pass")) {
-        if (strcmp(hPass, "***") != 0) {
-            target.httpPass = hPass;
+        const size_t len = strlen(domain);
+        if (len <= target.httpDomain.max_size()) {
+            target.httpDomain = domain;
+        } else {
+            res.success = false;
+            res.errorMessage = "http_domain too long";
+            return res;
         }
     }
+    if (!assignStringSafe(target.httpUser, getString("http_user"), "http_user", res, false)) return res;
+
+    if (const char* hPass = getString("http_pass")) {
+        if (strcmp(hPass, "***") != 0) {
+            if (!assignStringSafe(target.httpPass, hPass, "http_pass", res, false)) return res;
+        }
+    }
+
+    if (!assignStringSafe(target.otaBaseUrl, getString("ota_url"), "ota_url", res, false)) return res;
+
+    if (!assignStringSafe(target.syslogServer, getString("syslog_server"), "syslog_server", res, false)) return res;
+
+    if (!assignStringSafe(target.hassDiscoveryPrefix, getString("hass_discovery_prefix"), "hass_discovery_prefix", res, false)) return res;
+
 
     if (doc["dali_poll_interval_ms"].is<uint32_t>()) {
         target.daliPollIntervalMs = doc["dali_poll_interval_ms"].as<uint32_t>();
@@ -148,7 +163,8 @@ ConfigApplyResult ConfigJson::apply(const JsonDocument& doc, ConfigStructure& ta
     if (doc["buses"].is<JsonArrayConst>()) {
         size_t idx = 0;
         for (JsonObjectConst bObj : doc["buses"].as<JsonArrayConst>()) {
-            if (idx >= target.buses.size()) break;
+            if (idx >= target.buses.size())
+                break;
             if (bObj["rx_pin"].is<int8_t>() && target.buses[idx].rxPin != bObj["rx_pin"].as<int8_t>()) {
                 target.buses[idx].rxPin = bObj["rx_pin"].as<int8_t>();
                 res.requiresReboot = true;

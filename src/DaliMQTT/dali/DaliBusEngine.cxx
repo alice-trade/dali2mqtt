@@ -72,7 +72,7 @@ void DaliBusEngine::busWorkerTaskRunner(void* arg) {
     uint8_t retryCount = 0;
 
     auto finish = [&](const esp_err_t result, const uint8_t response) {
-        const TransactionResponse resp{.err = result, .response = response};
+        const TransactionResponse resp{.err = result, .response = response, .token = activeTx.token};
         if (m_respQueue) {
             xQueueOverwrite(m_respQueue, &resp);
         }
@@ -208,31 +208,50 @@ esp_err_t DaliBusEngine::executeTransaction(const TransactionRequest& request, u
     if (!isInitialized())
         return ESP_ERR_INVALID_STATE;
 
-    if (xSemaphoreTakeRecursive(m_busMutex, pdMS_TO_TICKS(500)) != pdTRUE) {
+    if (xSemaphoreTakeRecursive(m_busMutex, pdMS_TO_TICKS(1000)) != pdTRUE) {
         return ESP_ERR_TIMEOUT;
     }
-    xQueueReset(m_respQueue);
+    uint16_t currentToken = m_nextToken.fetch_add(1, std::memory_order_relaxed);
+    if (currentToken == 0) {
+        currentToken = m_nextToken.fetch_add(1, std::memory_order_relaxed);
+    }
 
-    if (xQueueSend(m_txQueue, &request, pdMS_TO_TICKS(100)) != pdTRUE) {
+    TransactionRequest req = request;
+    req.token = currentToken;
+
+    if (xQueueSend(m_txQueue, &req, pdMS_TO_TICKS(100)) != pdTRUE) {
         xSemaphoreGiveRecursive(m_busMutex);
         return ESP_ERR_NO_MEM;
     }
+
     constexpr DaliRawFrame kick{.type = DaliFrameType::Wakeup};
     xQueueSend(m_phyEventQueue, &kick, 0);
 
+    constexpr TickType_t WAIT_TIMEOUT = pdMS_TO_TICKS(350);
+    const TickType_t startTick = xTaskGetTickCount();
+
     TransactionResponse resp{};
-    const BaseType_t res =
-        xQueueReceive(m_respQueue, &resp, pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_TRANSACTION_TIMEOUT_MS));
+    esp_err_t finalErr = ESP_ERR_TIMEOUT;
+
+    while ((xTaskGetTickCount() - startTick) < WAIT_TIMEOUT) {
+        TickType_t remaining = WAIT_TIMEOUT - (xTaskGetTickCount() - startTick);
+        if (xQueueReceive(m_respQueue, &resp, remaining) == pdTRUE) {
+            if (resp.token == currentToken) {
+                finalErr = resp.err;
+                if (resp.err == ESP_OK && outResponse) {
+                    *outResponse = resp.response;
+                }
+                break;
+            } else {
+                ESP_LOGW(TAG, "Discarded stale DALI frame (token mismatch: got %u, expected %u)", resp.token,
+                         currentToken);
+            }
+        } else {
+            break;
+        }
+    }
     xSemaphoreGiveRecursive(m_busMutex);
-
-    if (res != pdTRUE) {
-        return ESP_ERR_TIMEOUT;
-    }
-
-    if (resp.err == ESP_OK && outResponse) {
-        *outResponse = resp.response;
-    }
-    return resp.err;
+    return finalErr;
 }
 
 std::optional<uint8_t> DaliBusEngine::queryRaw(const uint32_t rawData, const uint8_t bits) const {

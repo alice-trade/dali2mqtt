@@ -93,4 +93,18 @@ export const api = {
     async triggerSystemOta(url?: string) {
         return await apiClient.post('/api/ota/install', {url});
     },
+    async uploadFirmwareFile(file: File, onProgress?: (percent: number) => void) {
+        return await apiClient.post('/api/ota/upload', file, {
+            headers: {
+                'Content-Type': 'application/octet-stream',
+            },
+            timeout: 120000,
+            onUploadProgress: (progressEvent) => {
+                if (progressEvent.total) {
+                    const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+                    if (onProgress) onProgress(percent);
+                }
+            },
+        });
+    },
 };

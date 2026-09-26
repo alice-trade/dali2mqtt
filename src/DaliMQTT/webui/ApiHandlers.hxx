@@ -58,6 +58,8 @@ struct ApiHandlers {
 
     static esp_err_t triggerOtaCheck(httpd_req_t* req);
     static esp_err_t triggerOtaInstall(httpd_req_t* req);
+    static esp_err_t uploadOtaBin(httpd_req_t* req);
+
 };
 
 } // namespace daliMQTT

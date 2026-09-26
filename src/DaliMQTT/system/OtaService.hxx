@@ -20,6 +20,7 @@ struct OtaVersionInfo {
 };
 
 enum class OtaStatus : uint8_t { Idle, CheckingVersion, InProgress, Verifying, Success, Failed };
+using OtaStreamReaderFn = int (*)(void* userCtx, char* buffer, size_t maxLen);
 
 struct OtaProgressEvent {
     OtaStatus status{OtaStatus::Idle};
@@ -39,6 +40,7 @@ class OtaService {
     OtaService& operator=(const OtaService&) = delete;
 
     esp_err_t startUpdate(const char* url, bool updateWebFs = true);
+    esp_err_t processStreamUpdate(OtaStreamReaderFn readFn, void* userCtx, size_t totalLen);
 
     [[nodiscard]] inline bool isUpdating() const noexcept;
     [[nodiscard]] inline OtaStatus getStatus() const noexcept;

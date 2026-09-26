@@ -43,7 +43,7 @@ esp_err_t MqttBridge::start() {
     m_mqtt.setDataCallback(&onMqttDataReceivedBridge, this);
 
     if (!m_taskHandle) {
-        const BaseType_t res = xTaskCreate(bridgeTaskRunner, "mqtt_bridge_task", 4096, this, 6, &m_taskHandle);
+        const BaseType_t res = xTaskCreate(bridgeTaskRunner, "mqtt_bridge_task", 6144, this, 6, &m_taskHandle);
         if (res != pdPASS) {
             ESP_LOGE(TAG, "Failed to start bridge worker task");
             return ESP_ERR_NO_MEM;
@@ -328,12 +328,10 @@ void MqttBridge::bridgeTaskRunner(void* arg) {
 }
 
 [[noreturn]] void MqttBridge::bridgeWorkerLoop() const {
-    MqttIncomingMessage msg{};
-
     while (true) {
-        if (xQueueReceive(m_cmdQueue, &msg, portMAX_DELAY) == pdTRUE) {
-            const std::string_view topic(msg.topic.c_str(), msg.topic.length());
-            const std::string_view payload(msg.payload.c_str(), msg.payload.length());
+        if (xQueueReceive(m_cmdQueue, &m_currentMsg, portMAX_DELAY) == pdTRUE) {
+            const std::string_view topic(m_currentMsg.topic.c_str(), m_currentMsg.topic.length());
+            const std::string_view payload(m_currentMsg.payload.c_str(), m_currentMsg.payload.length());
 
             routeIncomingCommand(topic, payload);
         }
@@ -385,7 +383,7 @@ void MqttBridge::routeIncomingCommand(std::string_view topic, std::string_view p
         handleGroupConfigGetCommand();
     } else if (subTopic == "/config/group/refresh") {
         handleGroupRefreshCommand();
-    }  else if (subTopic == "/config/scene/get") {
+    } else if (subTopic == "/config/scene/get") {
         handleSceneConfigGetCommand(payload);
     } else if (subTopic == "/config/scene/set") {
         handleSceneConfigSetCommand(payload);
@@ -541,7 +539,7 @@ void MqttBridge::handleGroupConfigGetCommand() const {
 
 void MqttBridge::handleGroupRefreshCommand() const {
     ESP_LOGI(TAG, "MQTT requested group refresh from DALI bus...");
-        xTaskCreate(
+    xTaskCreate(
         [](void* arg) {
             auto* self = static_cast<const MqttBridge*>(arg);
             self->m_daliRegistry.refreshGroupAssignmentsFromBus();
@@ -702,9 +700,9 @@ void MqttBridge::handleConfigGetCommand() const {
 
     char resTopic[128];
     snprintf(resTopic, sizeof(resTopic), "%s/config/get/response", m_baseTopic.c_str());
-    char resBuf[1024];
-    serializeJson(doc, resBuf, sizeof(resBuf));
-    m_mqtt.publish(resTopic, resBuf, 0, false);
+
+    serializeJson(doc, m_bridgeScratchpad.data(), m_bridgeScratchpad.size());
+    m_mqtt.publish(resTopic, m_bridgeScratchpad.data(), 0, false);
 }
 
 void MqttBridge::handleConfigSetCommand(std::string_view payload) const {
@@ -729,13 +727,12 @@ void MqttBridge::handleConfigSetCommand(std::string_view payload) const {
     const esp_err_t err = m_config.save(newCfg);
 
     char resPayload[128];
-    snprintf(resPayload, sizeof(resPayload),
-             R"({"status":"%s","reboot":%s})",
-             (err == ESP_OK) ? "ok" : "error",
+    snprintf(resPayload, sizeof(resPayload), R"({"status":"%s","reboot":%s})", (err == ESP_OK) ? "ok" : "error",
              result.requiresReboot ? "true" : "false");
     m_mqtt.publish(resTopic, resPayload, 0, false);
 
-    if (err != ESP_OK) return;
+    if (err != ESP_OK)
+        return;
 
     if (result.hassDiscoveryToggled && !result.requiresReboot) {
         publishHomeAssistantDiscovery();
@@ -809,8 +806,7 @@ void MqttBridge::handleSceneConfigSetCommand(std::string_view payload) const {
                 }
             }
         }
-    }
-    else if (doc["address"].is<const char*>() && doc["level"].is<int>()) {
+    } else if (doc["address"].is<const char*>() && doc["level"].is<int>()) {
         auto laOpt = utils::stringToLongAddress(doc["address"].as<const char*>());
         if (laOpt) {
             auto intAddr = m_daliRegistry.getInternalAddress(*laOpt);
@@ -825,21 +821,23 @@ void MqttBridge::handleSceneConfigSetCommand(std::string_view payload) const {
     char resTopic[128];
     snprintf(resTopic, sizeof(resTopic), "%s/config/scene/set/response", m_baseTopic.c_str());
     char resPayload[64];
-    snprintf(resPayload, sizeof(resPayload), R"({"status":"%s","scene":%d})", (err == ESP_OK) ? "ok" : "error", sceneId);
+    snprintf(resPayload, sizeof(resPayload), R"({"status":"%s","scene":%d})", (err == ESP_OK) ? "ok" : "error",
+             sceneId);
     m_mqtt.publish(resTopic, resPayload, 0, false);
 }
 
 void MqttBridge::handleNamesGetCommand() const {
     const NvsHandle nvs("dali_names", NVS_READONLY);
-    char buf[1024] = "{}";
+    strncpy(m_bridgeScratchpad.data(), "{}", m_bridgeScratchpad.size());
+
     if (nvs) {
-        size_t len = sizeof(buf);
-        nvs_get_str(nvs.get(), "names_json", buf, &len);
+        size_t len = m_bridgeScratchpad.size();
+        nvs_get_str(nvs.get(), "names_json", m_bridgeScratchpad.data(), &len);
     }
 
     char resTopic[128];
     snprintf(resTopic, sizeof(resTopic), "%s/config/names/get/response", m_baseTopic.c_str());
-    m_mqtt.publish(resTopic, buf, 0, false);
+    m_mqtt.publish(resTopic, m_bridgeScratchpad.data(), 0, false);
 }
 
 void MqttBridge::handleNamesSetCommand(std::string_view payload) const {
@@ -847,27 +845,27 @@ void MqttBridge::handleNamesSetCommand(std::string_view payload) const {
     if (deserializeJson(incoming, payload.data(), payload.size()) != DeserializationError::Ok)
         return;
 
-    const NvsHandle readNvs("dali_names", NVS_READONLY);
-    char buf[1024] = "{}";
-    if (readNvs) {
-        size_t len = sizeof(buf);
-        nvs_get_str(readNvs.get(), "names_json", buf, &len);
+    // Считываем текущие имена в m_bridgeScratchpad
+    strncpy(m_bridgeScratchpad.data(), "{}", m_bridgeScratchpad.size());
+    {
+        const NvsHandle readNvs("dali_names", NVS_READONLY);
+        if (readNvs) {
+            size_t len = m_bridgeScratchpad.size();
+            nvs_get_str(readNvs.get(), "names_json", m_bridgeScratchpad.data(), &len);
+        }
     }
 
     JsonDocument currentNames;
-    deserializeJson(currentNames, buf);
-
+    deserializeJson(currentNames, static_cast<const char*>(m_bridgeScratchpad.data()));
     for (JsonPair kv : incoming.as<JsonObject>()) {
         currentNames[kv.key()] = kv.value();
     }
-
-    char saveBuf[1024];
-    serializeJson(currentNames, saveBuf, sizeof(saveBuf));
+    serializeJson(currentNames, m_bridgeScratchpad.data(), m_bridgeScratchpad.size());
 
     NvsHandle writeNvs("dali_names", NVS_READWRITE);
     esp_err_t err = ESP_FAIL;
     if (writeNvs) {
-        nvs_set_str(writeNvs.get(), "names_json", saveBuf);
+        nvs_set_str(writeNvs.get(), "names_json", m_bridgeScratchpad.data());
         err = nvs_commit(writeNvs.get());
     }
 

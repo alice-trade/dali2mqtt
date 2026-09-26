@@ -71,6 +71,7 @@ class DaliBusEngine {
     struct TransactionResponse {
         esp_err_t err{ESP_FAIL};
         uint8_t response{0};
+        uint16_t token{0};
     };
 
     struct TransactionRequest {
@@ -80,6 +81,7 @@ class DaliBusEngine {
         bool sendTwice{false};
         bool acceptAnyReplyAsYes{false};
         bool isClash{false};
+        uint16_t token{0};
     };
     QueueHandle_t m_respQueue{nullptr};
 
@@ -107,6 +109,7 @@ class DaliBusEngine {
     BusSnifferCallback m_snifferCb{nullptr};
     void* m_snifferCtx{nullptr};
 
+    mutable std::atomic<uint16_t> m_nextToken{1};
     std::atomic<bool> m_running{false};
 };
 static_assert(DaliBusConcept<DaliBusEngine>, "DaliBusEngine must strictly satisfy DaliBusConcept");

@@ -93,6 +93,9 @@ class MqttBridge {
     const NetworkPlatform& m_network;
     HomeAssistantDiscovery m_discovery;
 
+    mutable std::array<char, 1024> m_bridgeScratchpad{};
+    mutable MqttIncomingMessage m_currentMsg{};
+
     etl::string<64> m_baseTopic{"dali_bridge"};
     QueueHandle_t m_cmdQueue{nullptr};
     TaskHandle_t m_taskHandle{nullptr};

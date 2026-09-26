@@ -28,6 +28,16 @@ enum class DaliOperationStatus : uint8_t { Idle, Scanning, Initializing, Refresh
 
 static std::atomic<DaliOperationStatus> g_daliStatus{DaliOperationStatus::Idle};
 
+static int httpSocketReader(void* ctx, char* buf, size_t maxLen) {
+    auto* req = static_cast<httpd_req_t*>(ctx);
+    int ret = 0;
+    int retries = 3;
+    do {
+        ret = httpd_req_recv(req, buf, maxLen);
+    } while (ret == HTTPD_SOCK_ERR_TIMEOUT && --retries > 0);
+    return ret;
+}
+
 static esp_err_t checkAuth(httpd_req_t* req, const ApiContext* ctx) {
     char authHdr[128];
     if (httpd_req_get_hdr_value_str(req, "Authorization", authHdr, sizeof(authHdr)) != ESP_OK) {
@@ -604,4 +614,29 @@ esp_err_t ApiHandlers::triggerOtaInstall(httpd_req_t* req) {
     return ESP_OK;
 }
 
+esp_err_t ApiHandlers::uploadOtaBin(httpd_req_t* req) {
+    const auto* ctx = static_cast<ApiContext*>(req->user_ctx);
+    if (checkAuth(req, ctx) != ESP_OK)
+        return ESP_FAIL;
+
+    if (req->content_len == 0) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "File is empty");
+        return ESP_FAIL;
+    }
+
+    const esp_err_t err = ctx->ota.processStreamUpdate(httpSocketReader, req, req->content_len);
+
+    if (err == ESP_OK) {
+        httpd_resp_send(req, R"({"status":"ok","message":"Flash complete. Rebooting..."})", HTTPD_RESP_USE_STRLEN);
+
+        xTaskCreate([](void*) {
+            vTaskDelay(pdMS_TO_TICKS(1500));
+            esp_restart();
+        }, "ota_rst", 2048, nullptr, 5, nullptr);
+        return ESP_OK;
+    } else {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Flash write failed or rejected");
+        return ESP_FAIL;
+    }
+}
 } // namespace daliMQTT
