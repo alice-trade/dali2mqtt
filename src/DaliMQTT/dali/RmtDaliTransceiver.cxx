@@ -236,8 +236,12 @@ void RmtDaliTransceiver::taskRunner(void* arg) {
                             .eot_level = Timing::LEVEL_IDLE
                         }
                     };
-                    ESP_ERROR_CHECK(rmt_transmit(m_txChannel, m_copyEncoder, m_txBuffer,
-                                                 symCount * sizeof(rmt_symbol_word_t), &txConf));
+                    const esp_err_t txErr = rmt_transmit(m_txChannel, m_copyEncoder, m_txBuffer,
+                                      symCount * sizeof(rmt_symbol_word_t), &txConf);
+                    if (txErr != ESP_OK) {
+                        ESP_LOGE(TAG, "RMT transmit hardware error: %s", esp_err_to_name(txErr));
+                        m_txState.active = false;
+                    }
                 }
             }
         }

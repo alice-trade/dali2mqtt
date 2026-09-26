@@ -211,6 +211,12 @@ esp_err_t DaliBusEngine::executeTransaction(const TransactionRequest& request, u
     if (xSemaphoreTakeRecursive(m_busMutex, pdMS_TO_TICKS(1000)) != pdTRUE) {
         return ESP_ERR_TIMEOUT;
     }
+
+    TransactionResponse staleResp;
+    while (xQueueReceive(m_respQueue, &staleResp, 0) == pdTRUE) {
+        ESP_LOGD(TAG, "Drained stale response with token %u", staleResp.token);
+    }
+
     uint16_t currentToken = m_nextToken.fetch_add(1, std::memory_order_relaxed);
     if (currentToken == 0) {
         currentToken = m_nextToken.fetch_add(1, std::memory_order_relaxed);

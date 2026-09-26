@@ -280,22 +280,29 @@ esp_err_t ApiHandlers::scanDaliBus(httpd_req_t* req) {
     if (checkAuth(req, ctx) != ESP_OK)
         return ESP_FAIL;
 
-    if (g_daliStatus.load() != DaliOperationStatus::Idle) {
+    auto expected = DaliOperationStatus::Idle;
+    if (!g_daliStatus.compare_exchange_strong(expected, DaliOperationStatus::Scanning,
+                                              std::memory_order_acq_rel)) {
         httpd_resp_set_status(req, "409 Conflict");
         httpd_resp_send(req, "Operation in progress", HTTPD_RESP_USE_STRLEN);
         return ESP_OK;
     }
 
-    g_daliStatus.store(DaliOperationStatus::Scanning);
-    xTaskCreate(
+    const BaseType_t ret = xTaskCreate(
         [](void* arg) {
             auto* c = static_cast<ApiContext*>(arg);
             c->daliRegistry.scanBus();
             c->daliRegistry.refreshGroupAssignmentsFromBus();
-            g_daliStatus.store(DaliOperationStatus::Idle);
+            g_daliStatus.store(DaliOperationStatus::Idle, std::memory_order_release);
             vTaskDelete(nullptr);
         },
         "web_scan", 4096, ctx, 4, nullptr);
+
+    if (ret != pdPASS) {
+        g_daliStatus.store(DaliOperationStatus::Idle, std::memory_order_release);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Task create failed");
+        return ESP_FAIL;
+    }
 
     httpd_resp_set_status(req, "202 Accepted");
     httpd_resp_send(req, R"({"status":"ok","message":"Scan initiated"})", HTTPD_RESP_USE_STRLEN);
@@ -389,7 +396,7 @@ esp_err_t ApiHandlers::getDaliNames(httpd_req_t* req) {
         return ESP_FAIL;
 
     NvsHandle nvs("dali_names", NVS_READONLY);
-    char buf[1024] = "{}";
+    char buf[3072] = "{}";
     if (nvs) {
         size_t len = sizeof(buf);
         nvs_get_str(nvs.get(), "names_json", buf, &len);
@@ -405,7 +412,7 @@ esp_err_t ApiHandlers::setDaliNames(httpd_req_t* req) {
     if (checkAuth(req, ctx) != ESP_OK)
         return ESP_FAIL;
 
-    char buf[1024];
+    char buf[3072];
     const int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
     if (ret <= 0)
         return ESP_FAIL;

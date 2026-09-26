@@ -1280,11 +1280,21 @@ esp_err_t DaliDeviceRegistry::saveAddressMapToNvs() {
 
 void DaliDeviceRegistry::handleDeferredNvsFlush(const int64_t nowMs) {
     constexpr int64_t FLUSH_DEBOUNCE_MS = 60'000;
-    if (m_nvsDirty && (nowMs - m_lastNvsDirtyTsMs > FLUSH_DEBOUNCE_MS)) {
-        m_nvsDirty = false;
+    bool shouldFlush = false;
+
+    {
+        std::lock_guard<std::mutex> lock(m_registryMutex);
+        if (m_nvsDirty && (nowMs - m_lastNvsDirtyTsMs > FLUSH_DEBOUNCE_MS)) {
+            m_nvsDirty = false;
+            shouldFlush = true;
+        }
+    }
+
+    if (shouldFlush) {
         saveAddressMapToNvs();
     }
 }
+
 StaticMetadata DaliDeviceRegistry::queryDeviceMetadataFromBus(const uint8_t sa) const {
     StaticMetadata meta{};
 

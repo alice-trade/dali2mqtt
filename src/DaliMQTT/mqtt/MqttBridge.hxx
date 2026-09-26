@@ -22,7 +22,7 @@ namespace daliMQTT {
 
 class MqttBridge {
   public:
-    static constexpr size_t CMD_QUEUE_CAPACITY = 24;
+    static constexpr size_t CMD_QUEUE_CAPACITY = 16;
 
     MqttBridge(MqttClient& mqtt,
                DaliDeviceRegistry& daliRegistry,
@@ -84,16 +84,18 @@ class MqttBridge {
 
     void publishDeviceGroups(DaliLongAddress_t longAddr, const GroupMask& groups) const;
     void publishAllDeviceGroups() const;
+    void publishDeviceStateInternal(const DeviceStateChangeEvent& event) const;
 
     MqttClient& m_mqtt;
     DaliDeviceRegistry& m_daliRegistry;
     DaliBusEngine& m_daliBus;
+    QueueHandle_t m_daliEventsQueue{nullptr};
     ConfigStore& m_config;
     OtaService& m_ota;
     const NetworkPlatform& m_network;
     HomeAssistantDiscovery m_discovery;
 
-    mutable std::array<char, 1024> m_bridgeScratchpad{};
+    mutable std::array<char, 3072> m_bridgeScratchpad{};
     mutable MqttIncomingMessage m_currentMsg{};
     mutable std::atomic<bool> m_replayInProgress{false};
 

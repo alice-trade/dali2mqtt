@@ -20,12 +20,15 @@ MqttBridge::MqttBridge(MqttClient& mqtt, DaliDeviceRegistry& daliRegistry, DaliB
     : m_mqtt(mqtt), m_daliRegistry(daliRegistry), m_daliBus(daliBus), m_config(config), m_ota(ota), m_network(network),
       m_discovery(m_mqtt, m_daliRegistry) {
     m_cmdQueue = xQueueCreate(CMD_QUEUE_CAPACITY, sizeof(MqttIncomingMessage));
+    m_daliEventsQueue = xQueueCreate(16, sizeof(DeviceStateChangeEvent));
 }
 
 MqttBridge::~MqttBridge() {
     stop();
     if (m_cmdQueue)
         vQueueDelete(m_cmdQueue);
+    if (m_daliEventsQueue)
+        vQueueDelete(m_daliEventsQueue);
 }
 
 esp_err_t MqttBridge::start() {
@@ -172,10 +175,18 @@ void MqttBridge::onMqttDataReceivedBridge(const char* topic, const int tLen, con
 
 void MqttBridge::onDaliDeviceStateChanged(const DeviceStateChangeEvent& event, void* ctx) {
     const auto* self = static_cast<MqttBridge*>(ctx);
+    if (self->m_daliEventsQueue) {
+        xQueueSend(self->m_daliEventsQueue, &event, 0);
+    }
+}
+
+void MqttBridge::publishDeviceStateInternal(const DeviceStateChangeEvent& event) const {
+    if (!m_mqtt.isConnected()) return;
+
     const auto addrStr = utils::longAddressToString(event.longAddress);
 
     char topic[128];
-    snprintf(topic, sizeof(topic), "%s/light/%s/state", self->m_baseTopic.c_str(), addrStr.data());
+    snprintf(topic, sizeof(topic), "%s/light/%s/state", m_baseTopic.c_str(), addrStr.data());
 
     JsonDocument doc;
     doc["state"] = (event.level > 0) ? "ON" : "OFF";
@@ -196,11 +207,13 @@ void MqttBridge::onDaliDeviceStateChanged(const DeviceStateChangeEvent& event, v
 
     char payload[256];
     serializeJson(doc, payload, sizeof(payload));
-    self->m_mqtt.publish(topic, payload, 0, false);
+    m_mqtt.publish(topic, payload, 0, false);
 }
+
 
 void MqttBridge::onDaliGroupStateChanged(const GroupStateChangeEvent& event, void* ctx) {
     const auto* self = static_cast<MqttBridge*>(ctx);
+    if (!self->m_mqtt.isConnected()) return;
 
     char topic[128];
     snprintf(topic, sizeof(topic), "%s/light/bus/%d/group/%d/state", self->m_baseTopic.c_str(), event.busId,
@@ -284,7 +297,7 @@ void MqttBridge::replayAllCachedStates() const {
 
 void MqttBridge::onDaliInputEvent(const InputDeviceEvent& event, void* ctx) {
     const auto* self = static_cast<MqttBridge*>(ctx);
-
+    if (!self->m_mqtt.isConnected()) return;
     auto typeStr = "short";
     char addrStr[16];
 
@@ -328,12 +341,18 @@ void MqttBridge::bridgeTaskRunner(void* arg) {
 }
 
 [[noreturn]] void MqttBridge::bridgeWorkerLoop() const {
+    DeviceStateChangeEvent daliEv{};
+
     while (true) {
-        if (xQueueReceive(m_cmdQueue, &m_currentMsg, portMAX_DELAY) == pdTRUE) {
+        if (xQueueReceive(m_cmdQueue, &m_currentMsg, pdMS_TO_TICKS(10)) == pdTRUE) {
             const std::string_view topic(m_currentMsg.topic.c_str(), m_currentMsg.topic.length());
             const std::string_view payload(m_currentMsg.payload.c_str(), m_currentMsg.payload.length());
 
             routeIncomingCommand(topic, payload);
+        }
+
+        while (xQueueReceive(m_daliEventsQueue, &daliEv, 0) == pdTRUE) {
+            publishDeviceStateInternal(daliEv);
         }
     }
 }

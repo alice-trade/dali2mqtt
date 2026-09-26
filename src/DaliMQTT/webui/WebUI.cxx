@@ -41,7 +41,7 @@ esp_err_t WebUI::start() {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.uri_match_fn = httpd_uri_match_wildcard;
     config.max_uri_handlers = 24;
-    config.stack_size = 8192;
+    config.stack_size = 10240;
     config.lru_purge_enable = true;
 
     ESP_RETURN_ON_ERROR(httpd_start(&m_serverHandle, &config), TAG, "HTTP Server start failed");

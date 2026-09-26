@@ -11,7 +11,7 @@ namespace daliMQTT {
 
 struct MqttIncomingMessage {
     etl::string<96> topic{};
-    etl::string<768> payload{};
+    etl::string<1280> payload{};
 };
 
 } // namespace daliMQTT

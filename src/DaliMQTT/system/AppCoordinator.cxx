@@ -17,7 +17,6 @@ void AppCoordinator::start() {
     ESP_LOGI(TAG, "  DALI-to-MQTT Bridge Core v.%s (%s)", DALIMQTT_VERSION, NetworkPlatform::getInterfaceName());
     ESP_LOGI(TAG, "==========================================");
 
-    m_deps.controls.checkAndValidateOta();
     m_deps.controls.init(GPIO_NUM_0);
     m_deps.controls.setResetCallback(&onFactoryResetRequestedEntry, this);
 
@@ -39,6 +38,8 @@ void AppCoordinator::start() {
         ESP_LOGI(TAG, "Network not configured. Starting Provisioning AP: '%s'...", CONFIG_DALI2MQTT_WIFI_AP_SSID);
         m_deps.network.startAccessPoint(CONFIG_DALI2MQTT_WIFI_AP_SSID, CONFIG_DALI2MQTT_WIFI_AP_PASS);
         m_deps.network.startMdns(CONFIG_DALI2MQTT_WEBUI_DEFAULT_MDNS_DOMAIN, "Setup");
+        m_deps.controls.checkAndValidateOta();
+
     } else {
         m_state.store(AppState::ConnectingNetwork);
         ESP_LOGI(TAG, "Connecting to %s infrastructure...", NetworkPlatform::getInterfaceName());
@@ -55,6 +56,7 @@ void AppCoordinator::start() {
 void AppCoordinator::handleNetworkConnected() {
     const auto cfg = m_deps.config.get();
     ESP_LOGI(TAG, "[%s] Connected! IP: %s", NetworkPlatform::getInterfaceName(), m_deps.network.getIpAddress().c_str());
+    m_deps.controls.checkAndValidateOta();
 
     m_deps.network.startMdns(cfg->httpDomain.c_str(), cfg->clientId.c_str());
 
