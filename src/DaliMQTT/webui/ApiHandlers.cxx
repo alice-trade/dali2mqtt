@@ -357,6 +357,10 @@ esp_err_t ApiHandlers::initializeDaliInputs(httpd_req_t* req) {
 }
 
 esp_err_t ApiHandlers::getDaliStatus(httpd_req_t* req) {
+    const auto* ctx = static_cast<ApiContext*>(req->user_ctx);
+    if (checkAuth(req, ctx) != ESP_OK)
+        return ESP_FAIL;
+
     auto s = "idle";
     switch (g_daliStatus.load()) {
     case DaliOperationStatus::Scanning:

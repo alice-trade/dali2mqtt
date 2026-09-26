@@ -29,7 +29,6 @@ class ConfigStore {
     [[nodiscard]] inline bool isConfigured() const noexcept;
 
   private:
-    static esp_err_t mountLittleFs();
     static void generateDefaultClientId(ConfigStructure& cfg);
 
     mutable std::mutex m_mutex{};

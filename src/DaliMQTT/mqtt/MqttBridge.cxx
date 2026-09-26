@@ -340,9 +340,23 @@ void MqttBridge::bridgeTaskRunner(void* arg) {
 
 void MqttBridge::handleHomeAssistantStatus(std::string_view payload) const {
     if (payload == "online") {
-        ESP_LOGI(TAG, "Home Assistant is ONLINE (Birth Message received)!");
-        vTaskDelay(pdMS_TO_TICKS(300));
-        replayAllCachedStates();
+        if (m_replayInProgress.exchange(true)) {
+            ESP_LOGW(TAG, "HA state replay already in progress, ignoring duplicate birth message.");
+            return;
+        }
+
+        ESP_LOGI(TAG, "Home Assistant is ONLINE (Birth Message received). Scheduling state replay...");
+
+        xTaskCreate(
+            [](void* arg) {
+                auto* self = static_cast<const MqttBridge*>(arg);
+                vTaskDelay(pdMS_TO_TICKS(300));
+                self->replayAllCachedStates();
+                self->m_replayInProgress.store(false);
+                vTaskDelete(nullptr);
+            },
+            "ha_replay_task", 4096, const_cast<MqttBridge*>(this), 3, nullptr);
+
     } else if (payload == "offline") {
         ESP_LOGW(TAG, "Home Assistant is OFFLINE (LWT)");
     }

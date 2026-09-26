@@ -240,7 +240,7 @@ esp_err_t OtaService::processStreamUpdate(OtaStreamReaderFn readFn, void* userCt
     ESP_LOGI(TAG, "Starting firmware direct flash (%zu bytes)...", totalLen);
     notifyProgress(OtaStatus::InProgress, 0, "Inspecting firmware header...");
 
-    alignas(4) char chunkBuf[STREAM_BUFFER_SIZE];
+    alignas(4) char chunkBuf[1024];
     int received = 0;
 
     const int firstRead = readFn(userCtx, chunkBuf, std::min(sizeof(chunkBuf), totalLen));

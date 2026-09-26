@@ -95,6 +95,7 @@ class MqttBridge {
 
     mutable std::array<char, 1024> m_bridgeScratchpad{};
     mutable MqttIncomingMessage m_currentMsg{};
+    mutable std::atomic<bool> m_replayInProgress{false};
 
     etl::string<64> m_baseTopic{"dali_bridge"};
     QueueHandle_t m_cmdQueue{nullptr};

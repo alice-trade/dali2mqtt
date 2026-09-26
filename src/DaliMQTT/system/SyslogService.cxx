@@ -32,6 +32,7 @@ esp_err_t SyslogService::start(const char* serverAddr) {
     if (res != pdPASS) {
         vRingbufferDelete(m_ringBuf);
         m_ringBuf = nullptr;
+        g_syslogServiceInstance = nullptr;
         return ESP_FAIL;
     }
 
@@ -41,10 +42,14 @@ esp_err_t SyslogService::start(const char* serverAddr) {
 }
 
 void SyslogService::stop() {
+    g_syslogServiceInstance = nullptr;
+
     if (m_originalVprintf) {
         esp_log_set_vprintf(m_originalVprintf);
         m_originalVprintf = nullptr;
     }
+
+    vTaskDelay(pdMS_TO_TICKS(20));
 
     if (m_taskHandle) {
         vTaskDelete(m_taskHandle);
@@ -61,12 +66,11 @@ void SyslogService::stop() {
         close(m_sockFd);
         m_sockFd = -1;
     }
-
-    g_syslogServiceInstance = nullptr;
 }
 
 int SyslogService::syslogVprintfHook(const char* format, va_list args) {
     int ret = 0;
+
     if (g_syslogServiceInstance && g_syslogServiceInstance->m_originalVprintf) {
         va_list cpy;
         va_copy(cpy, args);
@@ -77,6 +81,9 @@ int SyslogService::syslogVprintfHook(const char* format, va_list args) {
     if (!g_syslogServiceInstance || !g_syslogServiceInstance->m_ringBuf)
         return ret;
 
+    if (xPortInIsrContext())
+        return ret;
+
     if (xTaskGetCurrentTaskHandle() == g_syslogServiceInstance->m_taskHandle)
         return ret;
 
@@ -84,17 +91,7 @@ int SyslogService::syslogVprintfHook(const char* format, va_list args) {
     const int len = vsnprintf(msgBuf, sizeof(msgBuf), format, args);
     if (len > 0) {
         const size_t actualLen = (static_cast<size_t>(len) < sizeof(msgBuf)) ? len : (sizeof(msgBuf) - 1);
-        if (xPortInIsrContext()) {
-            BaseType_t highTaskWoken = pdFALSE;
-            xRingbufferSendFromISR(g_syslogServiceInstance->m_ringBuf, msgBuf, actualLen, &highTaskWoken);
-#ifndef traceISR_EXIT_TO_SCHEDULER
-#define traceISR_EXIT_TO_SCHEDULER()
-#endif
-            if (highTaskWoken)
-                portYIELD_FROM_ISR();
-        } else {
-            xRingbufferSend(g_syslogServiceInstance->m_ringBuf, msgBuf, actualLen, 0);
-        }
+        xRingbufferSend(g_syslogServiceInstance->m_ringBuf, msgBuf, actualLen, 0);
     }
     return ret;
 }
