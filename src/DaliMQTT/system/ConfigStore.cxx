@@ -5,7 +5,6 @@
 
 #include "network/NetworkPlatform.hxx"
 #include "utils/NvsHandle.hxx"
-#include <esp_littlefs.h>
 #include <esp_log.h>
 #include <esp_mac.h>
 #include <nvs_flash.h>
@@ -14,7 +13,6 @@ namespace daliMQTT {
 
 static constexpr char TAG[] = "ConfigStore";
 static constexpr char NVS_NAMESPACE[] = CONFIG_DALI2MQTT_NVS_NAMESPACE;
-static constexpr char FS_PARTITION_LABEL[] = CONFIG_DALI2MQTT_WEBUI_SPIFFS_PARTITION_LABEL;
 
 esp_err_t ConfigStore::init() {
     if (m_initialized)
@@ -28,25 +26,8 @@ esp_err_t ConfigStore::init() {
     }
     ESP_RETURN_ON_ERROR(ret, TAG, "NVS Flash Init failed");
 
-#if defined(CONFIG_DALI2MQTT_ENABLE_WEBUI)
-    ret = mountLittleFs();
-    if (ret != ESP_OK) {
-        ESP_LOGW(TAG, "LittleFS mount warning: %s", esp_err_to_name(ret));
-    }
-#endif
-
     m_initialized = true;
     return ESP_OK;
-}
-
-esp_err_t ConfigStore::mountLittleFs() {
-    esp_vfs_littlefs_conf_t conf = {
-        .base_path = "/littlefs",
-        .partition_label = FS_PARTITION_LABEL,
-        .format_if_mount_failed = true,
-        .dont_mount = false,
-    };
-    return esp_vfs_littlefs_register(&conf);
 }
 
 void ConfigStore::generateDefaultClientId(ConfigStructure& cfg) {

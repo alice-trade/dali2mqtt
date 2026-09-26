@@ -57,7 +57,6 @@ target_link_libraries(DaliMQTT-Core PUBLIC
         idf::esp_netif
         idf::freertos
         idf::esp_timer
-        idf::esp-littlefs-src
         idf::esp-mqtt-src
         idf::mdns
         idf::cxx

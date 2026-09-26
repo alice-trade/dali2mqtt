@@ -35,7 +35,6 @@ set(PLATFORM_MODULES
         nvs_flash
         esp_timer
         Kconfig
-        esp-littlefs-src
 )
 set(SDKCONFIG_DEFAULTS_LIST "")
 list(APPEND SDKCONFIG_DEFAULTS_LIST "${PROJDIR}/support/sdkconfig.default")
@@ -98,7 +97,6 @@ message(STATUS "Uses Sdkconfig: ${CURRENT_SDKCONFIG}")
 
 idf_build_component(${ESP_BUILD_UTILS_PATH}/../../Kconfig)
 idf_build_component(${ESP_PROTO_BASEDIR}/mdns)
-idf_build_component(${esp-littlefs_SOURCE_DIR})
 idf_build_component(${esp-mqtt_SOURCE_DIR})
 
 idf_build_process(${TARGET}

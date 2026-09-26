@@ -3,7 +3,7 @@ project(
         daliMQTT
         VERSION 0.15.0
         DESCRIPTION "DALI-to-MQTT bridge for ESP platform"
-        LANGUAGES C CXX
+        LANGUAGES C CXX ASM
 )
 
 include(scripts/common.cmake)

@@ -46,14 +46,4 @@ if(Dependencies_Platform_ESP)
             SOURCE_SUBDIR  "N/A"
     )
         FetchContent_MakeAvailable(esp-mqtt)
-
-    # esp-littlefs
-    FetchContent_Declare(
-            esp-littlefs
-            GIT_REPOSITORY https://github.com/joltwallet/esp_littlefs.git
-            GIT_TAG        v1.22.3
-            GIT_SHALLOW    TRUE
-            SOURCE_SUBDIR  "N/A"
-    )
-        FetchContent_MakeAvailable(esp-littlefs)
 endif()

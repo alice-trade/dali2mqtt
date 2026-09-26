@@ -408,7 +408,7 @@ void MqttBridge::routeIncomingCommand(std::string_view topic, std::string_view p
         m_ota.checkForUpdateAsync(cfg->otaBaseUrl.c_str());
     } else if (subTopic == "/update/install") {
         ESP_LOGI(TAG, "MQTT command: install update");
-        m_ota.startUpdate(nullptr, true);
+        m_ota.startUpdate(nullptr);
     } else if (subTopic == "/cmd/query") {
         ESP_LOGI(TAG, "External query command received, replaying state cache...");
         replayAllCachedStates();

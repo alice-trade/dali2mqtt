@@ -605,7 +605,7 @@ esp_err_t ApiHandlers::triggerOtaInstall(httpd_req_t* req) {
         }
     }
 
-    const esp_err_t err = ctx->ota.startUpdate(strlen(customUrl) > 0 ? customUrl : nullptr, true);
+    const esp_err_t err = ctx->ota.startUpdate(strlen(customUrl) > 0 ? customUrl : nullptr);
     if (err == ESP_OK) {
         httpd_resp_send(req, R"({"status":"ok","message":"Update initiated"})", HTTPD_RESP_USE_STRLEN);
     } else {

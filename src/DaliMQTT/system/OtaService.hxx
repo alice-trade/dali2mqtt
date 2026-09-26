@@ -39,7 +39,7 @@ class OtaService {
     OtaService(const OtaService&) = delete;
     OtaService& operator=(const OtaService&) = delete;
 
-    esp_err_t startUpdate(const char* url, bool updateWebFs = true);
+    esp_err_t startUpdate(const char* url);
     esp_err_t processStreamUpdate(OtaStreamReaderFn readFn, void* userCtx, size_t totalLen);
 
     [[nodiscard]] inline bool isUpdating() const noexcept;
@@ -58,14 +58,12 @@ class OtaService {
     void performVersionCheck(const char* url);
 
     esp_err_t performAppOta(const char* appUrl);
-    esp_err_t performFsOta(const char* fsUrl);
     void notifyProgress(OtaStatus status, uint8_t percentage, const char* desc);
 
     std::atomic<bool> m_isUpdating{false};
     std::atomic<OtaStatus> m_status{OtaStatus::Idle};
 
     etl::string<256> m_targetUrl{};
-    bool m_updateWebFs{true};
     mutable std::mutex m_infoMutex{};
     OtaVersionInfo m_versionInfo{};
     OtaVersionCallback m_versionCb{nullptr};

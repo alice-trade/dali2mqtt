@@ -8,7 +8,6 @@
 #include <esp_crt_bundle.h>
 #include <esp_http_client.h>
 #include <esp_https_ota.h>
-#include <esp_littlefs.h>
 #include <esp_ota_ops.h>
 #include <esp_log.h>
 #include <esp_partition.h>
@@ -17,7 +16,6 @@
 namespace daliMQTT {
 
 static constexpr char TAG[] = "OtaService";
-static constexpr char FS_PARTITION_LABEL[] = CONFIG_DALI2MQTT_WEBUI_SPIFFS_PARTITION_LABEL;
 static constexpr size_t SECTOR_SIZE = 4096;
 static constexpr size_t STREAM_BUFFER_SIZE = SECTOR_SIZE;
 
@@ -29,7 +27,7 @@ OtaService::~OtaService() {
     }
 }
 
-esp_err_t OtaService::startUpdate(const char* url, const bool updateWebFs) {
+esp_err_t OtaService::startUpdate(const char* url) {
     if (m_isUpdating.exchange(true)) {
         ESP_LOGW(TAG, "OTA Update already in progress");
         return ESP_ERR_INVALID_STATE;
@@ -50,7 +48,6 @@ esp_err_t OtaService::startUpdate(const char* url, const bool updateWebFs) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    m_updateWebFs = updateWebFs;
     m_status.store(OtaStatus::InProgress);
 
     const BaseType_t res = xTaskCreate(otaTaskRunner, "ota_worker", 8192, this, 4, &m_taskHandle);
@@ -86,39 +83,6 @@ void OtaService::otaTaskRunner(void* arg) {
         notifyProgress(OtaStatus::Failed, 0, "Firmware update failed");
         m_isUpdating.store(false);
         vTaskDelete(nullptr);
-    }
-
-    if (m_updateWebFs) {
-        etl::string<160> fsUrl = m_targetUrl;
-        bool fsUrlResolved = false;
-
-        const size_t pos = fsUrl.find("firmware.bin");
-        if (pos != etl::string<160>::npos) {
-            fsUrl.replace(pos, 12, "web_storage.bin");
-            fsUrlResolved = true;
-        } else {
-            const size_t lastSlash = fsUrl.rfind('/');
-            if (lastSlash != etl::string<160>::npos) {
-                fsUrl.resize(lastSlash + 1);
-                fsUrl.append("web_storage.bin");
-                fsUrlResolved = true;
-            }
-        }
-
-        if (fsUrlResolved && fsUrl != m_targetUrl) {
-            ESP_LOGI(TAG, "Attempting WebUI FS update from: %s", fsUrl.c_str());
-            err = performFsOta(fsUrl.c_str());
-            if (err != ESP_OK) {
-                ESP_LOGE(TAG, "WebUI LittleFS update failed: %s. ABORTING REBOOT to protect system state!",
-                         esp_err_to_name(err));
-                notifyProgress(OtaStatus::Failed, 0, "WebUI update failed");
-                m_isUpdating.store(false);
-                vTaskDelete(nullptr);
-            }
-        } else {
-            ESP_LOGW(TAG,
-                     "Could not resolve distinct web_storage URL. Skipping FS OTA to prevent partition corruption.");
-        }
     }
 
     notifyProgress(OtaStatus::Success, 100, "Update successful. Rebooting...");
@@ -160,204 +124,6 @@ esp_err_t OtaService::performAppOta(const char* appUrl) {
     }
 
     return esp_https_ota_finish(otaHandle);
-}
-
-esp_err_t OtaService::performFsOta(const char* fsUrl) {
-    const esp_partition_t* part =
-        esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, FS_PARTITION_LABEL);
-    if (!part) {
-        ESP_LOGE(TAG, "Partition '%s' not found in partition table", FS_PARTITION_LABEL);
-        return ESP_ERR_NOT_FOUND;
-    }
-
-    esp_http_client_config_t httpCfg{};
-    httpCfg.url = fsUrl;
-    httpCfg.timeout_ms = 15000;
-    httpCfg.keep_alive_enable = true;
-    httpCfg.max_redirection_count = 5;
-    httpCfg.crt_bundle_attach = esp_crt_bundle_attach;
-
-    esp_http_client_handle_t client = esp_http_client_init(&httpCfg);
-    if (!client) {
-        return ESP_FAIL;
-    }
-
-    if (esp_http_client_open(client, 0) != ESP_OK) {
-        ESP_LOGE(TAG, "Cannot connect to WebUI asset URL: %s", fsUrl);
-        esp_http_client_cleanup(client);
-        return ESP_FAIL;
-    }
-
-    const int contentLen = esp_http_client_fetch_headers(client);
-    const int statusCode = esp_http_client_get_status_code(client);
-
-    if (statusCode != 200) {
-        ESP_LOGE(TAG, "HTTP pre-flight failed. HTTP Status: %d", statusCode);
-        esp_http_client_close(client);
-        esp_http_client_cleanup(client);
-        return ESP_ERR_HTTP_INVALID_TRANSPORT;
-    }
-
-    if (contentLen <= 0 || contentLen > static_cast<int>(part->size)) {
-        ESP_LOGE(TAG, "Invalid Content-Length: %d (Partition capacity: %u)", contentLen, (unsigned)part->size);
-        esp_http_client_close(client);
-        esp_http_client_cleanup(client);
-        return ESP_ERR_INVALID_SIZE;
-    }
-
-    alignas(4) char firstSectorBuf[SECTOR_SIZE];
-    int firstSectorRead = 0;
-    while (firstSectorRead < static_cast<int>(SECTOR_SIZE) && firstSectorRead < contentLen) {
-        const int r = esp_http_client_read(
-            client, firstSectorBuf + firstSectorRead,
-            std::min(SECTOR_SIZE - firstSectorRead, static_cast<size_t>(contentLen - firstSectorRead)));
-        if (r <= 0)
-            break;
-        firstSectorRead += r;
-    }
-
-    if (firstSectorRead < 64) {
-        ESP_LOGE(TAG, "Truncated payload on header read");
-        esp_http_client_close(client);
-        esp_http_client_cleanup(client);
-        return ESP_ERR_IMAGE_INVALID;
-    }
-
-    if (static_cast<uint8_t>(firstSectorBuf[0]) == 0xE9) {
-        ESP_LOGE(TAG, "Aborted: URL points to an ESP32 application binary, not LittleFS image!");
-        esp_http_client_close(client);
-        esp_http_client_cleanup(client);
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    if (firstSectorBuf[0] == '<' || memcmp(firstSectorBuf, "<!DOCTYPE", 9) == 0) {
-        ESP_LOGE(TAG, "Aborted: Server returned HTML error page instead of binary image!");
-        esp_http_client_close(client);
-        esp_http_client_cleanup(client);
-        return ESP_ERR_INVALID_RESPONSE;
-    }
-
-    bool hasLittleFsMagic = false;
-    for (size_t i = 0; i <= 56; ++i) {
-        if (memcmp(firstSectorBuf + i, "littlefs", 8) == 0) {
-            hasLittleFsMagic = true;
-            break;
-        }
-    }
-
-    if (!hasLittleFsMagic) {
-        ESP_LOGE(TAG, "Aborted: First sector does not contain LittleFS superblock signature!");
-        esp_http_client_close(client);
-        esp_http_client_cleanup(client);
-        return ESP_ERR_INVALID_CRC;
-    }
-
-    ESP_LOGI(TAG, "Image validated successfully. Starting flash write process...");
-    notifyProgress(OtaStatus::InProgress, 81, "Updating WebUI storage...");
-
-    esp_vfs_littlefs_unregister(FS_PARTITION_LABEL);
-
-    alignas(4) char streamBuffer[SECTOR_SIZE];
-    int totalWritten = 0;
-    int retryCount = 0;
-    constexpr int MAX_RETRIES = 3;
-
-    size_t erasedUpTo = 0;
-    esp_err_t err = ESP_OK;
-    while (erasedUpTo < static_cast<size_t>(firstSectorRead)) {
-        err = esp_partition_erase_range(part, erasedUpTo, SECTOR_SIZE);
-        if (err != ESP_OK) {
-            ESP_LOGE(TAG, "Failed to erase sector at %zu: %s", erasedUpTo, esp_err_to_name(err));
-            esp_http_client_close(client);
-            esp_http_client_cleanup(client);
-            return err;
-        }
-        erasedUpTo += SECTOR_SIZE;
-    }
-
-    err = esp_partition_write(part, 0, firstSectorBuf, firstSectorRead);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to write sector 0: %s", esp_err_to_name(err));
-        esp_http_client_close(client);
-        esp_http_client_cleanup(client);
-        return err;
-    }
-    totalWritten += firstSectorRead;
-
-    while (totalWritten < contentLen) {
-        const size_t bytesToRead = std::min(sizeof(streamBuffer), static_cast<size_t>(contentLen - totalWritten));
-        const int bytesRead = esp_http_client_read(client, streamBuffer, bytesToRead);
-
-        if (bytesRead > 0) {
-            while (erasedUpTo < static_cast<size_t>(totalWritten + bytesRead)) {
-                err = esp_partition_erase_range(part, erasedUpTo, SECTOR_SIZE);
-                if (err != ESP_OK) {
-                    ESP_LOGE(TAG, "Flash erase failed at offset %zu: %s", erasedUpTo, esp_err_to_name(err));
-                    break;
-                }
-                erasedUpTo += SECTOR_SIZE;
-            }
-            if (err != ESP_OK) break;
-
-            err = esp_partition_write(part, totalWritten, streamBuffer, bytesRead);
-            if (err != ESP_OK) {
-                ESP_LOGE(TAG, "Flash write failed at offset %d: %s", totalWritten, esp_err_to_name(err));
-                break;
-            }
-            totalWritten += bytesRead;
-            const uint8_t pct = static_cast<uint8_t>(80 + (totalWritten * 19) / contentLen);
-            notifyProgress(OtaStatus::InProgress, pct, "Flashing WebUI assets...");
-        } else if (bytesRead == 0) {
-            if (++retryCount > MAX_RETRIES) {
-                ESP_LOGE(TAG, "HTTP connection lost, retry limit reached");
-                break;
-            }
-
-            ESP_LOGW(TAG, "Connection interrupted at %d bytes. Reconnecting (attempt %d/%d)...", totalWritten,
-                     retryCount, MAX_RETRIES);
-            esp_http_client_close(client);
-
-            char rangeHeader[32];
-            snprintf(rangeHeader, sizeof(rangeHeader), "bytes=%d-", totalWritten);
-            esp_http_client_set_header(client, "Range", rangeHeader);
-
-            if (esp_http_client_open(client, 0) != ESP_OK) {
-                vTaskDelay(pdMS_TO_TICKS(1000));
-                continue;
-            }
-            esp_http_client_fetch_headers(client);
-            const int resCode = esp_http_client_get_status_code(client);
-            if (resCode != 206 && resCode != 200) {
-                ESP_LOGE(TAG, "Server rejected resume request with status %d", resCode);
-                break;
-            }
-        } else {
-            break;
-        }
-    }
-
-    esp_http_client_close(client);
-    esp_http_client_cleanup(client);
-
-    if (totalWritten != contentLen) {
-        ESP_LOGE(TAG, "FS OTA Failed: written %d of %d bytes", totalWritten, contentLen);
-        return ESP_ERR_IMAGE_INVALID;
-    }
-
-    esp_vfs_littlefs_conf_t conf = {
-        .base_path = "/littlefs",
-        .partition_label = FS_PARTITION_LABEL,
-        .format_if_mount_failed = false,
-        .dont_mount = false,
-    };
-    err = esp_vfs_littlefs_register(&conf);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "LittleFS mount test failed: %s", esp_err_to_name(err));
-        return err;
-    }
-
-    ESP_LOGI(TAG, "LittleFS successfully updated and mounted (%d bytes)", totalWritten);
-    return ESP_OK;
 }
 
 esp_err_t OtaService::checkForUpdateAsync(const char* manifestUrl) {
@@ -471,8 +237,8 @@ esp_err_t OtaService::processStreamUpdate(OtaStreamReaderFn readFn, void* userCt
         return ESP_ERR_INVALID_ARG;
     }
 
-    ESP_LOGI(TAG, "Starting stream-based direct flash (%zu bytes)...", totalLen);
-    notifyProgress(OtaStatus::InProgress, 0, "Inspecting image header...");
+    ESP_LOGI(TAG, "Starting firmware direct flash (%zu bytes)...", totalLen);
+    notifyProgress(OtaStatus::InProgress, 0, "Inspecting firmware header...");
 
     alignas(4) char chunkBuf[STREAM_BUFFER_SIZE];
     int received = 0;
@@ -480,72 +246,58 @@ esp_err_t OtaService::processStreamUpdate(OtaStreamReaderFn readFn, void* userCt
     const int firstRead = readFn(userCtx, chunkBuf, std::min(sizeof(chunkBuf), totalLen));
     if (firstRead <= 0) {
         m_isUpdating.store(false);
-        notifyProgress(OtaStatus::Failed, 0, "Socket read error on header");
         return ESP_FAIL;
     }
     received += firstRead;
 
-    const bool isAppFirmware = (static_cast<uint8_t>(chunkBuf[0]) == 0xE9);
-    bool isLittleFs = false;
-    for (size_t i = 0; i <= 56 && i < static_cast<size_t>(firstRead); ++i) {
-        if (memcmp(chunkBuf + i, "littlefs", 8) == 0) {
-            isLittleFs = true;
-            break;
-        }
-    }
-
-    if (!isAppFirmware && !isLittleFs) {
-        ESP_LOGE(TAG, "Unknown image signature. Aborted without touching Flash.");
+    if (static_cast<uint8_t>(chunkBuf[0]) != 0xE9) {
+        ESP_LOGE(TAG, "Aborted: Not an ESP32 application binary (magic != 0xE9)!");
         m_isUpdating.store(false);
-        notifyProgress(OtaStatus::Failed, 0, "Invalid binary signature");
+        notifyProgress(OtaStatus::Failed, 0, "Invalid binary magic");
         return ESP_ERR_INVALID_ARG;
     }
 
-    esp_err_t ret = ESP_OK;
-
-    if (isAppFirmware) {
-        const esp_partition_t* updatePart = esp_ota_get_next_update_partition(nullptr);
-        if (!updatePart || totalLen > updatePart->size) {
-            m_isUpdating.store(false);
-            return ESP_ERR_NO_MEM;
-        }
-
-        esp_ota_handle_t otaHandle = 0;
-        ret = esp_ota_begin(updatePart, totalLen, &otaHandle);
-        if (ret != ESP_OK) {
-            m_isUpdating.store(false);
-            return ret;
-        }
-
-        ret = esp_ota_write(otaHandle, chunkBuf, firstRead);
-        while (received < static_cast<int>(totalLen) && ret == ESP_OK) {
-            const int r = readFn(userCtx, chunkBuf, std::min(sizeof(chunkBuf), totalLen - received));
-            if (r <= 0) {
-                ret = ESP_FAIL;
-                break;
-            }
-            ret = esp_ota_write(otaHandle, chunkBuf, r);
-            received += r;
-            const uint8_t pct = static_cast<uint8_t>((received * 100) / totalLen);
-            notifyProgress(OtaStatus::InProgress, pct, "Writing firmware...");
-        }
-
-        if (ret == ESP_OK && received == static_cast<int>(totalLen)) {
-            ret = esp_ota_end(otaHandle);
-            if (ret == ESP_OK) {
-                ret = esp_ota_set_boot_partition(updatePart);
-            }
-        } else {
-            esp_ota_abort(otaHandle);
-            ret = ESP_ERR_IMAGE_INVALID;
-        }
+    const esp_partition_t* updatePart = esp_ota_get_next_update_partition(nullptr);
+    if (!updatePart || totalLen > updatePart->size) {
+        m_isUpdating.store(false);
+        return ESP_ERR_NO_MEM;
     }
 
-    if (ret != ESP_OK || received != static_cast<int>(totalLen)) {
-        ESP_LOGE(TAG, "Streaming OTA Failed or truncated!");
+    esp_ota_handle_t otaHandle = 0;
+    esp_err_t ret = esp_ota_begin(updatePart, totalLen, &otaHandle);
+    if (ret != ESP_OK) {
         m_isUpdating.store(false);
-        notifyProgress(OtaStatus::Failed, 0, "Flash write aborted");
-        return ESP_FAIL;
+        return ret;
+    }
+
+    ret = esp_ota_write(otaHandle, chunkBuf, firstRead);
+    while (received < static_cast<int>(totalLen) && ret == ESP_OK) {
+        const int r = readFn(userCtx, chunkBuf, std::min(sizeof(chunkBuf), totalLen - received));
+        if (r <= 0) {
+            ret = ESP_FAIL;
+            break;
+        }
+        ret = esp_ota_write(otaHandle, chunkBuf, r);
+        received += r;
+        const uint8_t pct = static_cast<uint8_t>((received * 100) / totalLen);
+        notifyProgress(OtaStatus::InProgress, pct, "Writing firmware...");
+    }
+
+    if (ret == ESP_OK && received == static_cast<int>(totalLen)) {
+        ret = esp_ota_end(otaHandle);
+        if (ret == ESP_OK) {
+            ret = esp_ota_set_boot_partition(updatePart);
+        }
+    } else {
+        esp_ota_abort(otaHandle);
+        ret = ESP_ERR_IMAGE_INVALID;
+    }
+
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Flash write aborted or failed!");
+        m_isUpdating.store(false);
+        notifyProgress(OtaStatus::Failed, 0, "Flash write failed");
+        return ret;
     }
 
     notifyProgress(OtaStatus::Success, 100, "Update successful. Rebooting...");

@@ -3,18 +3,30 @@
 
 #include "webui/WebUI.hxx"
 #include "system/ConfigStore.hxx"
-#include "utils/FileHandle.hxx"
 #include "webui/ApiHandlers.hxx"
 #include <cstring>
 #include <esp_log.h>
-#include <mbedtls/base64.h>
 #include <string_view>
-#include <sys/stat.h>
 
 namespace daliMQTT {
 
 static constexpr char TAG[] = "WebServer";
-static constexpr size_t FILE_CHUNK_SIZE = 2048;
+
+extern "C" {
+extern const uint8_t index_html_gz_start[] asm("_binary_index_html_gz_start");
+extern const uint8_t index_html_gz_end[]   asm("_binary_index_html_gz_end");
+extern const uint8_t app_js_gz_start[]     asm("_binary_app_js_gz_start");
+extern const uint8_t app_js_gz_end[]       asm("_binary_app_js_gz_end");
+extern const uint8_t app_css_gz_start[]    asm("_binary_app_css_gz_start");
+extern const uint8_t app_css_gz_end[]      asm("_binary_app_css_gz_end");
+
+extern __attribute__((weak)) const uint8_t _binary_index_html_gz_start[1] = {};
+extern __attribute__((weak)) const uint8_t _binary_index_html_gz_end[1]   = {};
+extern __attribute__((weak)) const uint8_t _binary_app_js_gz_start[1]     = {};
+extern __attribute__((weak)) const uint8_t _binary_app_js_gz_end[1]       = {};
+extern __attribute__((weak)) const uint8_t _binary_app_css_gz_start[1]    = {};
+extern __attribute__((weak)) const uint8_t _binary_app_css_gz_end[1]      = {};
+}
 
 WebUI::WebUI(ApiContext& apiCtx) : m_apiCtx(apiCtx) {}
 
@@ -28,8 +40,8 @@ esp_err_t WebUI::start() {
 
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.uri_match_fn = httpd_uri_match_wildcard;
-    config.max_uri_handlers = 23;
-    config.stack_size = 10240;
+    config.max_uri_handlers = 24;
+    config.stack_size = 8192;
     config.lru_purge_enable = true;
 
     ESP_RETURN_ON_ERROR(httpd_start(&m_serverHandle, &config), TAG, "HTTP Server start failed");
@@ -54,13 +66,14 @@ esp_err_t WebUI::start() {
         {"/api/ota/check", HTTP_POST, ApiHandlers::triggerOtaCheck, &m_apiCtx},
         {"/api/ota/install", HTTP_POST, ApiHandlers::triggerOtaInstall, &m_apiCtx},
         {"/api/ota/upload", HTTP_POST, ApiHandlers::uploadOtaBin, &m_apiCtx},
-        {"/*", HTTP_GET, staticFileGetHandler, &m_apiCtx}};
+        {"/*", HTTP_GET, staticFileGetHandler, &m_apiCtx}
+    };
 
     for (const auto& route : apiRoutes) {
         httpd_register_uri_handler(m_serverHandle, &route);
     }
 
-    ESP_LOGI(TAG, "HTTP Web Server started on port 80");
+    ESP_LOGI(TAG, "HTTP Web Server started (Embedded Static Gzip)");
     return ESP_OK;
 }
 
@@ -73,58 +86,50 @@ esp_err_t WebUI::stop() {
 }
 
 esp_err_t WebUI::staticFileGetHandler(httpd_req_t* req) {
-    char filepath[544];
-    snprintf(filepath, sizeof(filepath), "/littlefs%s", (strcmp(req->uri, "/") == 0) ? "/index.html" : req->uri);
-    if (std::string_view(req->uri).find("..") != std::string_view::npos) {
-        httpd_resp_send_err(req, HTTPD_403_FORBIDDEN, "Access Denied");
-        return ESP_FAIL;
-    }
-    struct stat st{};
-    if (stat(filepath, &st) != 0) {
-        snprintf(filepath, sizeof(filepath), "/littlefs/index.html");
-        if (stat(filepath, &st) != 0) {
-            httpd_resp_send_404(req);
-            return ESP_FAIL;
-        }
-    }
+    const std::string_view uri(req->uri);
 
-    FileHandle f(filepath, "r");
-    if (!f) {
-        httpd_resp_send_500(req);
+    if (uri.starts_with("/api/")) {
+        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "API endpoint not found");
         return ESP_FAIL;
     }
 
-    setContentTypeByFilename(req, filepath);
+    auto calcSize = [](const uint8_t* start, const uint8_t* end) noexcept -> size_t {
+        return static_cast<size_t>(reinterpret_cast<uintptr_t>(end) - reinterpret_cast<uintptr_t>(start));
+    };
 
-    char chunk[FILE_CHUNK_SIZE];
-    size_t readBytes = 0;
-    while ((readBytes = fread(chunk, 1, sizeof(chunk), f.get())) > 0) {
-        if (httpd_resp_send_chunk(req, chunk, readBytes) != ESP_OK) {
-            httpd_resp_send_chunk(req, nullptr, 0);
-            return ESP_FAIL;
-        }
+    const uint8_t* data = nullptr;
+    size_t size = 0;
+    const char* contentType = nullptr;
+    bool cacheable = false;
+
+    if (uri == "/app.js" || uri.ends_with(".js")) {
+        data = app_js_gz_start;
+        size = calcSize(app_js_gz_start, app_js_gz_end);
+        contentType = "application/javascript";
+        cacheable = true;
+    } else if (uri == "/app.css" || uri.ends_with(".css")) {
+        data = app_css_gz_start;
+        size = calcSize(app_css_gz_start, app_css_gz_end);
+        contentType = "text/css";
+        cacheable = true;
+    } else {
+        data = index_html_gz_start;
+        size = calcSize(index_html_gz_start, index_html_gz_end);
+        contentType = "text/html";
+        cacheable = false;
     }
 
-    httpd_resp_send_chunk(req, nullptr, 0);
-    return ESP_OK;
-}
+    httpd_resp_set_type(req, contentType);
+    httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
 
-void WebUI::setContentTypeByFilename(httpd_req_t* req, const char* filepath) {
-    const std::string_view path(filepath);
-    if (path.ends_with(".html"))
-        httpd_resp_set_type(req, "text/html");
-    else if (path.ends_with(".js"))
-        httpd_resp_set_type(req, "application/javascript");
-    else if (path.ends_with(".css"))
-        httpd_resp_set_type(req, "text/css");
-    else if (path.ends_with(".svg"))
-        httpd_resp_set_type(req, "image/svg+xml");
-    else if (path.ends_with(".ico"))
-        httpd_resp_set_type(req, "image/x-icon");
-    else if (path.ends_with(".json"))
-        httpd_resp_set_type(req, "application/json");
-    else
-        httpd_resp_set_type(req, "text/plain");
+    if (cacheable) {
+        httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
+        httpd_resp_set_hdr(req, "ETag", DALIMQTT_VERSION);
+    } else {
+        httpd_resp_set_hdr(req, "Cache-Control", "no-store, no-cache, must-revalidate");
+    }
+
+    return httpd_resp_send(req, reinterpret_cast<const char*>(data), size);
 }
 
 } // namespace daliMQTT
