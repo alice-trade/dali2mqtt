@@ -31,8 +31,9 @@ apiClient.interceptors.response.use(
         if (error.response && error.response.status === 401) {
             clearAuth();
             localStorage.removeItem('auth');
-            window.location.reload();
-        }
+            if (!error.config.url.includes('/api/info')) {
+                window.location.reload();
+            }        }
         return Promise.reject(error);
     }
 );

@@ -166,6 +166,7 @@ void MqttBridge::onMqttConnectedBridge(void* ctx) {
         snprintf(haStatusTopic, sizeof(haStatusTopic), "%s/status", cfg->hassDiscoveryPrefix.c_str());
         self->m_mqtt.subscribe(haStatusTopic);
     }
+    self->replayAllCachedStates();
 }
 
 void MqttBridge::onMqttDataReceivedBridge(const char* topic, const int tLen, const char* data, int dLen, void* ctx) {
@@ -496,6 +497,16 @@ void MqttBridge::handleLightCommand(std::string_view targetPath, std::string_vie
             auto [p2, ec2] = std::from_chars(grpPart.data(), grpPart.data() + grpPart.size(), groupId);
 
             if (ec1 == std::errc{} && ec2 == std::errc{} && groupId < 16) {
+                if (doc["color_temp"].is<int>()) {
+                    m_daliRegistry.setGroupColorTemp(busId, groupId, static_cast<uint16_t>(doc["color_temp"].as<int>()));
+                }
+                if (doc["color"].is<JsonObject>()) {
+                    JsonObject c = doc["color"];
+                    if (c["r"].is<int>() && c["g"].is<int>() && c["b"].is<int>()) {
+                        m_daliRegistry.setGroupRgb(busId, groupId, c["r"], c["g"], c["b"]);
+                    }
+                }
+
                 if (brightness.has_value())
                     m_daliRegistry.setGroupBrightness(busId, groupId, *brightness);
                 else if (powerState.has_value())
@@ -539,7 +550,19 @@ void MqttBridge::handleLightCommand(std::string_view targetPath, std::string_vie
     if (doc["color"].is<JsonObject>()) {
         JsonObject c = doc["color"];
         if (c["r"].is<int>() && c["g"].is<int>() && c["b"].is<int>()) {
-            m_daliRegistry.setRgb(longAddr, c["r"], c["g"], c["b"]);
+            const uint8_t r = static_cast<uint8_t>(std::clamp(c["r"].as<int>(), 0, 254));
+            const uint8_t g = static_cast<uint8_t>(std::clamp(c["g"].as<int>(), 0, 254));
+            const uint8_t b = static_cast<uint8_t>(std::clamp(c["b"].as<int>(), 0, 254));
+
+            if (c["w"].is<int>() || c["a"].is<int>() || c["f"].is<int>()) {
+                const uint8_t w = c["w"].is<int>() ? static_cast<uint8_t>(std::clamp(c["w"].as<int>(), 0, 254)) : 0xFF;
+                const uint8_t a = c["a"].is<int>() ? static_cast<uint8_t>(std::clamp(c["a"].as<int>(), 0, 254)) : 0xFF;
+                const uint8_t f = c["f"].is<int>() ? static_cast<uint8_t>(std::clamp(c["f"].as<int>(), 0, 254)) : 0xFF;
+
+                m_daliRegistry.setRgbwaf(longAddr, r, g, b, w, a, f);
+            } else {
+                m_daliRegistry.setRgb(longAddr, r, g, b);
+            }
         }
     }
 

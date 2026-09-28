@@ -31,6 +31,7 @@ struct ColorFeatures {
     std::optional<DaliRGB> currentRgb;
     bool supportsRgb{false};
     bool supportsTc{false};
+    uint8_t rgbChannels{0};
 };
 
 } // namespace daliMQTT

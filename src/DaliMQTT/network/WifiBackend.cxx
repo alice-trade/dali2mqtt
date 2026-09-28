@@ -111,16 +111,18 @@ void WifiBackend::wifiEventHandler(void* arg, esp_event_base_t eventBase, int32_
         case WIFI_EVENT_STA_START:
             esp_wifi_connect();
             break;
-        case WIFI_EVENT_STA_DISCONNECTED:
-            self->m_status.store(NetworkStatus::Disconnected);
+        case WIFI_EVENT_STA_DISCONNECTED: {
+            const auto prevStatus = self->m_status.exchange(NetworkStatus::Disconnected);
             self->m_retryCount++;
             ESP_LOGW(TAG, "Wi-Fi disconnected. Retry #%d...", self->m_retryCount);
-            if (self->m_eventQueue) {
+
+            if (prevStatus != NetworkStatus::Disconnected && self->m_eventQueue) {
                 constexpr auto ev = SystemEventType::NetworkDisconnected;
                 xQueueSend(self->m_eventQueue, &ev, 0);
             }
             esp_wifi_connect();
             break;
+        }
         default:
             break;
         }

@@ -92,7 +92,11 @@ void HomeAssistantDiscovery::publishLight(const ControlGear& gear, const ConfigS
             doc["max_mireds"] = gear.color->maxMireds.value_or(500);
         }
         if (gear.color->supportsRgb) {
-            modes.add("rgb");
+            if (gear.color->rgbChannels >= 4) {
+                modes.add("rgbw");
+            } else {
+                modes.add("rgb");
+            }
         }
     }
 
@@ -103,7 +107,7 @@ void HomeAssistantDiscovery::publishLight(const ControlGear& gear, const ConfigS
     devObj["name"] = nameBuf;
     devObj["via_device"] = config.clientId.c_str();
 
-    char payloadBuf[1024];
+    char payloadBuf[1536];
     serializeJson(doc, payloadBuf, sizeof(payloadBuf));
     m_mqtt.publish(discTopic, payloadBuf, 1, true);
 

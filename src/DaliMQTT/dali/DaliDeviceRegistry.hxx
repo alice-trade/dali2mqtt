@@ -80,7 +80,8 @@ class DaliDeviceRegistry {
     esp_err_t setRgb(DaliLongAddress_t longAddr, uint8_t r, uint8_t g, uint8_t b);
     esp_err_t setRgbwaf(DaliLongAddress_t longAddr, uint8_t r, uint8_t g, uint8_t b,
                         uint8_t w = 0xFF, uint8_t a = 0xFF, uint8_t f = 0xFF);
-    
+    esp_err_t setGroupColorTemp(uint8_t busId, uint8_t groupId, uint16_t mireds);
+    esp_err_t setGroupRgb(uint8_t busId, uint8_t groupId, uint8_t r, uint8_t g, uint8_t b);
     esp_err_t setGroupBrightness(uint8_t busId, uint8_t groupId, uint8_t level);
     esp_err_t setGroupPower(uint8_t busId, uint8_t groupId, bool on);
     esp_err_t setDeviceGroupMembership(DaliLongAddress_t longAddr, uint8_t groupId, bool assigned);
@@ -164,6 +165,7 @@ class DaliDeviceRegistry {
     etl::vector<DaliDevice, MAX_TOTAL_DEVICES> m_scanScratchpad{};
     std::array<AddressMapBlobItem, MAX_TOTAL_DEVICES> m_nvsBlobScratchpad{};
     mutable std::mutex m_snifferMutex{};
+    mutable std::mutex m_nvsWriteMutex{};
     etl::vector<DeviceStateChangeEvent, MAX_TOTAL_DEVICES> m_snifferEventsScratchpad{};
 
     DeviceStateCallback m_deviceStateCb{nullptr};

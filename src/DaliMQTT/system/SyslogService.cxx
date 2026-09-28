@@ -4,13 +4,16 @@
 #include "system/SyslogService.hxx"
 #include <cstdio>
 #include <cstring>
+#include <esp_timer.h>
 #include <lwip/netdb.h>
 #include <lwip/sockets.h>
 
 namespace daliMQTT {
 
 static constexpr char TAG[] = "Syslog";
+
 static SyslogService* g_syslogServiceInstance = nullptr;
+static vprintf_like_t g_originalVprintf = nullptr;
 
 SyslogService::SyslogService() = default;
 
@@ -19,41 +22,65 @@ SyslogService::~SyslogService() {
 }
 
 esp_err_t SyslogService::start(const char* serverAddr) {
-    if (!serverAddr || strlen(serverAddr) == 0)
+    if (!serverAddr || strlen(serverAddr) == 0 || strlen(serverAddr) >= m_serverAddr.capacity())
         return ESP_ERR_INVALID_ARG;
-    m_serverAddr = serverAddr;
 
-    g_syslogServiceInstance = this;
+    if (m_running.load()) {
+        stop();
+    }
+
+    m_serverAddr = serverAddr;
+    m_sockFd = -1;
+    m_lastConnectAttemptUs = 0;
+
     m_ringBuf = xRingbufferCreate(RING_BUFFER_SIZE, RINGBUF_TYPE_NOSPLIT);
     if (!m_ringBuf)
         return ESP_ERR_NO_MEM;
 
-    const BaseType_t res = xTaskCreate(syslogTaskRunner, "syslog_task", 4096, this, 4, &m_taskHandle);
+    m_running.store(true);
+    g_syslogServiceInstance = this;
+    TaskHandle_t createdTask = nullptr;
+
+    const BaseType_t res = xTaskCreate(syslogTaskRunner, "syslog_task", 4096, this, 4, &createdTask);
     if (res != pdPASS) {
+        m_running.store(false);
+        g_syslogServiceInstance = nullptr;
         vRingbufferDelete(m_ringBuf);
         m_ringBuf = nullptr;
-        g_syslogServiceInstance = nullptr;
         return ESP_FAIL;
     }
+    m_taskHandle.store(createdTask);
 
-    m_originalVprintf = esp_log_set_vprintf(&syslogVprintfHook);
-    ESP_LOGI(TAG, "Remote Syslog logging started -> %s:514", m_serverAddr.c_str());
+    g_originalVprintf = esp_log_set_vprintf(&syslogVprintfHook);
+    ESP_LOGI(TAG, "Remote Syslog logging initialized -> %s:514", m_serverAddr.c_str());
     return ESP_OK;
 }
 
 void SyslogService::stop() {
-    g_syslogServiceInstance = nullptr;
-
-    if (m_originalVprintf) {
-        esp_log_set_vprintf(m_originalVprintf);
-        m_originalVprintf = nullptr;
+    if (!m_running.exchange(false)) {
+        return;
     }
 
-    vTaskDelay(pdMS_TO_TICKS(20));
+    if (g_originalVprintf) {
+        esp_log_set_vprintf(g_originalVprintf);
+        g_originalVprintf = nullptr;
+    }
+    g_syslogServiceInstance = nullptr;
 
-    if (m_taskHandle) {
-        vTaskDelete(m_taskHandle);
-        m_taskHandle = nullptr;
+    vTaskDelay(pdMS_TO_TICKS(30));
+
+    if (m_taskHandle.load() != nullptr) {
+        constexpr char dummy = '\0';
+        xRingbufferSend(m_ringBuf, &dummy, 1, 0);
+
+        for (int i = 0; i < 30 && m_taskHandle.load() != nullptr; ++i) {
+            vTaskDelay(pdMS_TO_TICKS(10));
+        }
+
+        if (TaskHandle_t task = m_taskHandle.load()) {
+            vTaskDelete(task);
+            m_taskHandle.store(nullptr);
+        }
     }
 
     if (m_ringBuf) {
@@ -70,58 +97,89 @@ void SyslogService::stop() {
 
 int SyslogService::syslogVprintfHook(const char* format, va_list args) {
     int ret = 0;
-
-    if (g_syslogServiceInstance && g_syslogServiceInstance->m_originalVprintf) {
+    if (g_originalVprintf) {
         va_list cpy;
         va_copy(cpy, args);
-        ret = g_syslogServiceInstance->m_originalVprintf(format, cpy);
+        ret = g_originalVprintf(format, cpy);
         va_end(cpy);
     }
 
-    if (!g_syslogServiceInstance || !g_syslogServiceInstance->m_ringBuf)
+    const auto* inst = g_syslogServiceInstance;
+    if (!inst || !inst->m_running.load(std::memory_order_relaxed) || !inst->m_ringBuf)
         return ret;
 
     if (xPortInIsrContext())
         return ret;
 
-    if (xTaskGetCurrentTaskHandle() == g_syslogServiceInstance->m_taskHandle)
+    if (xTaskGetCurrentTaskHandle() == inst->m_taskHandle.load(std::memory_order_relaxed))
         return ret;
 
     char msgBuf[MAX_LOG_PAYLOAD];
     const int len = vsnprintf(msgBuf, sizeof(msgBuf), format, args);
     if (len > 0) {
         const size_t actualLen = (static_cast<size_t>(len) < sizeof(msgBuf)) ? len : (sizeof(msgBuf) - 1);
-        xRingbufferSend(g_syslogServiceInstance->m_ringBuf, msgBuf, actualLen, 0);
+        xRingbufferSend(inst->m_ringBuf, msgBuf, actualLen, 0);
     }
     return ret;
 }
 
 void SyslogService::syslogTaskRunner(void* arg) {
-    static_cast<SyslogService*>(arg)->syslogWorkerLoop();
+    auto* self = static_cast<SyslogService*>(arg);
+    self->syslogWorkerLoop();
+    self->m_taskHandle.store(nullptr);
+    vTaskDelete(nullptr);
 }
 
-[[noreturn]] void SyslogService::syslogWorkerLoop() {
-    struct addrinfo hints{};
-    hints.ai_family = AF_INET;
-    hints.ai_socktype = SOCK_DGRAM;
-    struct addrinfo* res = nullptr;
-
-    if (getaddrinfo(m_serverAddr.c_str(), "514", &hints, &res) == 0 && res != nullptr) {
-        std::lock_guard<std::mutex> lock(m_socketMutex);
-        m_sockFd = socket(res->ai_family, res->ai_socktype, 0);
-        if (m_sockFd >= 0) {
-            connect(m_sockFd, res->ai_addr, res->ai_addrlen);
-        }
-        freeaddrinfo(res);
+bool SyslogService::ensureSocketConnected() {
+    std::lock_guard<std::mutex> lock(m_socketMutex);
+    if (m_sockFd >= 0) {
+        return true;
     }
 
-    size_t itemSize = 0;
-    while (true) {
-        char* item = static_cast<char*>(xRingbufferReceive(m_ringBuf, &itemSize, portMAX_DELAY));
-        if (item != nullptr) {
-            sendUdpPacket(item, itemSize);
-            vRingbufferReturnItem(m_ringBuf, item);
+    const int64_t now = esp_timer_get_time();
+    if (now - m_lastConnectAttemptUs < RECONNECT_INTERVAL_US) {
+        return false;
+    }
+    m_lastConnectAttemptUs = now;
+
+    addrinfo hints{};
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_DGRAM;
+    addrinfo* res = nullptr;
+
+    if (getaddrinfo(m_serverAddr.c_str(), "514", &hints, &res) != 0 || res == nullptr) {
+        return false;
+    }
+
+    m_sockFd = socket(res->ai_family, res->ai_socktype, 0);
+    if (m_sockFd >= 0) {
+        constexpr timeval tv{.tv_sec = 0, .tv_usec = 100'000};
+        setsockopt(m_sockFd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+
+        if (connect(m_sockFd, res->ai_addr, res->ai_addrlen) != 0) {
+            close(m_sockFd);
+            m_sockFd = -1;
         }
+    }
+    freeaddrinfo(res);
+    return m_sockFd >= 0;
+}
+
+void SyslogService::syslogWorkerLoop() {
+    size_t itemSize = 0;
+
+    while (m_running.load(std::memory_order_relaxed)) {
+        const auto item = static_cast<char*>(xRingbufferReceive(m_ringBuf, &itemSize, pdMS_TO_TICKS(100)));
+        if (!item) {
+            continue;
+        }
+
+        if (itemSize > 0 && item[0] != '\0') {
+            if (ensureSocketConnected()) {
+                sendUdpPacket(item, itemSize);
+            }
+        }
+        vRingbufferReturnItem(m_ringBuf, item);
     }
 }
 
@@ -145,7 +203,11 @@ void SyslogService::sendUdpPacket(const char* msg, size_t len) {
     const size_t copyLen = (len < maxPayload) ? len : maxPayload;
 
     memcpy(packetBuf + headerLen, msg, copyLen);
-    send(m_sockFd, packetBuf, headerLen + copyLen, 0);
+
+    if (send(m_sockFd, packetBuf, headerLen + copyLen, 0) < 0) {
+        close(m_sockFd);
+        m_sockFd = -1;
+    }
 }
 
 } // namespace daliMQTT

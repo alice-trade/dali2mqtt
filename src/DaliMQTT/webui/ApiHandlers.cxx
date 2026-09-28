@@ -281,8 +281,7 @@ esp_err_t ApiHandlers::scanDaliBus(httpd_req_t* req) {
         return ESP_FAIL;
 
     auto expected = DaliOperationStatus::Idle;
-    if (!g_daliStatus.compare_exchange_strong(expected, DaliOperationStatus::Scanning,
-                                              std::memory_order_acq_rel)) {
+    if (!g_daliStatus.compare_exchange_strong(expected, DaliOperationStatus::Scanning, std::memory_order_acq_rel)) {
         httpd_resp_set_status(req, "409 Conflict");
         httpd_resp_send(req, "Operation in progress", HTTPD_RESP_USE_STRLEN);
         return ESP_OK;
@@ -314,22 +313,28 @@ esp_err_t ApiHandlers::initializeDaliBus(httpd_req_t* req) {
     if (checkAuth(req, ctx) != ESP_OK)
         return ESP_FAIL;
 
-    if (g_daliStatus.load() != DaliOperationStatus::Idle) {
+    auto expected = DaliOperationStatus::Idle;
+    if (!g_daliStatus.compare_exchange_strong(expected, DaliOperationStatus::Initializing, std::memory_order_acq_rel)) {
         httpd_resp_set_status(req, "409 Conflict");
         httpd_resp_send(req, "Operation in progress", HTTPD_RESP_USE_STRLEN);
         return ESP_OK;
     }
 
-    g_daliStatus.store(DaliOperationStatus::Initializing);
-    xTaskCreate(
+    const BaseType_t ret = xTaskCreate(
         [](void* arg) {
             const auto* c = static_cast<ApiContext*>(arg);
             c->daliRegistry.commissionNewDevices();
             c->daliRegistry.refreshGroupAssignmentsFromBus();
-            g_daliStatus.store(DaliOperationStatus::Idle);
+            g_daliStatus.store(DaliOperationStatus::Idle, std::memory_order_release);
             vTaskDelete(nullptr);
         },
         "web_init", 4096, ctx, 4, nullptr);
+
+    if (ret != pdPASS) {
+        g_daliStatus.store(DaliOperationStatus::Idle, std::memory_order_release);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Task creation failed");
+        return ESP_FAIL;
+    }
 
     httpd_resp_set_status(req, "202 Accepted");
     httpd_resp_send(req, R"({"status":"ok","message":"Commissioning initiated"})", HTTPD_RESP_USE_STRLEN);
@@ -341,22 +346,28 @@ esp_err_t ApiHandlers::initializeDaliInputs(httpd_req_t* req) {
     if (checkAuth(req, ctx) != ESP_OK)
         return ESP_FAIL;
 
-    if (g_daliStatus.load() != DaliOperationStatus::Idle) {
+    auto expected = DaliOperationStatus::Idle;
+    if (!g_daliStatus.compare_exchange_strong(expected, DaliOperationStatus::Initializing, std::memory_order_acq_rel)) {
         httpd_resp_set_status(req, "409 Conflict");
         httpd_resp_send(req, "Operation in progress", HTTPD_RESP_USE_STRLEN);
         return ESP_OK;
     }
 
-    g_daliStatus.store(DaliOperationStatus::Initializing);
-    xTaskCreate(
+    const BaseType_t ret = xTaskCreate(
         [](void* arg) {
             auto* c = static_cast<ApiContext*>(arg);
             c->daliRegistry.commission24BitDevices();
             c->daliRegistry.refreshGroupAssignmentsFromBus();
-            g_daliStatus.store(DaliOperationStatus::Idle);
+            g_daliStatus.store(DaliOperationStatus::Idle, std::memory_order_release);
             vTaskDelete(nullptr);
         },
         "web_inp_init", 4096, ctx, 4, nullptr);
+
+    if (ret != pdPASS) {
+        g_daliStatus.store(DaliOperationStatus::Idle, std::memory_order_release);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Task creation failed");
+        return ESP_FAIL;
+    }
 
     httpd_resp_set_status(req, "202 Accepted");
     httpd_resp_send(req, R"({"status":"ok","message":"Input device commissioning initiated"})", HTTPD_RESP_USE_STRLEN);
@@ -640,10 +651,12 @@ esp_err_t ApiHandlers::uploadOtaBin(httpd_req_t* req) {
     if (err == ESP_OK) {
         httpd_resp_send(req, R"({"status":"ok","message":"Flash complete. Rebooting..."})", HTTPD_RESP_USE_STRLEN);
 
-        xTaskCreate([](void*) {
-            vTaskDelay(pdMS_TO_TICKS(1500));
-            esp_restart();
-        }, "ota_rst", 2048, nullptr, 5, nullptr);
+        xTaskCreate(
+            [](void*) {
+                vTaskDelay(pdMS_TO_TICKS(1500));
+                esp_restart();
+            },
+            "ota_rst", 2048, nullptr, 5, nullptr);
         return ESP_OK;
     } else {
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Flash write failed or rejected");

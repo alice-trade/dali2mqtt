@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cstring>
 #include <esp_crt_bundle.h>
+#include <esp_app_format.h>
 #include <esp_http_client.h>
 #include <esp_https_ota.h>
 #include <esp_ota_ops.h>
@@ -50,7 +51,7 @@ esp_err_t OtaService::startUpdate(const char* url) {
 
     m_status.store(OtaStatus::InProgress);
 
-    const BaseType_t res = xTaskCreate(otaTaskRunner, "ota_worker", 8192, this, 4, &m_taskHandle);
+    const BaseType_t res = xTaskCreate(otaTaskRunner, "ota_worker", 10240, this, 4, &m_taskHandle);
     if (res != pdPASS) {
         ESP_LOGE(TAG, "Failed to create OTA task");
         m_isUpdating.store(false);
@@ -133,7 +134,7 @@ esp_err_t OtaService::checkForUpdateAsync(const char* manifestUrl) {
         return ESP_ERR_INVALID_ARG;
 
     m_targetUrl = manifestUrl;
-    xTaskCreate(versionCheckTaskRunner, "ota_ver_chk", 5120, this, 3, nullptr);
+    xTaskCreate(versionCheckTaskRunner, "ota_ver_chk", 10240, this, 3, nullptr);
     return ESP_OK;
 }
 
@@ -255,6 +256,32 @@ esp_err_t OtaService::processStreamUpdate(OtaStreamReaderFn readFn, void* userCt
         m_isUpdating.store(false);
         notifyProgress(OtaStatus::Failed, 0, "Invalid binary magic");
         return ESP_ERR_INVALID_ARG;
+    }
+
+    const auto* imgHeader = reinterpret_cast<const esp_image_header_t*>(chunkBuf);
+    if (imgHeader->magic != ESP_IMAGE_HEADER_MAGIC) {
+        ESP_LOGE(TAG, "Aborted: Invalid magic number 0x%02X", imgHeader->magic);
+        m_isUpdating.store(false);
+        return ESP_ERR_INVALID_ARG;
+    }
+
+#if CONFIG_IDF_TARGET_ESP32
+    constexpr esp_chip_id_t EXPECTED_CHIP = ESP_CHIP_ID_ESP32;
+#elif CONFIG_IDF_TARGET_ESP32S3
+    constexpr esp_chip_id_t EXPECTED_CHIP = ESP_CHIP_ID_ESP32S3;
+#elif CONFIG_IDF_TARGET_ESP32C6
+    constexpr esp_chip_id_t EXPECTED_CHIP = ESP_CHIP_ID_ESP32C6;
+#elif CONFIG_IDF_TARGET_ESP32C3
+    constexpr esp_chip_id_t EXPECTED_CHIP = ESP_CHIP_ID_ESP32C3;
+#else
+    constexpr esp_chip_id_t EXPECTED_CHIP = ESP_CHIP_ID_INVALID;
+#endif
+
+    if (EXPECTED_CHIP != ESP_CHIP_ID_INVALID && imgHeader->chip_id != EXPECTED_CHIP) {
+        ESP_LOGE(TAG, "Binary chip ID (0x%04X) mismatch! Running chip ID: 0x%04X", imgHeader->chip_id, EXPECTED_CHIP);
+        m_isUpdating.store(false);
+        notifyProgress(OtaStatus::Failed, 0, "Wrong chip architecture");
+        return ESP_ERR_INVALID_VERSION;
     }
 
     const esp_partition_t* updatePart = esp_ota_get_next_update_partition(nullptr);

@@ -59,8 +59,7 @@ inline size_t RmtDaliTransceiver::encodeManchester(const uint32_t data, const ui
     }
 
     // Stop condition: Idle for 4 Te
-    m_txBuffer[symIdx++] = makeSymbol(Timing::T_TE_US * 2, Timing::LEVEL_IDLE,
-                                     Timing::T_TE_US * 2, Timing::LEVEL_IDLE);
+    m_txBuffer[symIdx++] = makeSymbol(Timing::T_TE_US * 2, Timing::LEVEL_IDLE, Timing::T_TE_US * 2, Timing::LEVEL_IDLE);
 
     return symIdx;
 }
@@ -95,15 +94,14 @@ inline void RmtDaliTransceiver::decodeSymbols(const rmt_symbol_word_t* symbols, 
 
             const uint32_t n = (dur + (Timing::T_TE_US / 2)) / Timing::T_TE_US;
 
-            if (n == 1) {
-                halfBits[hbCount++] = lvl;
-            } else if (n == 2) {
-                if (hbCount + 1 < MAX_HALF_BITS) {
-                    halfBits[hbCount++] = lvl;
-                    halfBits[hbCount++] = lvl;
-                } else {
+            if (n == 1 || n == 2) {
+                if (hbCount + n > MAX_HALF_BITS) {
                     stopConditionFound = true;
                     break;
+                }
+                halfBits[hbCount++] = lvl;
+                if (n == 2) {
+                    halfBits[hbCount++] = lvl;
                 }
             } else if (n >= 3) {
                 if (lvl == Timing::LEVEL_IDLE) {
@@ -137,7 +135,7 @@ inline void RmtDaliTransceiver::decodeSymbols(const rmt_symbol_word_t* symbols, 
     if (stopConditionFound && ((hbCount - startIdx) % 2 != 0) && hbCount < MAX_HALF_BITS) {
         halfBits[hbCount++] = Timing::LEVEL_IDLE;
     }
-    
+
     if ((hbCount - startIdx) < 18) {
         m_txState.active = false;
         dispatchFrame(DaliFrameType::NoiseCorrupted, 0, 0);
