@@ -38,6 +38,14 @@ target_include_directories(DaliMQTT-Core PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
 )
 
+target_sources(DaliMQTT-Core PRIVATE
+                utils/DaliLongAddrConversions.hxx
+                utils/NvsHandle.hxx
+                utils/DaliNamingUtils.hxx
+                utils/DaliSensorMath.hxx
+                utils/Arena.hxx
+)
+
 add_subdirectory(system)
 add_subdirectory(dali)
 add_subdirectory(mqtt)

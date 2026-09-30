@@ -267,12 +267,18 @@ esp_err_t OtaService::processStreamUpdate(OtaStreamReaderFn readFn, void* userCt
 
 #if CONFIG_IDF_TARGET_ESP32
     constexpr esp_chip_id_t EXPECTED_CHIP = ESP_CHIP_ID_ESP32;
+#elif CONFIG_IDF_TARGET_ESP32S2
+    constexpr esp_chip_id_t EXPECTED_CHIP = ESP_CHIP_ID_ESP32S2;
 #elif CONFIG_IDF_TARGET_ESP32S3
     constexpr esp_chip_id_t EXPECTED_CHIP = ESP_CHIP_ID_ESP32S3;
 #elif CONFIG_IDF_TARGET_ESP32C6
     constexpr esp_chip_id_t EXPECTED_CHIP = ESP_CHIP_ID_ESP32C6;
 #elif CONFIG_IDF_TARGET_ESP32C3
     constexpr esp_chip_id_t EXPECTED_CHIP = ESP_CHIP_ID_ESP32C3;
+#elif CONFIG_IDF_TARGET_ESP32C5
+    constexpr esp_chip_id_t EXPECTED_CHIP = ESP_CHIP_ID_ESP32C5;
+#elif CONFIG_IDF_TARGET_ESP32P4
+    constexpr esp_chip_id_t EXPECTED_CHIP = ESP_CHIP_ID_ESP32P4;
 #else
     constexpr esp_chip_id_t EXPECTED_CHIP = ESP_CHIP_ID_INVALID;
 #endif
