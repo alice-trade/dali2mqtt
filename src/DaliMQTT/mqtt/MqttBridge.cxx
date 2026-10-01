@@ -46,12 +46,14 @@ esp_err_t MqttBridge::start() {
     m_mqtt.setDataCallback(&onMqttDataReceivedBridge, this);
 
     if (!m_taskHandle) {
-        const BaseType_t res = xTaskCreate(bridgeTaskRunner, "mqtt_bridge_task", 6144, this, 6, &m_taskHandle);
-        if (res != pdPASS) {
+        m_taskHandle = xTaskCreateStatic(bridgeTaskRunner, "mqtt_bridge_task", BRIDGE_TASK_STACK_SIZE, this, 6,
+                                         m_bridgeTaskStack, &m_bridgeTaskBuffer);
+        if (!m_taskHandle) {
             ESP_LOGE(TAG, "Failed to start bridge worker task");
             return ESP_ERR_NO_MEM;
         }
     }
+
     ESP_LOGI(TAG, "MQTT Bridge initialized (Base Topic: %s)", m_baseTopic.c_str());
     return ESP_OK;
 }
@@ -182,7 +184,8 @@ void MqttBridge::onDaliDeviceStateChanged(const DeviceStateChangeEvent& event, v
 }
 
 void MqttBridge::publishDeviceStateInternal(const DeviceStateChangeEvent& event) const {
-    if (!m_mqtt.isConnected()) return;
+    if (!m_mqtt.isConnected())
+        return;
 
     const auto addrStr = utils::longAddressToString(event.longAddress);
 
@@ -211,10 +214,10 @@ void MqttBridge::publishDeviceStateInternal(const DeviceStateChangeEvent& event)
     m_mqtt.publish(topic, payload, 0, false);
 }
 
-
 void MqttBridge::onDaliGroupStateChanged(const GroupStateChangeEvent& event, void* ctx) {
     const auto* self = static_cast<MqttBridge*>(ctx);
-    if (!self->m_mqtt.isConnected()) return;
+    if (!self->m_mqtt.isConnected())
+        return;
 
     char topic[128];
     snprintf(topic, sizeof(topic), "%s/light/bus/%d/group/%d/state", self->m_baseTopic.c_str(), event.busId,
@@ -298,7 +301,8 @@ void MqttBridge::replayAllCachedStates() const {
 
 void MqttBridge::onDaliInputEvent(const InputDeviceEvent& event, void* ctx) {
     const auto* self = static_cast<MqttBridge*>(ctx);
-    if (!self->m_mqtt.isConnected()) return;
+    if (!self->m_mqtt.isConnected())
+        return;
     auto typeStr = "short";
     char addrStr[16];
 
@@ -498,7 +502,8 @@ void MqttBridge::handleLightCommand(std::string_view targetPath, std::string_vie
 
             if (ec1 == std::errc{} && ec2 == std::errc{} && groupId < 16) {
                 if (doc["color_temp"].is<int>()) {
-                    m_daliRegistry.setGroupColorTemp(busId, groupId, static_cast<uint16_t>(doc["color_temp"].as<int>()));
+                    m_daliRegistry.setGroupColorTemp(busId, groupId,
+                                                     static_cast<uint16_t>(doc["color_temp"].as<int>()));
                 }
                 if (doc["color"].is<JsonObject>()) {
                     JsonObject c = doc["color"];

@@ -20,11 +20,7 @@
 namespace daliMQTT {
 
 using BusSnifferCallback = void (*)(const DaliRawFrame& frame, uint8_t busId, void* userCtx);
-enum class BusHealth : uint8_t {
-    Ok,
-    ShortCircuit,
-    HardwareFault
-};
+enum class BusHealth : uint8_t { Ok, ShortCircuit, HardwareFault };
 
 class DaliBusEngine {
   public:
@@ -36,11 +32,12 @@ class DaliBusEngine {
 
     esp_err_t start();
 
- inline esp_err_t sendDAPC(DaliAddressType type, uint8_t addr, uint8_t level) const;
+    inline esp_err_t sendDAPC(DaliAddressType type, uint8_t addr, uint8_t level) const;
     inline esp_err_t sendGearCommand(DaliAddressType type, uint8_t addr, OpCode opcode, bool sendTwice = false) const;
     inline esp_err_t sendGearSpecial(SpecialOpCode opcode, uint8_t data, bool sendTwice = false) const;
     inline esp_err_t sendDeviceCommand(uint8_t shortAddr, uint8_t opcode, bool sendTwice = false) const;
-    inline esp_err_t sendInstanceCommand(uint8_t shortAddr, uint8_t instance, uint8_t opcode, bool sendTwice = false) const;
+    inline esp_err_t sendInstanceCommand(uint8_t shortAddr, uint8_t instance, uint8_t opcode,
+                                         bool sendTwice = false) const;
     inline esp_err_t sendDeviceSpecial(uint8_t specialOp, uint8_t data, bool sendTwice = false) const;
 
     inline std::optional<uint8_t> queryGear(DaliAddressType type, uint8_t addr, OpCode opcode) const;
@@ -48,7 +45,8 @@ class DaliBusEngine {
     inline std::optional<uint8_t> queryDevice(uint8_t shortAddr, uint8_t opcode) const;
     inline std::optional<uint8_t> queryInstance(uint8_t shortAddr, uint8_t instance, uint8_t opcode) const;
     std::optional<uint8_t> queryRaw(uint32_t rawData, uint8_t bits = 16) const;
-    bool readMemoryBlock(uint8_t shortAddr, uint8_t bank, uint8_t startOffset, uint8_t* outBuffer, uint8_t length) const;
+    bool readMemoryBlock(uint8_t shortAddr, uint8_t bank, uint8_t startOffset, uint8_t* outBuffer,
+                         uint8_t length) const;
     inline esp_err_t setDtr0(uint8_t value) const;
     inline esp_err_t setDtr1(uint8_t value) const;
     inline esp_err_t setDtr2(uint8_t value) const;
@@ -108,6 +106,10 @@ class DaliBusEngine {
 
     BusSnifferCallback m_snifferCb{nullptr};
     void* m_snifferCtx{nullptr};
+
+    static constexpr size_t BUS_ENG_STACK_SIZE = 4096 / sizeof(StackType_t);
+    StackType_t m_workerStack[BUS_ENG_STACK_SIZE]{};
+    StaticTask_t m_workerTaskBuffer{};
 
     mutable std::atomic<uint16_t> m_nextToken{1};
     std::atomic<bool> m_running{false};

@@ -40,8 +40,9 @@ esp_err_t DaliBusEngine::start() {
 
     m_transceiver.setFrameCallback(onPhyFrameReceived, this);
 
-    const BaseType_t ret = xTaskCreate(busWorkerTaskRunner, "dali_bus_eng", 4096, this, 8, &m_workerTaskHandle);
-    if (ret != pdPASS) {
+    m_workerTaskHandle = xTaskCreateStatic(busWorkerTaskRunner, "dali_bus_eng", BUS_ENG_STACK_SIZE, this, 8,
+                                           m_workerStack, &m_workerTaskBuffer);
+    if (!m_workerTaskHandle) {
         ESP_LOGE(TAG, "Failed to create bus worker task");
         return ESP_ERR_NO_MEM;
     }

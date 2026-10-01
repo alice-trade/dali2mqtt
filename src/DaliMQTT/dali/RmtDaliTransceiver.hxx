@@ -94,6 +94,10 @@ class RmtDaliTransceiver {
     PhyFrameCallback m_frameCb{nullptr};
     void* m_frameCbCtx{nullptr};
 
+    static constexpr size_t PHY_TASK_STACK_SIZE = 3584 / sizeof(StackType_t);
+    StackType_t m_taskStack[PHY_TASK_STACK_SIZE]{};
+    StaticTask_t m_taskBuffer{};
+
     TxEchoState m_txState{};
     int64_t m_lastBusActivityUs{0};
     std::atomic<bool> m_initialized{false};

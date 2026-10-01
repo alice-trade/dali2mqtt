@@ -102,6 +102,10 @@ class MqttBridge {
     etl::string<64> m_baseTopic{"dali_bridge"};
     QueueHandle_t m_cmdQueue{nullptr};
     TaskHandle_t m_taskHandle{nullptr};
+
+    static constexpr size_t BRIDGE_TASK_STACK_SIZE = 6144 / sizeof(StackType_t);
+    StackType_t m_bridgeTaskStack[BRIDGE_TASK_STACK_SIZE]{};
+    StaticTask_t m_bridgeTaskBuffer{};
 };
 
 } // namespace daliMQTT

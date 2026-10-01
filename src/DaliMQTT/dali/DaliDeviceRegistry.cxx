@@ -39,8 +39,9 @@ esp_err_t DaliDeviceRegistry::init() {
 
 void DaliDeviceRegistry::start() {
     if (!m_pollTaskHandle) {
-        xTaskCreate(pollTaskRunner, "dali_poll_task", CONFIG_DALI2MQTT_DALI_POLL_TASK_STACK_SIZE, this,
-                    CONFIG_DALI2MQTT_DALI_POLL_TASK_PRIORITY, &m_pollTaskHandle);
+        m_pollTaskHandle =
+            xTaskCreateStatic(pollTaskRunner, "dali_poll_task", POLL_TASK_STACK_SIZE, this,
+                              CONFIG_DALI2MQTT_DALI_POLL_TASK_PRIORITY, m_pollTaskStack, &m_pollTaskBuffer);
     }
 }
 
@@ -504,8 +505,7 @@ esp_err_t DaliDeviceRegistry::setRgbwaf(const DaliLongAddress_t longAddr, const 
     return err;
 }
 
-esp_err_t DaliDeviceRegistry::setGroupColorTemp(const uint8_t busId, const uint8_t groupId,
-                                                const uint16_t mireds) {
+esp_err_t DaliDeviceRegistry::setGroupColorTemp(const uint8_t busId, const uint8_t groupId, const uint16_t mireds) {
     if (groupId >= 16 || busId >= BUS_COUNT)
         return ESP_ERR_INVALID_ARG;
 
@@ -552,8 +552,8 @@ esp_err_t DaliDeviceRegistry::setGroupColorTemp(const uint8_t busId, const uint8
     return err;
 }
 
-esp_err_t DaliDeviceRegistry::setGroupRgb(const uint8_t busId, const uint8_t groupId,
-                                          const uint8_t r, const uint8_t g, const uint8_t b) {
+esp_err_t DaliDeviceRegistry::setGroupRgb(const uint8_t busId, const uint8_t groupId, const uint8_t r, const uint8_t g,
+                                          const uint8_t b) {
     if (groupId >= 16 || busId >= BUS_COUNT)
         return ESP_ERR_INVALID_ARG;
 
@@ -1102,10 +1102,10 @@ void DaliDeviceRegistry::commissionNewDevices() {
     ESP_LOGI(TAG, "Starting DALI Commissioning (Control Gear)...");
     ScanCommissionGuard guard(m_scanCommissionActive, m_bus);
 
-    m_bus.sendDeviceCommand(0xFF, 0x1D, true);
-    vTaskDelay(pdMS_TO_TICKS(50));
+    QuiescentModeGuard quiescentGuard(m_bus);
     m_bus.sendDeviceSpecial(0x00, 0x00, false);
     vTaskDelay(pdMS_TO_TICKS(50));
+
     std::bitset<64> occupiedAddresses;
     for (uint8_t sa = 0; sa < 64; ++sa) {
         if (m_bus.queryGear(DaliAddressType::Short, sa, OpCode::QueryControlGear).has_value()) {
@@ -1183,7 +1183,6 @@ void DaliDeviceRegistry::commissionNewDevices() {
 
     ESP_LOGI(TAG, "Commissioning complete. Newly assigned devices: %u", newlyAssignedCount);
     scanBus();
-    m_bus.sendDeviceCommand(0xFF, 0x1E, true);
 }
 
 void DaliDeviceRegistry::commission24BitDevices() {

@@ -63,8 +63,9 @@ esp_err_t RmtDaliTransceiver::init(const RmtTransceiverConfig& config) {
     ESP_RETURN_ON_ERROR(setupTx(), TAG, "TX init failed");
     ESP_RETURN_ON_ERROR(setupRx(), TAG, "RX init failed");
 
-    const BaseType_t ret = xTaskCreate(taskRunner, "rmt_dali_phy", 3584, this, 10, &m_taskHandle);
-    if (ret != pdPASS) {
+    m_taskHandle =
+        xTaskCreateStatic(taskRunner, "rmt_dali_phy", PHY_TASK_STACK_SIZE, this, 10, m_taskStack, &m_taskBuffer);
+    if (!m_taskHandle) {
         ESP_LOGE(TAG, "Failed to create FreeRTOS task");
         return ESP_ERR_NO_MEM;
     }
@@ -230,14 +231,9 @@ void RmtDaliTransceiver::taskRunner(void* arg) {
                     m_txState.startTs = currentNowUs;
 
                     const size_t symCount = encodeManchester(txMsg.data, txMsg.bits);
-                    rmt_transmit_config_t txConf = {
-                        .loop_count = 0,
-                        .flags = {
-                            .eot_level = Timing::LEVEL_IDLE
-                        }
-                    };
+                    rmt_transmit_config_t txConf = {.loop_count = 0, .flags = {.eot_level = Timing::LEVEL_IDLE}};
                     const esp_err_t txErr = rmt_transmit(m_txChannel, m_copyEncoder, m_txBuffer,
-                                      symCount * sizeof(rmt_symbol_word_t), &txConf);
+                                                         symCount * sizeof(rmt_symbol_word_t), &txConf);
                     if (txErr != ESP_OK) {
                         ESP_LOGE(TAG, "RMT transmit hardware error: %s", esp_err_to_name(txErr));
                         m_txState.active = false;

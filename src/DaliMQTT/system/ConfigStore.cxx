@@ -178,6 +178,14 @@ esp_err_t ConfigStore::factoryReset() {
             nvs_commit(namesNvs.get());
         }
     }
+    {
+        const NvsHandle regNvs(CONFIG_DALI2MQTT_NVS_DALI_NAMESPACE, NVS_READWRITE);
+        if (regNvs) {
+            nvs_erase_all(regNvs.get());
+            nvs_commit(regNvs.get());
+            ESP_LOGI(TAG, "DALI device registry namespace ('%s') erased.", CONFIG_DALI2MQTT_NVS_DALI_NAMESPACE);
+        }
+    }
 
     if (err == ESP_OK) {
         m_config = std::make_shared<ConfigStructure>(makeDefaultConfig());

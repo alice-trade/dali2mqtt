@@ -78,8 +78,8 @@ class DaliDeviceRegistry {
     esp_err_t setPower(DaliLongAddress_t longAddr, bool on);
     esp_err_t setColorTemp(DaliLongAddress_t longAddr, uint16_t mireds);
     esp_err_t setRgb(DaliLongAddress_t longAddr, uint8_t r, uint8_t g, uint8_t b);
-    esp_err_t setRgbwaf(DaliLongAddress_t longAddr, uint8_t r, uint8_t g, uint8_t b,
-                        uint8_t w = 0xFF, uint8_t a = 0xFF, uint8_t f = 0xFF);
+    esp_err_t setRgbwaf(DaliLongAddress_t longAddr, uint8_t r, uint8_t g, uint8_t b, uint8_t w = 0xFF, uint8_t a = 0xFF,
+                        uint8_t f = 0xFF);
     esp_err_t setGroupColorTemp(uint8_t busId, uint8_t groupId, uint16_t mireds);
     esp_err_t setGroupRgb(uint8_t busId, uint8_t groupId, uint8_t r, uint8_t g, uint8_t b);
     esp_err_t setGroupBrightness(uint8_t busId, uint8_t groupId, uint8_t level);
@@ -122,14 +122,34 @@ class DaliDeviceRegistry {
     struct ScanCommissionGuard {
         std::atomic<bool>& flag;
         DaliBusLock busLock;
-        ScanCommissionGuard(std::atomic<bool>& f, const DaliBusEngine& bus)
-            : flag(f), busLock(bus) {
+        ScanCommissionGuard(std::atomic<bool>& f, const DaliBusEngine& bus) : flag(f), busLock(bus) {
             flag.store(true, std::memory_order_release);
         }
-        ~ScanCommissionGuard() {
-            flag.store(false, std::memory_order_release);
-        }
+        ~ScanCommissionGuard() { flag.store(false, std::memory_order_release); }
     };
+
+    struct QuiescentModeGuard {
+        DaliBusEngine& bus;
+        bool active{false};
+
+        explicit QuiescentModeGuard(DaliBusEngine& b) : bus(b) {
+            if (bus.sendDeviceCommand(0xFF, 0x1D, true) == ESP_OK) {
+                active = true;
+                vTaskDelay(pdMS_TO_TICKS(50));
+            }
+        }
+
+        ~QuiescentModeGuard() {
+            if (active) {
+                bus.sendDeviceCommand(0xFF, 0x1E, true);
+                vTaskDelay(pdMS_TO_TICKS(50));
+            }
+        }
+
+        QuiescentModeGuard(const QuiescentModeGuard&) = delete;
+        QuiescentModeGuard& operator=(const QuiescentModeGuard&) = delete;
+    };
+
     StaticMetadata queryDeviceMetadataFromBus(uint8_t shortAddr) const;
 
     static void snifferCallbackEntry(const DaliRawFrame& frame, uint8_t busId, void* ctx);
@@ -185,6 +205,10 @@ class DaliDeviceRegistry {
     uint8_t m_roundRobinIndex{0};
     bool m_nvsDirty{false};
     int64_t m_lastNvsDirtyTsMs{0};
+
+    static constexpr size_t POLL_TASK_STACK_SIZE = CONFIG_DALI2MQTT_DALI_POLL_TASK_STACK_SIZE / sizeof(StackType_t);
+    StackType_t m_pollTaskStack[POLL_TASK_STACK_SIZE]{};
+    StaticTask_t m_pollTaskBuffer{};
 };
 
 } // namespace daliMQTT
