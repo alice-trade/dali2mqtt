@@ -44,6 +44,7 @@ target_sources(DaliMQTT-Core PRIVATE
                 utils/DaliNamingUtils.hxx
                 utils/DaliSensorMath.hxx
                 utils/Arena.hxx
+                utils/JsonArenaAllocator.hxx
 )
 
 add_subdirectory(system)

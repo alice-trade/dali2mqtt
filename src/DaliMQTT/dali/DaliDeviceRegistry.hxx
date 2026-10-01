@@ -182,7 +182,6 @@ class DaliDeviceRegistry {
     etl::flat_set<DaliInternalAddr, MAX_TOTAL_DEVICES> m_prioritySyncSet{};
     etl::vector<DeferredSyncRequest, MAX_TOTAL_DEVICES> m_deferredSyncRequests{};
 
-    etl::vector<DaliDevice, MAX_TOTAL_DEVICES> m_scanScratchpad{};
     std::array<AddressMapBlobItem, MAX_TOTAL_DEVICES> m_nvsBlobScratchpad{};
     mutable std::mutex m_snifferMutex{};
     mutable std::mutex m_nvsWriteMutex{};

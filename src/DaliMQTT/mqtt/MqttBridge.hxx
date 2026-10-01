@@ -4,14 +4,15 @@
 #ifndef DALIMQTT_MQTTBRIDGE_HXX
 #define DALIMQTT_MQTTBRIDGE_HXX
 
-#include "network/NetworkPlatform.hxx"
 #include "dali/DaliBusEngine.hxx"
 #include "dali/DaliDeviceRegistry.hxx"
 #include "mqtt/HomeAssistantDiscovery.hxx"
 #include "mqtt/MqttClient.hxx"
 #include "mqtt/MqttMessage.hxx"
+#include "network/NetworkPlatform.hxx"
 #include "system/ConfigStore.hxx"
 #include "system/OtaService.hxx"
+#include "utils/Arena.hxx"
 #include <etl/string.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
@@ -95,7 +96,8 @@ class MqttBridge {
     const NetworkPlatform& m_network;
     HomeAssistantDiscovery m_discovery;
 
-    mutable std::array<char, 3072> m_bridgeScratchpad{};
+    mutable std::mutex m_arenaMutex{};
+    mutable memory::StaticArena<6144> m_bridgeArena{};
     mutable MqttIncomingMessage m_currentMsg{};
     mutable std::atomic<bool> m_replayInProgress{false};
 

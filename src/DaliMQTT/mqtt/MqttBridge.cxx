@@ -6,6 +6,7 @@
 #include "system/ConfigJson.hxx"
 #include "utils/DaliLongAddrConversions.hxx"
 #include "utils/DaliSensorMath.hxx"
+#include "utils/JsonArenaAllocator.hxx"
 #include "utils/NvsHandle.hxx"
 #include <ArduinoJson.h>
 #include <charconv>
@@ -756,14 +757,26 @@ void MqttBridge::publishTelemetry() const {
 }
 
 void MqttBridge::handleConfigGetCommand() const {
-    JsonDocument doc;
+    std::lock_guard<std::mutex> lock(m_arenaMutex);
+    m_bridgeArena.reset();
+
+    memory::JsonArenaAllocator allocator(m_bridgeArena);
+    JsonDocument doc(&allocator);
+
     ConfigJson::serialize(*m_config.get(), doc, /*maskSecrets=*/true);
+
+    const size_t jsonSize = measureJson(doc) + 1;
+    auto outBuf = static_cast<char*>(m_bridgeArena.allocate(jsonSize));
+    if (!outBuf) {
+        ESP_LOGE(TAG, "Failed to allocate buffer for config response in Arena");
+        return;
+    }
+
+    serializeJson(doc, outBuf, jsonSize);
 
     char resTopic[128];
     snprintf(resTopic, sizeof(resTopic), "%s/config/get/response", m_baseTopic.c_str());
-
-    serializeJson(doc, m_bridgeScratchpad.data(), m_bridgeScratchpad.size());
-    m_mqtt.publish(resTopic, m_bridgeScratchpad.data(), 0, false);
+    m_mqtt.publish(resTopic, outBuf, 0, false);
 }
 
 void MqttBridge::handleConfigSetCommand(std::string_view payload) const {
@@ -888,45 +901,66 @@ void MqttBridge::handleSceneConfigSetCommand(std::string_view payload) const {
 }
 
 void MqttBridge::handleNamesGetCommand() const {
-    const NvsHandle nvs("dali_names", NVS_READONLY);
-    strncpy(m_bridgeScratchpad.data(), "{}", m_bridgeScratchpad.size());
+    std::lock_guard<std::mutex> lock(m_arenaMutex);
+    m_bridgeArena.reset();
 
+    constexpr size_t MAX_NAMES_SIZE = 3072;
+    auto buf = static_cast<char*>(m_bridgeArena.allocate(MAX_NAMES_SIZE));
+    if (!buf) return;
+
+    strncpy(buf, "{}", MAX_NAMES_SIZE);
+
+    const NvsHandle nvs("dali_names", NVS_READONLY);
     if (nvs) {
-        size_t len = m_bridgeScratchpad.size();
-        nvs_get_str(nvs.get(), "names_json", m_bridgeScratchpad.data(), &len);
+        size_t len = MAX_NAMES_SIZE;
+        nvs_get_str(nvs.get(), "names_json", buf, &len);
     }
 
     char resTopic[128];
     snprintf(resTopic, sizeof(resTopic), "%s/config/names/get/response", m_baseTopic.c_str());
-    m_mqtt.publish(resTopic, m_bridgeScratchpad.data(), 0, false);
+    m_mqtt.publish(resTopic, buf, 0, false);
 }
 
 void MqttBridge::handleNamesSetCommand(std::string_view payload) const {
-    JsonDocument incoming;
-    if (deserializeJson(incoming, payload.data(), payload.size()) != DeserializationError::Ok)
-        return;
+    std::lock_guard<std::mutex> lock(m_arenaMutex);
+    m_bridgeArena.reset();
 
-    // Считываем текущие имена в m_bridgeScratchpad
-    strncpy(m_bridgeScratchpad.data(), "{}", m_bridgeScratchpad.size());
+    memory::JsonArenaAllocator allocator(m_bridgeArena);
+    JsonDocument incoming(&allocator);
+    if (deserializeJson(incoming, payload.data(), payload.size()) != DeserializationError::Ok) {
+        return;
+    }
+
+    constexpr size_t NAMES_BUF_SIZE = 3072;
+    const auto currentRaw = static_cast<char*>(m_bridgeArena.allocate(NAMES_BUF_SIZE));
+    if (!currentRaw) return;
+
+    strncpy(currentRaw, "{}", NAMES_BUF_SIZE);
     {
         const NvsHandle readNvs("dali_names", NVS_READONLY);
         if (readNvs) {
-            size_t len = m_bridgeScratchpad.size();
-            nvs_get_str(readNvs.get(), "names_json", m_bridgeScratchpad.data(), &len);
+            size_t len = NAMES_BUF_SIZE;
+            nvs_get_str(readNvs.get(), "names_json", currentRaw, &len);
         }
     }
 
-    JsonDocument currentNames;
-    deserializeJson(currentNames, static_cast<const char*>(m_bridgeScratchpad.data()));
+    JsonDocument currentNames(&allocator);
+    deserializeJson(currentNames, currentRaw);
+
     for (JsonPair kv : incoming.as<JsonObject>()) {
         currentNames[kv.key()] = kv.value();
     }
-    serializeJson(currentNames, m_bridgeScratchpad.data(), m_bridgeScratchpad.size());
 
-    NvsHandle writeNvs("dali_names", NVS_READWRITE);
+    const size_t outSize = measureJson(currentNames) + 1;
+    const auto outBuf = static_cast<char*>(m_bridgeArena.allocate(outSize));
+    if (!outBuf) return;
+
+    serializeJson(currentNames, outBuf, outSize);
+
+    const NvsHandle writeNvs("dali_names", NVS_READWRITE);
     esp_err_t err = ESP_FAIL;
     if (writeNvs) {
-        nvs_set_str(writeNvs.get(), "names_json", m_bridgeScratchpad.data());
+        nvs_set_str(writeNvs.get(), "names_json", outBuf);
         err = nvs_commit(writeNvs.get());
     }
 
