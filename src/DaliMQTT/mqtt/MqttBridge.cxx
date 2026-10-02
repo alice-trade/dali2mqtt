@@ -509,7 +509,18 @@ void MqttBridge::handleLightCommand(std::string_view targetPath, std::string_vie
                 if (doc["color"].is<JsonObject>()) {
                     JsonObject c = doc["color"];
                     if (c["r"].is<int>() && c["g"].is<int>() && c["b"].is<int>()) {
-                        m_daliRegistry.setGroupRgb(busId, groupId, c["r"], c["g"], c["b"]);
+                        const uint8_t r = static_cast<uint8_t>(std::clamp(c["r"].as<int>(), 0, 254));
+                        const uint8_t g = static_cast<uint8_t>(std::clamp(c["g"].as<int>(), 0, 254));
+                        const uint8_t b = static_cast<uint8_t>(std::clamp(c["b"].as<int>(), 0, 254));
+
+                        std::optional<uint8_t> w;
+                        std::optional<uint8_t> a;
+                        std::optional<uint8_t> f;
+                        if (c["w"].is<int>()) w = static_cast<uint8_t>(std::clamp(c["w"].as<int>(), 0, 254));
+                        if (c["a"].is<int>()) a = static_cast<uint8_t>(std::clamp(c["a"].as<int>(), 0, 254));
+                        if (c["f"].is<int>()) f = static_cast<uint8_t>(std::clamp(c["f"].as<int>(), 0, 254));
+
+                        m_daliRegistry.setGroupColor(busId, groupId, r, g, b, w, a, f);
                     }
                 }
 
@@ -560,15 +571,14 @@ void MqttBridge::handleLightCommand(std::string_view targetPath, std::string_vie
             const uint8_t g = static_cast<uint8_t>(std::clamp(c["g"].as<int>(), 0, 254));
             const uint8_t b = static_cast<uint8_t>(std::clamp(c["b"].as<int>(), 0, 254));
 
-            if (c["w"].is<int>() || c["a"].is<int>() || c["f"].is<int>()) {
-                const uint8_t w = c["w"].is<int>() ? static_cast<uint8_t>(std::clamp(c["w"].as<int>(), 0, 254)) : 0xFF;
-                const uint8_t a = c["a"].is<int>() ? static_cast<uint8_t>(std::clamp(c["a"].as<int>(), 0, 254)) : 0xFF;
-                const uint8_t f = c["f"].is<int>() ? static_cast<uint8_t>(std::clamp(c["f"].as<int>(), 0, 254)) : 0xFF;
+            std::optional<uint8_t> w;
+            std::optional<uint8_t> a;
+            std::optional<uint8_t> f;
+            if (c["w"].is<int>()) w = static_cast<uint8_t>(std::clamp(c["w"].as<int>(), 0, 254));
+            if (c["a"].is<int>()) a = static_cast<uint8_t>(std::clamp(c["a"].as<int>(), 0, 254));
+            if (c["f"].is<int>()) f = static_cast<uint8_t>(std::clamp(c["f"].as<int>(), 0, 254));
 
-                m_daliRegistry.setRgbwaf(longAddr, r, g, b, w, a, f);
-            } else {
-                m_daliRegistry.setRgb(longAddr, r, g, b);
-            }
+            m_daliRegistry.setColor(longAddr, r, g, b, w, a, f);
         }
     }
 
