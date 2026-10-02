@@ -47,13 +47,19 @@ esp_err_t ConfigStore::load() {
     const auto cfg = std::make_shared<ConfigStructure>(makeDefaultConfig());
 
     if (nvs) {
-        auto readStr = [&](const char* key, auto& dest) {
-            size_t reqSize = 0;
-            if (nvs_get_str(nvs.get(), key, nullptr, &reqSize) == ESP_OK && reqSize > 1) {
-                char buf[128];
-                if (reqSize <= sizeof(buf) && nvs_get_str(nvs.get(), key, buf, &reqSize) == ESP_OK) {
-                    dest = buf;
-                }
+        auto readStr = [&]<typename T0>(const char* key, T0& dest) {
+            using TargetType = std::remove_reference_t<T0>;
+            constexpr size_t capacity = TargetType::MAX_SIZE;
+
+            char buf[capacity + 1];
+            size_t len = sizeof(buf);
+            const esp_err_t err = nvs_get_str(nvs.get(), key, buf, &len);
+
+            if (err == ESP_OK && len > 1) {
+                dest = buf;
+            } else if (err == ESP_ERR_NVS_INVALID_LENGTH) {
+                ESP_LOGW(TAG, "NVS key '%s' value exceeds capacity (%zu bytes), skipping invalid entry.",
+                         key, capacity);
             }
         };
 
@@ -79,6 +85,8 @@ esp_err_t ConfigStore::load() {
                 if (nvs_get_str(nvs.get(), "mqtt_cert", certBuf.get(), &certSize) == ESP_OK) {
                     cfg->mqttCaCert = certBuf.get();
                 }
+            } else {
+                ESP_LOGW(TAG, "mqtt_cert in NVS exceeds max buffer (%zu bytes), skipped.", certSize);
             }
         }
 
