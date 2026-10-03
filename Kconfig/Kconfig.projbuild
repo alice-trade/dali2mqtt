@@ -274,25 +274,43 @@ menu "DALI MQTT Bridge Settings"
             default "admin"
             help
                 Default password for Web UI HTTP Basic Authentication. Used if not in NVS.
-        endmenu
+    endmenu
 
-        menu "Syslog Configuration"
+    menu "Syslog Configuration"
 
-            config DALI2MQTT_SYSLOG_ENABLED_BY_DEFAULT
-                    bool "Enable Syslog logging by default"
-                    default n
-                    help
-                        Enable sending ESP-IDF logs to a remote syslog server by default on first boot.
-                        This can be changed later in the WebUI.
+        config DALI2MQTT_SYSLOG_ENABLED_BY_DEFAULT
+                bool "Enable Syslog logging by default"
+                default n
+                help
+                    Enable sending ESP-IDF logs to a remote syslog server by default on first boot.
+                    This can be changed later in the WebUI.
 
 
-            config DALI2MQTT_SYSLOG_DEFAULT_SERVER
-                    string "Default Syslog Server IP Address"
-                    depends on DALI2MQTT_SYSLOG_ENABLED_BY_DEFAULT
-                    default ""
-                    help
-                        The default IP address or hostname of the syslog server.
-                        This can be overridden in the WebUI.
+        config DALI2MQTT_SYSLOG_DEFAULT_SERVER
+                string "Default Syslog Server IP Address"
+                depends on DALI2MQTT_SYSLOG_ENABLED_BY_DEFAULT
+                default ""
+                help
+                    The default IP address or hostname of the syslog server.
+                    This can be overridden in the WebUI.
 
-        endmenu
+    endmenu
+
+    menu "OTA / Firmware Update Configuration"
+
+        config DALI2MQTT_OTA_DEFAULT_URL
+            string "Default OTA Manifest URL"
+            default ""
+            help
+                Default URL for manifest releases JSON endpoint.
+
+        config DALI2MQTT_OTA_CHECK_INTERVAL_DAYS
+            int "Automatic OTA Check Interval in Days (0 = Disabled)"
+            default 3
+            range 0 90
+            help
+                Interval in days to automatically check for new firmware updates.
+                Set to 0 to disable automatic background update checks.
+
+    endmenu
 endmenu

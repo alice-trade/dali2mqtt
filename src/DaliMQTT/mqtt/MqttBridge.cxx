@@ -588,6 +588,7 @@ void MqttBridge::handleLightCommand(std::string_view targetPath, std::string_vie
         m_daliRegistry.setPower(longAddr, *powerState);
     }
 }
+
 void MqttBridge::handleGroupConfigGetCommand() const {
     const auto assignments = m_daliRegistry.getGroupAssignments();
 

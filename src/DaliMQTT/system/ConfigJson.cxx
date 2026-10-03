@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "system/ConfigJson.hxx"
+#include <algorithm>
 #include <cstring>
 
 namespace daliMQTT {
@@ -137,8 +138,12 @@ ConfigApplyResult ConfigJson::apply(const JsonDocument& doc, ConfigStructure& ta
     if (doc["telemetry_interval_sec"].is<uint32_t>()) {
         target.telemetryIntervalSec = doc["telemetry_interval_sec"].as<uint32_t>();
     }
-    if (doc["ota_check_interval_days"].is<uint8_t>()) {
-        target.otaCheckIntervalDays = doc["ota_check_interval_days"].as<uint8_t>();
+    if (doc["ota_check_interval_days"].is<int>()) {
+        const uint8_t newDays = static_cast<uint8_t>(std::clamp(doc["ota_check_interval_days"].as<int>(), 0, 90));
+        if (target.otaCheckIntervalDays != newDays) {
+            target.otaCheckIntervalDays = newDays;
+            res.requiresReboot = true;
+        }
     }
     if (const char* ota = getString("ota_url")) {
         target.otaBaseUrl = ota;

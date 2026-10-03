@@ -6,7 +6,8 @@ target_sources(DaliMQTT-Core PRIVATE
         SystemControls.cxx
         SystemScheduler.cxx
         OtaService.cxx
-
+        SystemEvent.hxx
+        ConfigDefaults.icc
         Application.hxx
         AppCoordinator.hxx
         ConfigStore.hxx

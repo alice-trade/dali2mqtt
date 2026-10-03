@@ -13,9 +13,6 @@ param (
     [Alias("d")]
     [string]$CustomBuildDir = "",
 
-    [Alias("offline")]
-    [string]$OfflineDir = "",
-
     [Alias("h")]
     [switch]$Help
 )
@@ -53,12 +50,10 @@ function Print-Help {
     Write-Host "                           If omitted, an interactive menu will appear."
     Write-Host "  -d <dir>                 Custom build output directory"
     Write-Host "  -i                       Run interactive TUI"
-    Write-Host "  --offline <dir>          Use offline assets directory for dependencies"
     Write-Host "  -h, --help               Show this help message`n"
     Write-Host "Examples:"
     Write-Host "  .\build.ps1 flash -t esp32c6 -b Debug"
     Write-Host "  .\build.ps1 app"
-    Write-Host "  .\build.ps1 app --offline .\assets"
 }
 
 if ($Help) {
@@ -283,21 +278,6 @@ $CMakeArgs = @(
     "-DCMAKE_BUILD_TYPE=$BuildType",
     "-DBUILD_TESTING=$BuildTests"
 )
-
-$PythonCmd = if (Get-Command "python" -ErrorAction SilentlyContinue) { "python" } elseif (Get-Command "py" -ErrorAction SilentlyContinue) { "py" } else { "python3" }
-
-if (-not [string]::IsNullOrEmpty($OfflineDir)) {
-    if (-not (Test-Path "offline-fetch")) {
-        Write-Host "$C_ERR offline-fetch tool not found.$NC"
-        exit 1
-    }
-
-    $OfflineOutput = & $PythonCmd offline-fetch get-args "$OfflineDir" | Select-String "-DFETCHCONTENT"
-    if ($OfflineOutput) {
-        $OfflineFlags = ($OfflineOutput -join " ").Split(" ", [System.StringSplitOptions]::RemoveEmptyEntries)
-        $CMakeArgs += $OfflineFlags
-    }
-}
 
 $padTarget = $Target.PadRight(32)
 $padType   = $BuildType.PadRight(32)

@@ -8,7 +8,6 @@ COMMAND=""
 BUILD_DIR=""
 CUSTOM_BUILD_DIR=""
 BUILD_TESTS="ON"
-OFFLINE_DIR=""
 FORCE_INTERACTIVE=0
 
 C_BORDER='\033[38;5;67m'
@@ -46,7 +45,6 @@ print_help() {
     echo "  -t, --target <chip>       esp32s3, esp32c6, esp32c3, esp32s2, esp32"
     echo "  -b, --build-type <type>   Release, Debug"
     echo "  -d, --build-dir <dir>     Custom build output directory"
-    echo "  --offline <dir>           Offline dependencies path"
     echo "  -i, --interactive         Run graphical TUI"
     echo "  -h, --help                Show help"
 }
@@ -61,8 +59,6 @@ while [[ $# -gt 0 ]]; do
             BUILD_TYPE="$2"; shift 2 ;;
         -d|--build-dir)
             CUSTOM_BUILD_DIR="$2"; shift 2 ;;
-        --offline)
-            OFFLINE_DIR="$2"; shift 2 ;;
         -i|--interactive)
             FORCE_INTERACTIVE=1; shift ;;
         -h|--help)
@@ -283,15 +279,6 @@ CMAKE_ARGS=(
     "-DCMAKE_BUILD_TYPE=$BUILD_TYPE"
     "-DBUILD_TESTING=$BUILD_TESTS"
 )
-
-if [ -n "$OFFLINE_DIR" ]; then
-    [ ! -f "offline-fetch" ] && exit 1
-    OFFLINE_FLAGS=$(python3 offline-fetch.py get-args "$OFFLINE_DIR" | grep "\-DFETCHCONTENT" || true)
-    if [ -n "$OFFLINE_FLAGS" ]; then
-        read -r -a OFFLINE_ARGS <<< "$OFFLINE_FLAGS"
-        CMAKE_ARGS+=("${OFFLINE_ARGS[@]}")
-    fi
-fi
 
 printf "${C_BORDER}╭────────────────────────────────────────────╮${NC}\n"
 printf "${C_BORDER}│${NC}  Target : ${C_ACCENT}%-32s${NC}${C_BORDER}│${NC}\n" "$TARGET"

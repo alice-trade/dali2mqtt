@@ -18,7 +18,15 @@ inline ConfigStructure makeDefaultConfig() {
                                      .txPin = static_cast<int8_t>(CONFIG_DALI2MQTT_DALI_TX_PIN)};
 
     cfg.daliPollIntervalMs = CONFIG_DALI2MQTT_DALI_DEFAULT_POLL_INTERVAL_MS;
-    cfg.otaCheckIntervalDays = 3;
+
+#if defined(CONFIG_DALI2MQTT_OTA_CHECK_INTERVAL_DAYS)
+    cfg.otaCheckIntervalDays = static_cast<uint8_t>(CONFIG_DALI2MQTT_OTA_CHECK_INTERVAL_DAYS);
+#endif
+
+#if defined(CONFIG_DALI2MQTT_OTA_DEFAULT_URL)
+    cfg.otaBaseUrl = CONFIG_DALI2MQTT_OTA_DEFAULT_URL;
+#endif
+
     cfg.telemetryIntervalSec = 60;
 
 #if defined(CONFIG_DALI2MQTT_MQTT_HOMEASSISTANT_DISCOVERY_ENABLED)

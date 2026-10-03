@@ -28,6 +28,7 @@ interface ConfigData {
   syslog_server?: string;
   syslog_enabled?: boolean;
   ota_url?: string;
+  ota_check_interval_days?: number;
   dali_poll_interval_ms?: number;
   buses?: DaliBusConfig[];
   hass_discovery_enabled?: boolean;
@@ -54,6 +55,7 @@ const config = ref<ConfigData>({
   client_id: '',
   mqtt_base_topic: '',
   ota_url: '',
+  ota_check_interval_days: 3,
   http_domain: '',
   http_user: '',
   syslog_server: '',
@@ -103,6 +105,9 @@ const loadConfig = async () => {
     if (config.value.dali_poll_interval_ms) {
       daliPollSeconds.value = config.value.dali_poll_interval_ms / 1000.0;
     }
+    if (config.value.ota_check_interval_days === undefined) {
+      config.value.ota_check_interval_days = 3;
+    }
     if (infoRes.data.ota) {
       otaInfo.value = infoRes.data.ota;
       if (otaInfo.value.is_updating) {
@@ -117,53 +122,8 @@ const loadConfig = async () => {
   }
 };
 
-const selectedFile = ref<File | null>(null);
-const uploadProgress = ref(0);
-const isUploadingFile = ref(false);
-
-const handleFileSelect = (event: Event) => {
-  const target = event.target as HTMLInputElement;
-  if (target.files && target.files.length > 0) {
-    const file = target.files[0];
-    if (!file.name.endsWith('.bin')) {
-      alert('Please select a valid compiled .bin file!');
-      target.value = '';
-      selectedFile.value = null;
-      return;
-    }
-    selectedFile.value = file;
-  }
-};
-
-const handleUploadBinFile = async () => {
-  if (!selectedFile.value) return;
-
-  const sizeKb = (selectedFile.value.size / 1024).toFixed(1);
-  if (!confirm(`Flash "${selectedFile.value.name}" (${sizeKb} KB) directly to ESP32?`)) {
-    return;
-  }
-
-  isUploadingFile.value = true;
-  uploadProgress.value = 0;
-  otaStatusText.value = 'Uploading binary file to device...';
-
-  try {
-    await api.uploadFirmwareFile(selectedFile.value, (pct) => {
-      uploadProgress.value = pct;
-      if (pct < 100) {
-        otaStatusText.value = `Uploading to ESP32: ${pct}%`;
-      } else {
-        otaStatusText.value = 'Verifying and writing flash...';
-      }
-    });
-
-    otaStatusText.value = 'Flashing complete! Bridge is restarting...';
-    waitForDeviceReboot();
-  } catch (e: any) {
-    isUploadingFile.value = false;
-    alert(e.response?.data || 'Failed to flash file. Check serial log.');
-    otaStatusText.value = 'Upload failed.';
-  }
+const toggleAutoOta = (enabled: boolean) => {
+  config.value.ota_check_interval_days = enabled ? 3 : 0;
 };
 
 const handleCheckOta = async () => {
@@ -296,6 +256,11 @@ const validateForm = (): boolean => {
   if (!daliPollSeconds.value) {
     activeTab.value = 'dali';
     message.value = 'Bus Sync Interval is required.';
+    return false;
+  }
+  if (config.value.ota_check_interval_days !== undefined && config.value.ota_check_interval_days < 0) {
+    activeTab.value = 'logging';
+    message.value = 'OTA check interval must be positive or 0 (disabled).';
     return false;
   }
   return true;
@@ -545,39 +510,30 @@ onUnmounted(() => {
                 <label for="ota_url">OTA Manifest URL</label>
                 <input type="text" id="ota_url" v-model="config.ota_url" placeholder="https://api.github.com/repos/.../releases/latest">
                 <small>JSON manifest endpoint for automated background checks.</small>
-              </div>
 
-              <details class="ota-advanced-details">
-                <summary>Upload Firmware using .bin file</summary>
-                <div class="advanced-body">
-                  <label for="bin_file_input">Select Firmware Binary (.bin)</label>
-                  <input type="file"
-                         id="bin_file_input"
-                         accept=".bin"
-                         @change="handleFileSelect"
-                         :disabled="isUploadingFile || otaUpdating">
-
-                  <div v-if="selectedFile" class="file-summary-card">
-                    <div class="file-info-row">
-                      <span><strong>File:</strong> {{ selectedFile.name }}</span>
-                      <span><strong>Size:</strong> {{ (selectedFile.size / 1024).toFixed(1) }} KB</span>
-                    </div>
-
-                    <div v-if="isUploadingFile" style="margin-top: 0.75rem;">
-                      <progress :value="uploadProgress" max="100"></progress>
-                      <small style="text-align: center; display: block;">{{ otaStatusText }}</small>
-                    </div>
-
-                    <button v-else
-                            type="button"
-                            class="contrast manual-install-btn"
-                            @click="handleUploadBinFile"
-                            :disabled="isUploadingFile">
-                      Flash {{ selectedFile.name }}
-                    </button>
+                <div class="grid" style="margin-top: 1rem;">
+                  <div>
+                    <label for="ota_auto_check">
+                      <input type="checkbox"
+                             id="ota_auto_check"
+                             role="switch"
+                             :checked="(config.ota_check_interval_days ?? 0) > 0"
+                             @change="toggleAutoOta(($event.target as HTMLInputElement).checked)" />
+                      <strong>Automatic Update Checks</strong>
+                    </label>
+                  </div>
+                  <div v-if="(config.ota_check_interval_days ?? 0) > 0">
+                    <label for="ota_interval">Check Interval (Days)</label>
+                    <input type="number"
+                           id="ota_interval"
+                           v-model.number="config.ota_check_interval_days"
+                           min="1"
+                           max="90"
+                           step="1" />
+                    <small>Interval in days between checks (1 - 90 days).</small>
                   </div>
                 </div>
-              </details>
+              </div>
             </div>
 
           </section>

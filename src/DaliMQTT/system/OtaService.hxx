@@ -40,8 +40,6 @@ class OtaService {
     OtaService& operator=(const OtaService&) = delete;
 
     esp_err_t startUpdate(const char* url);
-    esp_err_t processStreamUpdate(OtaStreamReaderFn readFn, void* userCtx, size_t totalLen);
-
     [[nodiscard]] inline bool isUpdating() const noexcept;
     [[nodiscard]] inline OtaStatus getStatus() const noexcept;
 
