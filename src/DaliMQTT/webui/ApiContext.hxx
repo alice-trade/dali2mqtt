@@ -4,6 +4,9 @@
 #ifndef DALIMQTT_APICONTEXT_HXX
 #define DALIMQTT_APICONTEXT_HXX
 
+#include "utils/Arena.hxx"
+#include <mutex>
+
 namespace daliMQTT {
 
 class ConfigStore;
@@ -19,16 +22,11 @@ struct ApiContext {
     MqttClient& mqttClient;
     OtaService& ota;
 
-    ApiContext(ConfigStore& cfg,
-              NetworkPlatform& net,
-              DaliDeviceRegistry& reg,
-              MqttClient& mqtt,
-              OtaService& o)
-       : config(cfg),
-         network(net),
-         daliRegistry(reg),
-         mqttClient(mqtt),
-         ota(o) {}
+    mutable std::mutex arenaMutex{};
+    mutable memory::StaticArena<8192> arena{};
+
+    ApiContext(ConfigStore& cfg, NetworkPlatform& net, DaliDeviceRegistry& reg, MqttClient& mqtt, OtaService& o)
+        : config(cfg), network(net), daliRegistry(reg), mqttClient(mqtt), ota(o) {}
 };
 
 } // namespace daliMQTT

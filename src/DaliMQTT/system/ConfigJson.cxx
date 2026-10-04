@@ -36,18 +36,30 @@ bool assignStringSafe(etl::string<N>& dest, const char* src, const char* fieldKe
 
 void ConfigJson::serialize(const ConfigStructure& cfg, JsonDocument& doc, const bool maskSecrets) {
     doc["wifi_ssid"] = cfg.wifiSsid.c_str();
-    doc["wifi_password"] = maskSecrets ? "***" : cfg.wifiPass.c_str();
+    doc["has_wifi_pass"] = !cfg.wifiPass.empty();
+    if (!maskSecrets) {
+        doc["wifi_password"] = cfg.wifiPass.c_str();
+    }
 
     doc["mqtt_uri"] = cfg.mqttUri.c_str();
     doc["mqtt_user"] = cfg.mqttUser.c_str();
-    doc["mqtt_pass"] = maskSecrets ? "***" : cfg.mqttPass.c_str();
+    doc["has_mqtt_pass"] = !cfg.mqttPass.empty();
+    if (!maskSecrets) {
+        doc["mqtt_pass"] = cfg.mqttPass.c_str();
+    }
     doc["mqtt_base_topic"] = cfg.mqttBaseTopic.c_str();
-    doc["mqtt_ca_cert"] = cfg.mqttCaCert.empty() ? "" : (maskSecrets ? "***" : cfg.mqttCaCert.c_str());
+    doc["has_mqtt_ca_cert"] = !cfg.mqttCaCert.empty();
+    if (!maskSecrets) {
+        doc["mqtt_ca_cert"] = cfg.mqttCaCert.c_str();
+    }
     doc["client_id"] = cfg.clientId.c_str();
 
     doc["http_domain"] = cfg.httpDomain.c_str();
     doc["http_user"] = cfg.httpUser.c_str();
-    doc["http_pass"] = maskSecrets ? "***" : cfg.httpPass.c_str();
+    doc["has_http_pass"] = !cfg.httpPass.empty();
+    if (!maskSecrets) {
+        doc["http_pass"] = cfg.httpPass.c_str();
+    }
 
     doc["dali_poll_interval_ms"] = cfg.daliPollIntervalMs;
     doc["telemetry_interval_sec"] = cfg.telemetryIntervalSec;
@@ -79,7 +91,7 @@ ConfigApplyResult ConfigJson::apply(const JsonDocument& doc, ConfigStructure& ta
         return res;
 
     if (const char* pass = getString("wifi_password")) {
-        if (strcmp(pass, "***") != 0) {
+        if (pass[0] != '\0') {
             if (!assignStringSafe(target.wifiPass, pass, "wifi_password", res))
                 return res;
         }
@@ -90,7 +102,7 @@ ConfigApplyResult ConfigJson::apply(const JsonDocument& doc, ConfigStructure& ta
     if (!assignStringSafe(target.mqttUser, getString("mqtt_user"), "mqtt_user", res))
         return res;
     if (const char* mPass = getString("mqtt_pass")) {
-        if (strcmp(mPass, "***") != 0) {
+        if (mPass[0] != '\0') {
             if (!assignStringSafe(target.mqttPass, mPass, "mqtt_pass", res))
                 return res;
         }
@@ -101,9 +113,11 @@ ConfigApplyResult ConfigJson::apply(const JsonDocument& doc, ConfigStructure& ta
         return res;
 
     if (const char* cert = getString("mqtt_ca_cert")) {
-        if (strcmp(cert, "***") != 0) {
+        if (cert[0] != '\0') {
             if (!assignStringSafe(target.mqttCaCert, cert, "mqtt_ca_cert", res))
                 return res;
+        } else {
+            target.mqttCaCert.clear();
         }
     }
 
@@ -120,7 +134,7 @@ ConfigApplyResult ConfigJson::apply(const JsonDocument& doc, ConfigStructure& ta
     if (!assignStringSafe(target.httpUser, getString("http_user"), "http_user", res, false)) return res;
 
     if (const char* hPass = getString("http_pass")) {
-        if (strcmp(hPass, "***") != 0) {
+        if (hPass[0] != '\0') {
             if (!assignStringSafe(target.httpPass, hPass, "http_pass", res, false)) return res;
         }
     }

@@ -9,6 +9,7 @@
 #include "system/ConfigStore.hxx"
 #include "system/OtaService.hxx"
 #include "utils/DaliLongAddrConversions.hxx"
+#include "utils/JsonArenaAllocator.hxx"
 #include "utils/NvsHandle.hxx"
 #include "webui/ApiContext.hxx"
 #include <ArduinoJson.h>
@@ -27,6 +28,37 @@ enum class DaliOperationStatus : uint8_t { Idle, Scanning, Initializing, Refresh
 }
 
 static std::atomic<DaliOperationStatus> g_daliStatus{DaliOperationStatus::Idle};
+
+static char* readRequestBodyToArena(httpd_req_t* req, ApiContext* ctx, const size_t maxLen, size_t* outReceived = nullptr) {
+    if (req->content_len == 0 || req->content_len > maxLen) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Payload too large or empty");
+        return nullptr;
+    }
+
+    auto* buf = static_cast<char*>(ctx->arena.allocate(req->content_len + 1));
+    if (!buf) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Arena allocation failed");
+        return nullptr;
+    }
+
+    size_t received = 0;
+    while (received < req->content_len) {
+        const int ret = httpd_req_recv(req, buf + received, req->content_len - received);
+        if (ret <= 0) {
+            if (ret == HTTPD_SOCK_ERR_TIMEOUT) {
+                httpd_resp_send_408(req);
+            }
+            return nullptr;
+        }
+        received += ret;
+    }
+    buf[received] = '\0';
+
+    if (outReceived) {
+        *outReceived = received;
+    }
+    return buf;
+}
 
 static esp_err_t checkAuth(httpd_req_t* req, const ApiContext* ctx) {
     char authHdr[128];
@@ -70,38 +102,43 @@ esp_err_t ApiHandlers::getConfig(httpd_req_t* req) {
     if (checkAuth(req, ctx) != ESP_OK)
         return ESP_FAIL;
 
-    JsonDocument doc;
+    std::lock_guard<std::mutex> lock(ctx->arenaMutex);
+    ctx->arena.reset();
+
+    memory::JsonArenaAllocator allocator(ctx->arena);
+    JsonDocument doc(&allocator);
     ConfigJson::serialize(*ctx->config.get(), doc, true);
 
-    char buf[1024];
-    serializeJson(doc, buf, sizeof(buf));
+    const size_t neededSize = measureJson(doc) + 1;
+    auto* buf = static_cast<char*>(ctx->arena.allocate(neededSize));
+    if (!buf) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Arena out of memory");
+        return ESP_FAIL;
+    }
+
+    serializeJson(doc, buf, neededSize);
     httpd_resp_set_type(req, "application/json");
     httpd_resp_send(req, buf, HTTPD_RESP_USE_STRLEN);
     return ESP_OK;
 }
 
 esp_err_t ApiHandlers::setConfig(httpd_req_t* req) {
-    const auto* ctx = static_cast<ApiContext*>(req->user_ctx);
+    auto* ctx = static_cast<ApiContext*>(req->user_ctx);
     if (checkAuth(req, ctx) != ESP_OK)
         return ESP_FAIL;
 
-    if (req->content_len == 0 || req->content_len > 4096) {
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Payload too large or empty");
+    std::lock_guard<std::mutex> lock(ctx->arenaMutex);
+    ctx->arena.reset();
+
+    size_t received = 0;
+    auto* buf = readRequestBodyToArena(req, ctx, 4096, &received);
+    if (!buf) {
         return ESP_FAIL;
     }
 
-    auto buf = std::make_unique<char[]>(req->content_len + 1);
-    size_t received = 0;
-    while (received < req->content_len) {
-        const int ret = httpd_req_recv(req, buf.get() + received, req->content_len - received);
-        if (ret <= 0)
-            return ESP_FAIL;
-        received += ret;
-    }
-    buf[received] = '\0';
-
-    JsonDocument doc;
-    if (deserializeJson(doc, buf.get()) != DeserializationError::Ok) {
+    memory::JsonArenaAllocator allocator(ctx->arena);
+    JsonDocument doc(&allocator);
+    if (deserializeJson(doc, buf, received) != DeserializationError::Ok) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
         return ESP_FAIL;
     }
@@ -140,7 +177,12 @@ esp_err_t ApiHandlers::getInfo(httpd_req_t* req) {
     esp_chip_info_t chipInfo{};
     esp_chip_info(&chipInfo);
 
-    JsonDocument doc;
+    std::lock_guard<std::mutex> lock(ctx->arenaMutex);
+    ctx->arena.reset();
+
+    memory::JsonArenaAllocator allocator(ctx->arena);
+    JsonDocument doc(&allocator);
+
     doc["version"] = DALIMQTT_VERSION;
     doc["chip_model"] = (chipInfo.model == CHIP_ESP32C6)   ? "ESP32-C6"
                         : (chipInfo.model == CHIP_ESP32S3) ? "ESP32-S3"
@@ -172,57 +214,76 @@ esp_err_t ApiHandlers::getInfo(httpd_req_t* req) {
     otaObj["release_url"] = ota.releaseUrl.c_str();
     otaObj["is_updating"] = ctx->ota.isUpdating();
 
-    char buf[512];
-    serializeJson(doc, buf, sizeof(buf));
+    const size_t neededSize = measureJson(doc) + 1;
+    auto* buf = static_cast<char*>(ctx->arena.allocate(neededSize));
+    if (!buf) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Arena out of memory");
+        return ESP_FAIL;
+    }
+
+    serializeJson(doc, buf, neededSize);
     httpd_resp_set_type(req, "application/json");
     httpd_resp_send(req, buf, HTTPD_RESP_USE_STRLEN);
     return ESP_OK;
 }
 
 esp_err_t ApiHandlers::getDaliDevices(httpd_req_t* req) {
-    const auto* ctx = static_cast<ApiContext*>(req->user_ctx);
+    const auto* ctx = static_cast<const ApiContext*>(req->user_ctx);
     if (checkAuth(req, ctx) != ESP_OK)
         return ESP_FAIL;
 
     const auto devices = ctx->daliRegistry.getDevicesSnapshot();
 
-    JsonDocument doc;
-    const auto arr = doc.to<JsonArray>();
+    std::lock_guard<std::mutex> lock(ctx->arenaMutex);
+    ctx->arena.reset();
+
+    httpd_resp_set_type(req, "application/json");
+    HttpChunkStream stream{.req = req};
+
+    stream.write(reinterpret_cast<const uint8_t*>("["), 1);
+    bool first = true;
 
     for (const auto& dev : devices) {
-        auto obj = arr.add<JsonObject>();
+        ctx->arena.reset();
+        memory::JsonArenaAllocator allocator(ctx->arena);
+        JsonDocument itemDoc(&allocator);
+
         const auto& id = getIdentity(dev);
         const auto addrStr = utils::longAddressToString(id.longAddress);
 
-        obj["long_address"] = addrStr.data();
-        obj["driverId"] = id.internalAddress.bus();
-        obj["short_address"] = id.internalAddress.shortAddr();
-        obj["available"] = id.available;
+        itemDoc["long_address"] = addrStr.data();
+        itemDoc["driverId"] = id.internalAddress.bus();
+        itemDoc["short_address"] = id.internalAddress.shortAddr();
+        itemDoc["available"] = id.available;
         if (!id.gtin.empty())
-            obj["gtin"] = id.gtin.c_str();
+            itemDoc["gtin"] = id.gtin.c_str();
 
         if (const auto* gear = etl::get_if<ControlGear>(&dev)) {
-            obj["type"] = "gear";
-            obj["level"] = gear->currentLevel;
-            obj["dt"] = gear->deviceType.value_or(0);
-            obj["lamp_failure"] = (gear->statusByte & 0x02) != 0;
-            obj["min"] = gear->minLevel;
-            obj["max"] = gear->maxLevel;
-            obj["on_level"] = gear->powerOnLevel;
-            obj["fail_level"] = gear->systemFailureLevel;
+            itemDoc["type"] = "gear";
+            itemDoc["level"] = gear->currentLevel;
+            itemDoc["dt"] = gear->deviceType.value_or(0);
+            itemDoc["lamp_failure"] = (gear->statusByte & 0x02) != 0;
+            itemDoc["min"] = gear->minLevel;
+            itemDoc["max"] = gear->maxLevel;
+            itemDoc["on_level"] = gear->powerOnLevel;
+            itemDoc["fail_level"] = gear->systemFailureLevel;
             if (gear->color.has_value()) {
-                obj["supports_tc"] = gear->color->supportsTc;
-                obj["supports_rgb"] = gear->color->supportsRgb;
+                itemDoc["supports_tc"] = gear->color->supportsTc;
+                itemDoc["supports_rgb"] = gear->color->supportsRgb;
             }
         } else {
-            obj["type"] = "input";
+            itemDoc["type"] = "input";
         }
+
+        if (!first) {
+            stream.write(reinterpret_cast<const uint8_t*>(","), 1);
+        }
+        first = false;
+
+        serializeJson(itemDoc, stream);
     }
 
-    httpd_resp_set_type(req, "application/json");
-
-    HttpChunkStream stream{.req = req};
-    serializeJson(doc, stream);
+    stream.write(reinterpret_cast<const uint8_t*>("]"), 1);
     stream.flush();
 
     httpd_resp_send_chunk(req, nullptr, 0);
@@ -396,10 +457,20 @@ esp_err_t ApiHandlers::getDaliNames(httpd_req_t* req) {
     if (checkAuth(req, ctx) != ESP_OK)
         return ESP_FAIL;
 
-    NvsHandle nvs("dali_names", NVS_READONLY);
-    char buf[3072] = "{}";
+    std::lock_guard<std::mutex> lock(ctx->arenaMutex);
+    ctx->arena.reset();
+
+    constexpr size_t MAX_NAMES_SIZE = 3072;
+    auto* buf = static_cast<char*>(ctx->arena.allocate(MAX_NAMES_SIZE));
+    if (!buf) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Arena out of memory");
+        return ESP_FAIL;
+    }
+
+    strncpy(buf, "{}", MAX_NAMES_SIZE);
+    const NvsHandle nvs("dali_names", NVS_READONLY);
     if (nvs) {
-        size_t len = sizeof(buf);
+        size_t len = MAX_NAMES_SIZE;
         nvs_get_str(nvs.get(), "names_json", buf, &len);
     }
 
@@ -409,23 +480,48 @@ esp_err_t ApiHandlers::getDaliNames(httpd_req_t* req) {
 }
 
 esp_err_t ApiHandlers::setDaliNames(httpd_req_t* req) {
-    const auto* ctx = static_cast<ApiContext*>(req->user_ctx);
-    if (checkAuth(req, ctx) != ESP_OK)
+    auto* ctx = static_cast<ApiContext*>(req->user_ctx);
+    if (checkAuth(req, ctx) != ESP_OK) {
         return ESP_FAIL;
-
-    char buf[3072];
-    const int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
-    if (ret <= 0)
-        return ESP_FAIL;
-    buf[ret] = '\0';
-
-    NvsHandle nvs("dali_names", NVS_READWRITE);
-    if (nvs) {
-        nvs_set_str(nvs.get(), "names_json", buf);
-        nvs_commit(nvs.get());
     }
 
-    httpd_resp_send(req, R"({"status":"ok"})", HTTPD_RESP_USE_STRLEN);
+    std::lock_guard<std::mutex> lock(ctx->arenaMutex);
+    ctx->arena.reset();
+
+    size_t received = 0;
+    auto* buf = readRequestBodyToArena(req, ctx, 3072, &received);
+    if (!buf) {
+        return ESP_FAIL;
+    }
+
+    memory::JsonArenaAllocator allocator(ctx->arena);
+    JsonDocument doc(&allocator);
+
+    const DeserializationError jsonErr = deserializeJson(doc, buf, received);
+    if (jsonErr != DeserializationError::Ok || !doc.is<JsonObject>()) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON object");
+        return ESP_FAIL;
+    }
+
+    const NvsHandle nvs("dali_names", NVS_READWRITE);
+    if (!nvs) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "NVS open failed");
+        return ESP_FAIL;
+    }
+
+    esp_err_t err = nvs_set_str(nvs.get(), "names_json", buf);
+    if (err == ESP_OK) {
+        err = nvs_commit(nvs.get());
+    }
+
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to commit names to NVS: %s", esp_err_to_name(err));
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "NVS commit failed");
+        return ESP_FAIL;
+    }
+
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, R"({"status":"ok","message":"Names saved successfully"})", HTTPD_RESP_USE_STRLEN);
     return ESP_OK;
 }
 
@@ -436,18 +532,29 @@ esp_err_t ApiHandlers::getDaliGroups(httpd_req_t* req) {
 
     const auto assignments = ctx->daliRegistry.getGroupAssignments();
 
-    JsonDocument doc;
+    std::lock_guard<std::mutex> lock(ctx->arenaMutex);
+    ctx->arena.reset();
+
+    memory::JsonArenaAllocator allocator(ctx->arena);
+    JsonDocument doc(&allocator);
+
     for (const auto& [longAddr, groups] : assignments) {
         const auto laStr = utils::longAddressToString(longAddr);
-        JsonArray grpArr = doc[laStr.data()].to<JsonArray>();
+        auto grpArr = doc[laStr.data()].to<JsonArray>();
         for (int i = 0; i < 16; ++i) {
             if (groups.test(i))
                 grpArr.add(i);
         }
     }
 
-    char buf[768];
-    serializeJson(doc, buf, sizeof(buf));
+    const size_t neededSize = measureJson(doc) + 1;
+    auto* buf = static_cast<char*>(ctx->arena.allocate(neededSize));
+    if (!buf) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Arena out of memory");
+        return ESP_FAIL;
+    }
+
+    serializeJson(doc, buf, neededSize);
     httpd_resp_set_type(req, "application/json");
     httpd_resp_send(req, buf, HTTPD_RESP_USE_STRLEN);
     return ESP_OK;
@@ -458,14 +565,19 @@ esp_err_t ApiHandlers::setDaliGroups(httpd_req_t* req) {
     if (checkAuth(req, ctx) != ESP_OK)
         return ESP_FAIL;
 
-    char buf[1024];
-    const int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
-    if (ret <= 0)
-        return ESP_FAIL;
-    buf[ret] = '\0';
+    std::lock_guard<std::mutex> lock(ctx->arenaMutex);
+    ctx->arena.reset();
 
-    JsonDocument doc;
-    if (deserializeJson(doc, buf) == DeserializationError::Ok && doc.is<JsonObject>()) {
+    size_t received = 0;
+    auto* buf = readRequestBodyToArena(req, ctx, 2048, &received);
+    if (!buf) {
+        return ESP_FAIL;
+    }
+
+    memory::JsonArenaAllocator allocator(ctx->arena);
+    JsonDocument doc(&allocator);
+
+    if (deserializeJson(doc, buf, received) == DeserializationError::Ok && doc.is<JsonObject>()) {
         const auto currentAssignments = ctx->daliRegistry.getGroupAssignments();
         for (JsonPair kv : doc.as<JsonObject>()) {
             auto laOpt = utils::stringToLongAddress(kv.key().c_str());
@@ -529,9 +641,14 @@ esp_err_t ApiHandlers::getDaliScenes(httpd_req_t* req) {
 
     const auto levels = ctx->daliRegistry.querySceneLevels(0, sceneId);
 
-    JsonDocument doc;
+    std::lock_guard<std::mutex> lock(ctx->arenaMutex);
+    ctx->arena.reset();
+
+    memory::JsonArenaAllocator allocator(ctx->arena);
+    JsonDocument doc(&allocator);
     doc["scene_id"] = sceneId;
     auto lObj = doc["levels"].to<JsonObject>();
+
     for (uint8_t sa = 0; sa < 64; ++sa) {
         if (levels[sa] != 255) {
             auto laOpt = ctx->daliRegistry.getLongAddress(DaliInternalAddr(0, sa));
@@ -540,8 +657,14 @@ esp_err_t ApiHandlers::getDaliScenes(httpd_req_t* req) {
         }
     }
 
-    char buf[512];
-    serializeJson(doc, buf, sizeof(buf));
+    const size_t neededSize = measureJson(doc) + 1;
+    auto* buf = static_cast<char*>(ctx->arena.allocate(neededSize));
+    if (!buf) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Arena out of memory");
+        return ESP_FAIL;
+    }
+
+    serializeJson(doc, buf, neededSize);
     httpd_resp_set_type(req, "application/json");
     httpd_resp_send(req, buf, HTTPD_RESP_USE_STRLEN);
     return ESP_OK;
@@ -552,14 +675,19 @@ esp_err_t ApiHandlers::setDaliScenes(httpd_req_t* req) {
     if (checkAuth(req, ctx) != ESP_OK)
         return ESP_FAIL;
 
-    char buf[1024];
-    const int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
-    if (ret <= 0)
-        return ESP_FAIL;
-    buf[ret] = '\0';
+    std::lock_guard<std::mutex> lock(ctx->arenaMutex);
+    ctx->arena.reset();
 
-    JsonDocument doc;
-    if (deserializeJson(doc, buf) == DeserializationError::Ok) {
+    size_t received = 0;
+    auto* buf = readRequestBodyToArena(req, ctx, 2048, &received);
+    if (!buf) {
+        return ESP_FAIL;
+    }
+
+    memory::JsonArenaAllocator allocator(ctx->arena);
+    JsonDocument doc(&allocator);
+
+    if (deserializeJson(doc, buf, received) == DeserializationError::Ok) {
         if (doc["scene_id"].is<uint8_t>() && doc["levels"].is<JsonObject>()) {
             const uint8_t sceneId = doc["scene_id"].as<uint8_t>();
             SceneLevels levels{};

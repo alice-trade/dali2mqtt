@@ -1360,8 +1360,16 @@ esp_err_t DaliDeviceRegistry::saveAddressMapToNvs() {
         }
     }
 
-    esp_err_t err =
-        nvs_set_blob(nvs.get(), NVS_MAP_KEY, m_nvsBlobScratchpad.data(), count * sizeof(AddressMapBlobItem));
+    esp_err_t err = ESP_OK;
+    if (count == 0) {
+        err = nvs_erase_key(nvs.get(), NVS_MAP_KEY);
+        if (err == ESP_ERR_NVS_NOT_FOUND) {
+            err = ESP_OK;
+        }
+    } else {
+        err = nvs_set_blob(nvs.get(), NVS_MAP_KEY, m_nvsBlobScratchpad.data(), count * sizeof(AddressMapBlobItem));
+    }
+
     if (err == ESP_OK) {
         err = nvs_commit(nvs.get());
     }

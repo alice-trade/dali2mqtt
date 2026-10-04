@@ -16,15 +16,19 @@ interface DaliBusConfig {
 interface ConfigData {
   wifi_ssid: string;
   wifi_password?: string;
+  has_wifi_pass?: boolean;
   mqtt_uri: string;
   mqtt_user?: string;
   mqtt_pass?: string;
+  has_mqtt_pass?: boolean;
   mqtt_ca_cert?: string;
+  has_mqtt_ca_cert?: boolean;
   client_id: string;
   mqtt_base_topic: string;
   http_domain: string;
   http_user: string;
   http_pass?: string;
+  has_http_pass?: boolean;
   syslog_server?: string;
   syslog_enabled?: boolean;
   ota_url?: string;
@@ -101,6 +105,10 @@ const loadConfig = async () => {
   try {
     const [cfgRes, infoRes] = await Promise.all([api.getConfig(), api.getInfo()]);
     config.value = cfgRes.data;
+    config.value.wifi_password = '';
+    config.value.mqtt_pass = '';
+    config.value.http_pass = '';
+    config.value.mqtt_ca_cert = '';
     networkType.value = infoRes.data.network_type || 'Wi-Fi';
     if (config.value.dali_poll_interval_ms) {
       daliPollSeconds.value = config.value.dali_poll_interval_ms / 1000.0;
@@ -282,14 +290,16 @@ const saveConfig = async () => {
   payload.dali_poll_interval_ms = Math.round(daliPollSeconds.value * 1000);
 
   if (!payload.wifi_password) delete payload.wifi_password;
-  if (!payload.http_pass) delete payload.http_pass;
   if (!payload.mqtt_pass) delete payload.mqtt_pass;
-  if (payload.mqtt_ca_cert === '***') delete payload.mqtt_ca_cert;
-
+  if (!payload.http_pass) delete payload.http_pass;
+  if (!payload.mqtt_ca_cert && config.value.has_mqtt_ca_cert) {
+    delete payload.mqtt_ca_cert;
+  }
   try {
     const response = await api.saveConfig(payload);
     message.value = response.data.message || 'Settings saved successfully!';
     isError.value = false;
+    await loadConfig();
   } catch (e) {
     message.value = 'Failed to save configuration.';
     isError.value = true;
@@ -344,7 +354,8 @@ onUnmounted(() => {
             <input type="text" id="ssid" v-model="config.wifi_ssid">
 
             <label for="wifi_pass">Password</label>
-            <input type="password" id="wifi_pass" v-model="config.wifi_password" placeholder="Leave blank to keep unchanged">
+            <input type="password" id="wifi_pass" v-model="config.wifi_password"
+                   :placeholder="config.has_wifi_pass ? 'Leave blank to keep unchanged' : 'Enter password'">
           </section>
 
           <!-- MQTT -->
@@ -361,16 +372,24 @@ onUnmounted(() => {
               </div>
               <div>
                 <label for="mqtt_pass">Password</label>
-                <input type="password" id="mqtt_pass" v-model="config.mqtt_pass" placeholder="Leave blank to keep unchanged">
+                <input type="password" id="mqtt_pass" v-model="config.mqtt_pass"
+                       :placeholder="config.has_mqtt_pass ? 'Leave blank to keep unchanged' : 'Enter mqtt password'">
               </div>
             </div>
 
             <label for="mqtt_ca_cert">TLS CA Certificate (PEM)</label>
+            <div v-if="config.has_mqtt_ca_cert && !config.mqtt_ca_cert" class="cert-installed-badge">
+              <span>🔒 The CA certificate is installed</span>
+              <button type="button" class="outline secondary" style="width: auto; padding: 0.2rem 0.5rem; margin: 0;"
+                      @click="config.mqtt_ca_cert = ''; config.has_mqtt_ca_cert = false;">
+                Detach certificate
+              </button>
+            </div>
             <textarea
                 id="mqtt_ca_cert"
                 v-model="config.mqtt_ca_cert"
                 rows="4"
-                placeholder="-----BEGIN CERTIFICATE----- ..."
+                :placeholder="config.has_mqtt_ca_cert ? 'Leave blank to keep unchanged' : '-----BEGIN CERTIFICATE----- ...'"
                 style="font-family: monospace; font-size: 0.8rem; white-space: pre;">
             </textarea>
 
@@ -440,8 +459,9 @@ onUnmounted(() => {
                 <input type="text" id="http_user" v-model="config.http_user">
               </div>
               <div>
-                <label for="http_pass">New WebUI Password</label>
-                <input type="password" id="http_pass" v-model="config.http_pass" placeholder="Leave blank to keep unchanged">
+                <label for="http_pass">WebUI Password</label>
+                <input type="password" id="http_pass" v-model="config.http_pass"
+                       :placeholder="config.has_http_pass ? 'Leave blank to keep unchanged' : 'Enter new password'">
               </div>
             </div>
           </section>
