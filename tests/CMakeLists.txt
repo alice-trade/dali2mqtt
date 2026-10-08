@@ -34,3 +34,25 @@ target_link_libraries(${TEST_APP_NAME} PRIVATE
 
 idf_build_executable(${TEST_APP_NAME})
 
+target_compile_options(${TEST_APP_NAME} PRIVATE
+        ${_idf_compile_options}
+        -Wno-missing-field-initializers
+)
+
+if(CONFIG_ESP_GCOV_ENABLE AND ENABLE_COVERAGE)
+    target_link_libraries(${TEST_APP_NAME} PRIVATE
+            idf::esp_gcov
+    )
+
+    target_compile_options(DaliMQTT-Core PRIVATE
+            --coverage
+            -Og
+    )
+
+    target_link_options(${TEST_APP_NAME} PRIVATE
+            --coverage
+    )
+
+    idf_create_coverage_report(${CMAKE_CURRENT_BINARY_DIR}/coverage_report)
+    idf_clean_coverage_report(${CMAKE_CURRENT_BINARY_DIR}/coverage_report)
+endif()

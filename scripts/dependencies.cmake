@@ -46,4 +46,16 @@ if(Dependencies_Platform_ESP)
             SOURCE_SUBDIR  "N/A"
     )
         FetchContent_MakeAvailable(esp-mqtt)
+
+
+    if(Dependencies_ESP_Extra_Required OR (BUILD_UNITY AND ENABLE_COVERAGE))
+        FetchContent_Declare(
+                idf-extra-components
+                GIT_REPOSITORY https://github.com/espressif/idf-extra-components.git
+                GIT_TAG        69e8b21e1a20c8c1c48f5d5cffceeb0bc262eed0
+                GIT_SUBMODULES ".gitignore" # no submodules
+        )
+        FetchContent_MakeAvailable(idf-extra-components)
+    endif()
+
 endif()

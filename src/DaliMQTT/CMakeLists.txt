@@ -11,7 +11,6 @@ target_compile_options(DaliMQTT-Core PRIVATE
         -Wshadow
         -Wdouble-promotion
         -Wimplicit-fallthrough
-        -Wnull-dereference
         -Wmissing-declarations
         -Wunused
         -Wformat=2
@@ -27,6 +26,10 @@ string(TIMESTAMP PROJ_BUILD_TIMESTAMP "%Y-%m-%dT%H:%M:%SZ")
 target_compile_definitions(DaliMQTT-Core PRIVATE
         $<$<CONFIG:Debug>:_DEBUG_DALIMQTT_>
         DALIMQTT_VERSION=\"${PROJVER}\"
+)
+
+target_compile_options(DaliMQTT-Core PRIVATE
+        ${_idf_compile_options}
 )
 
 set_source_files_properties(

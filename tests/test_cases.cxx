@@ -21,6 +21,10 @@ void run_mqtt_command_routing_tests();
 void run_wifi_and_system_tests();
 void run_http_stream_tests();
 
+#if defined(CONFIG_ESP_GCOV_ENABLE)
+extern "C" void esp_gcov_dump(void);
+#endif
+
 static void erase_namespace(const char* ns) {
     nvs_handle_t h;
     if (nvs_open(ns, NVS_READWRITE, &h) == ESP_OK) {
@@ -50,6 +54,13 @@ static void unity_test_task(void* pvParameters) {
     UNITY_END();
 
     ESP_LOGI(TAG, "All unit tests executed successfully.");
+
+#if defined(CONFIG_ESP_GCOV_ENABLE)
+    ESP_LOGI(TAG, "Triggering GCOV Coverage Data Dump...");
+    vTaskDelay(pdMS_TO_TICKS(100));
+    esp_gcov_dump();
+#endif
+
     vTaskDelete(nullptr);
 }
 

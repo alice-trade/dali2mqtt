@@ -27,6 +27,16 @@ target_link_libraries(${app} PRIVATE DaliMQTT-Core)
 
 idf_build_executable(${app})
 
+target_compile_options(${app} PRIVATE
+        ${_idf_compile_options}
+)
+
+if(IDF_VERSION_MAJOR GREATER_EQUAL 6 AND
+        CONFIG_COMPILER_LTO_COMPILETIME)
+    target_compile_options(DaliMQTT-Core PRIVATE -flto=auto)
+    target_compile_options(${app} PRIVATE -flto=auto)
+endif()
+
 include(${PROJDIR}/scripts/size_components.cmake)
 include(${PROJDIR}/scripts/make_webui.cmake)
 

@@ -18,6 +18,7 @@ if(BUILD_TESTING)
             -DBUILD_UNITY=1
             -DESP_BUILD_UTILS_PATH=${ESP_BUILD_UTILS_PATH}
             -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+            -DENABLE_COVERAGE=${ENABLE_COVERAGE}
             -DPROJDIR=${PROJDIR}
             ${CMAKE_SOURCE_DIR}/tests
 
@@ -87,6 +88,19 @@ if(BUILD_TESTING)
         message(WARNING "pytest not found. Pytest targets ('pytest-unit', 'pytest-integration') are disabled.")
     endif()
 
+    if(ENABLE_COVERAGE)
+        add_custom_target(gcovr-report
+                COMMAND ${CMAKE_MAKE_PROGRAM} -C ${TESTS_BINARY_DIR} gcovr-report
+                COMMENT "Generating HTML Coverage Report using ESP-IDF gcovr integration..."
+                USES_TERMINAL
+        )
+
+        add_custom_target(gcovr-cov-data-clean
+                COMMAND ${CMAKE_MAKE_PROGRAM} -C ${TESTS_BINARY_DIR} cov-data-clean
+                COMMENT "Cleaning coverage (.gcda) data..."
+                USES_TERMINAL
+        )
+    endif()
 else()
     message(STATUS "Testing targets are disabled. Pass -DBUILD_TESTING=ON to enable.")
 endif()
