@@ -27,8 +27,17 @@ EthernetBackend::~EthernetBackend() {
 esp_err_t EthernetBackend::init() {
     if (m_initialized) return ESP_OK;
 
-    ESP_RETURN_ON_ERROR(esp_netif_init(), TAG, "Netif init failed");
-    ESP_RETURN_ON_ERROR(esp_event_loop_create_default(), TAG, "Event loop init failed");
+    esp_err_t err = esp_netif_init();
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
+        ESP_LOGE(TAG, "Netif init failed: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    err = esp_event_loop_create_default();
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
+        ESP_LOGE(TAG, "Event loop init failed: %s", esp_err_to_name(err));
+        return err;
+    }
 
     esp_netif_config_t cfg = ESP_NETIF_DEFAULT_ETH();
     m_ethNetif = esp_netif_new(&cfg);

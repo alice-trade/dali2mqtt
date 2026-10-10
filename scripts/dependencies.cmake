@@ -1,5 +1,5 @@
 # Dependency resolving,
-# auto downloads using git either pass locally downloaded dependencies with definitions: "-D FETCHCONTENT_SOURCE_DIR_<DEPENDENCY>=<PATH>
+# auto downloads using git either pass locally downloaded dependencies with definitions: "-D FETCHCONTENT_SOURCE_DIR_<DEPENDENCY>=<PATH>"
 
 # ETL
 FetchContent_Declare(

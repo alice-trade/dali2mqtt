@@ -29,13 +29,19 @@ static void test_system_scheduler_precision() {
     TEST_ASSERT_EQUAL_INT(0, telemCount);
     TEST_ASSERT_EQUAL_INT(1, busHealthCount);
 
-    scheduler.tick(59);
+    scheduler.tick(15);
     TEST_ASSERT_EQUAL_INT(0, telemCount);
     TEST_ASSERT_EQUAL_INT(1, busHealthCount);
 
+    scheduler.tick(20);
+    TEST_ASSERT_EQUAL_INT(0, telemCount);
+    TEST_ASSERT_EQUAL_INT(2, busHealthCount);
+
+    scheduler.tick(59);
+    TEST_ASSERT_EQUAL_INT(0, telemCount);
+
     scheduler.tick(60);
     TEST_ASSERT_EQUAL_INT(1, telemCount);
-    TEST_ASSERT_EQUAL_INT(2, busHealthCount);
 
     scheduler.tick(172800);
     TEST_ASSERT_EQUAL_INT(1, otaCount);

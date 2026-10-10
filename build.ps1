@@ -44,7 +44,7 @@ function Print-Help {
     Write-Host "  cppcheck      Run static analysis with cppcheck"
     Write-Host "  clean         Remove the build directory for the selected target`n"
     Write-Host "Options:"
-    Write-Host "  -t <target>              ESP32 target (esp32s3, esp32c6, esp32c3, esp32s2, esp32)."
+    Write-Host "  -t <target>              ESP32 target (esp32s3, esp32c6, esp32s2, esp32)."
     Write-Host "                           If omitted, an interactive menu will appear."
     Write-Host "  -b <type>                CMake build type (Debug/Release)."
     Write-Host "                           If omitted, an interactive menu will appear."
@@ -193,7 +193,7 @@ if ([string]::IsNullOrEmpty($Command)) {
 
 if ([string]::IsNullOrEmpty($Target)) {
     if ($isInteractive) {
-        $targets = @("esp32s3", "esp32c6", "esp32c3", "esp32s2", "esp32")
+        $targets = @("esp32s3", "esp32c6", "esp32s2", "esp32")
         $tIdx = Tui-Select -Title "Target" -Options $targets
         $Target = $targets[$tIdx]
     } else {

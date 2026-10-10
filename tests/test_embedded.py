@@ -22,7 +22,6 @@ def reset_esp(dut: Dut) -> None:
 
 @pytest.mark.esp32s3
 @pytest.mark.esp32c6
-@pytest.mark.esp32c3
 def test_unity_embedded_firmware(dut: Dut) -> None:
     reset_esp(dut)
     dut.expect_exact('Initializing hardware environment for Unity tests...', timeout=10)

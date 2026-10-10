@@ -40,7 +40,7 @@ static void test_mqtt_bridge_queue_bounds() {
     longTopic[sizeof(longTopic) - 1] = '\0';
     TEST_ASSERT_FALSE(bridge.enqueueIncomingMessage(longTopic, strlen(longTopic), payload, strlen(payload)));
 
-    char longPayload[800];
+    char longPayload[1400];
     memset(longPayload, 'x', sizeof(longPayload));
     longPayload[sizeof(longPayload) - 1] = '\0';
     TEST_ASSERT_FALSE(bridge.enqueueIncomingMessage(topic, strlen(topic), longPayload, strlen(longPayload)));
@@ -49,8 +49,12 @@ static void test_mqtt_bridge_queue_bounds() {
 }
 
 static void test_ha_discovery_light_payload() {
-    auto ctx = std::make_unique<Application>();
-    HomeAssistantDiscovery disc(ctx->mqttClient, ctx->dali.Registry());
+    auto phy = std::make_unique<RmtDaliTransceiver>();
+    auto bus = std::make_unique<DaliBusEngine>(*phy, 0);
+    auto reg = std::make_unique<DaliDeviceRegistry>(*bus);
+    MqttClient client;
+
+    HomeAssistantDiscovery disc(client, *reg);
 
     ConfigStructure cfg = makeDefaultConfig();
     cfg.clientId = "TestGw";

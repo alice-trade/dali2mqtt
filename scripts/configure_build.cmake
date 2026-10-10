@@ -29,6 +29,8 @@ idf_build_executable(${app})
 
 target_compile_options(${app} PRIVATE
         ${_idf_compile_options}
+        $<$<COMPILE_LANGUAGE:C>:${_idf_c_compile_options}>
+        $<$<COMPILE_LANGUAGE:CXX>:${_idf_cxx_compile_options}>
 )
 
 if(IDF_VERSION_MAJOR GREATER_EQUAL 6 AND

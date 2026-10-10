@@ -137,4 +137,7 @@ idf_build_process(${TARGET}
         BUILD_DIR ${CMAKE_BINARY_DIR}
 )
 
-idf_build_get_property(_idf_compile_options COMPILE_OPTIONS)
+idf_build_get_property(_idf_compile_options COMPILE_OPTIONS GENERATOR_EXPRESSION)
+idf_build_get_property(_idf_c_compile_options C_COMPILE_OPTIONS GENERATOR_EXPRESSION)
+idf_build_get_property(_idf_cxx_compile_options CXX_COMPILE_OPTIONS GENERATOR_EXPRESSION)
+list(APPEND _idf_cxx_compile_options "-std=gnu++23")

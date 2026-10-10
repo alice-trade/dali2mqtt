@@ -36,6 +36,8 @@ idf_build_executable(${TEST_APP_NAME})
 
 target_compile_options(${TEST_APP_NAME} PRIVATE
         ${_idf_compile_options}
+        $<$<COMPILE_LANGUAGE:C>:${_idf_c_compile_options}>
+        $<$<COMPILE_LANGUAGE:CXX>:${_idf_cxx_compile_options}>
         -Wno-missing-field-initializers
 )
 

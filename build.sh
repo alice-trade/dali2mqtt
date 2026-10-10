@@ -42,7 +42,7 @@ print_help() {
     echo "  clean         Remove the build directory for the selected target"
     echo ""
     echo "Options:"
-    echo "  -t, --target <chip>       esp32s3, esp32c6, esp32c3, esp32s2, esp32"
+    echo "  -t, --target <chip>       esp32s3, esp32c6, esp32s2, esp32"
     echo "  -b, --build-type <type>   Release, Debug"
     echo "  -d, --build-dir <dir>     Custom build output directory"
     echo "  -i, --interactive         Run graphical TUI"
@@ -202,7 +202,7 @@ fi
 
 if [ -z "$TARGET" ]; then
     if [ $IS_INTERACTIVE -eq 1 ]; then
-        targets=("esp32s3" "esp32c6" "esp32c3" "esp32s2" "esp32")
+        targets=("esp32s3" "esp32c6" "esp32s2" "esp32")
         tui_select "Target" 0 "${targets[@]}"
         TARGET="${targets[$TUI_RESULT]}"
     else

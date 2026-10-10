@@ -110,4 +110,8 @@ void run_dali_input_events_tests() {
     RUN_TEST(test_input_frame_short_addr_number_scheme);
     RUN_TEST(test_input_frame_group_scheme);
     RUN_TEST(test_input_frame_broadcast_scheme);
+
+    s_registry.reset();
+    s_bus.reset();
+    s_phy.reset();
 }

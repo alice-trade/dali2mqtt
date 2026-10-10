@@ -30,6 +30,8 @@ target_compile_definitions(DaliMQTT-Core PRIVATE
 
 target_compile_options(DaliMQTT-Core PRIVATE
         ${_idf_compile_options}
+        $<$<COMPILE_LANGUAGE:C>:${_idf_c_compile_options}>
+        $<$<COMPILE_LANGUAGE:CXX>:${_idf_cxx_compile_options}>
 )
 
 set_source_files_properties(

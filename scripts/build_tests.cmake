@@ -85,7 +85,7 @@ if(BUILD_TESTING)
                 COMMENT "Running complete pytest suite (Embedded Unit + Integration)..."
         )
     else()
-        message(WARNING "pytest not found. Pytest targets ('pytest-unit', 'pytest-integration') are disabled.")
+        message(STATUS "pytest not found. Pytest targets ('pytest-unit', 'pytest-integration') are disabled.")
     endif()
 
     if(ENABLE_COVERAGE)

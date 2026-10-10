@@ -6,10 +6,15 @@ project(
         LANGUAGES C CXX ASM
 )
 
-include(scripts/common.cmake)
 set(PROJVER ${CMAKE_PROJECT_VERSION})
 set(PROJDIR ${CMAKE_SOURCE_DIR})
 set(PROJBRANCH "default")
+
+if(POLICY CMP0168)
+    cmake_policy(SET CMP0168 NEW)
+endif()
+
+include(scripts/common.cmake)
 
 if(GIT_FOUND)
     execute_process(
@@ -40,7 +45,7 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 endif()
 
 message("DALI-2-MQTT v${PROJVER} (${PROJBRANCH})")
-set(targets "esp32s3" "esp32c6" "esp32c3" "esp32s2" "esp32")
+set(targets "esp32s3" "esp32c6" "esp32s2" "esp32")
 
 option(IGNORE_PLATFORM_REQS "Ignore platform checks" OFF)
 if("${TARGET}" IN_LIST targets OR IGNORE_PLATFORM_REQS)

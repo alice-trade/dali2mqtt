@@ -7,7 +7,6 @@ from pytest_embedded import Dut
 
 @pytest.mark.esp32s3
 @pytest.mark.esp32c6
-@pytest.mark.esp32c3
 def test_main_firmware_boot_and_provisioning(dut: Dut) -> None:
     dut.expect(r'DALI-to-MQTT Bridge Core v\.\d+\.\d+\.\d+', timeout=10)
 
