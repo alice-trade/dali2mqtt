@@ -34,6 +34,7 @@ struct HttpChunkStream {
         }
     }
 };
+
 struct ApiHandlers {
     static esp_err_t getConfig(httpd_req_t* req);
     static esp_err_t setConfig(httpd_req_t* req);
@@ -58,6 +59,12 @@ struct ApiHandlers {
 
     static esp_err_t triggerOtaCheck(httpd_req_t* req);
     static esp_err_t triggerOtaInstall(httpd_req_t* req);
+
+    static void webRebootTaskRunner(void* arg);
+    static void webScanTaskRunner(void* arg);
+    static void webInitTaskRunner(void* arg);
+    static void webInputInitTaskRunner(void* arg);
+    static void webGroupRefreshTaskRunner(void* arg);
 };
 
 } // namespace daliMQTT

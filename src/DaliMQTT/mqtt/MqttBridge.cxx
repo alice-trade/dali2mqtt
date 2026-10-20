@@ -22,6 +22,7 @@ MqttBridge::MqttBridge(MqttClient& mqtt, DaliDeviceRegistry& daliRegistry, DaliB
       m_discovery(m_mqtt, m_daliRegistry) {
     m_cmdQueue = xQueueCreate(CMD_QUEUE_CAPACITY, sizeof(MqttIncomingMessage));
     m_daliEventsQueue = xQueueCreate(16, sizeof(DeviceStateChangeEvent));
+    m_rawMonitorQueue = xQueueCreate(16, sizeof(DaliRawFrame));
 }
 
 MqttBridge::~MqttBridge() {
@@ -30,6 +31,8 @@ MqttBridge::~MqttBridge() {
         vQueueDelete(m_cmdQueue);
     if (m_daliEventsQueue)
         vQueueDelete(m_daliEventsQueue);
+    if (m_rawMonitorQueue)
+        vQueueDelete(m_rawMonitorQueue);
 }
 
 esp_err_t MqttBridge::start() {
@@ -40,6 +43,7 @@ esp_err_t MqttBridge::start() {
     m_daliRegistry.setGroupStateCallback(&onDaliGroupStateChanged, this);
     m_daliRegistry.setInputEventCallback(&onDaliInputEvent, this);
     m_daliRegistry.setDeviceAttributesCallback(&onDaliDeviceAttributesLoaded, this);
+    m_daliBus.setRawSnifferCallback(&onRawBusFrameObserved, this);
 
     m_ota.setProgressCallback(&onOtaProgressChanged, this);
     m_ota.setVersionCallback(&onOtaVersionReceived, this);
@@ -60,6 +64,7 @@ esp_err_t MqttBridge::start() {
 }
 
 void MqttBridge::stop() {
+    m_daliBus.setRawSnifferCallback(nullptr, nullptr);
     if (m_taskHandle) {
         vTaskDelete(m_taskHandle);
         m_taskHandle = nullptr;
@@ -93,6 +98,9 @@ void MqttBridge::onMqttConnectedBridge(void* ctx) {
     self->m_mqtt.publish(metaTopic, self->m_network.getIpAddress().c_str(), 0, true);
 
     char topicBuf[128];
+
+    snprintf(topicBuf, sizeof(topicBuf), "%s/raw/tx", self->m_baseTopic.c_str());
+    self->m_mqtt.subscribe(topicBuf);
 
     snprintf(topicBuf, sizeof(topicBuf), "%s/light/+/set", self->m_baseTopic.c_str());
     self->m_mqtt.subscribe(topicBuf);
@@ -181,6 +189,13 @@ void MqttBridge::onDaliDeviceStateChanged(const DeviceStateChangeEvent& event, v
     const auto* self = static_cast<MqttBridge*>(ctx);
     if (self->m_daliEventsQueue) {
         xQueueSend(self->m_daliEventsQueue, &event, 0);
+    }
+}
+
+void MqttBridge::onRawBusFrameObserved(const DaliRawFrame& frame, uint8_t, void* ctx) {
+    auto* self = static_cast<MqttBridge*>(ctx);
+    if (self->m_rawMonitorQueue && self->m_mqtt.isConnected()) {
+        xQueueSend(self->m_rawMonitorQueue, &frame, 0);
     }
 }
 
@@ -348,6 +363,7 @@ void MqttBridge::bridgeTaskRunner(void* arg) {
 
 [[noreturn]] void MqttBridge::bridgeWorkerLoop() const {
     DeviceStateChangeEvent daliEv{};
+    DaliRawFrame rawFrame{};
 
     while (true) {
         if (xQueueReceive(m_cmdQueue, &m_currentMsg, pdMS_TO_TICKS(10)) == pdTRUE) {
@@ -360,7 +376,95 @@ void MqttBridge::bridgeTaskRunner(void* arg) {
         while (xQueueReceive(m_daliEventsQueue, &daliEv, 0) == pdTRUE) {
             publishDeviceStateInternal(daliEv);
         }
+
+        while (xQueueReceive(m_rawMonitorQueue, &rawFrame, 0) == pdTRUE) {
+            publishRawMonitorFrame(rawFrame);
+        }
     }
+}
+
+void MqttBridge::publishRawMonitorFrame(const DaliRawFrame& frame) const {
+    char monTopic[128];
+    snprintf(monTopic, sizeof(monTopic), "%s/raw/monitor", m_baseTopic.c_str());
+
+    auto typeStr = "unknown";
+    switch (frame.type) {
+    case DaliFrameType::Forward16: typeStr = "fwd16"; break;
+    case DaliFrameType::Forward24: typeStr = "fwd24"; break;
+    case DaliFrameType::Backward8: typeStr = "back8"; break;
+    case DaliFrameType::Collision: typeStr = "collision"; break;
+    case DaliFrameType::NoiseCorrupted: typeStr = "noise"; break;
+    default: break;
+    }
+
+    char payload[128];
+    if (frame.bits == 16) {
+        snprintf(payload, sizeof(payload), R"({"type":"%s","bits":16,"data":"%04X","value":%u})",
+                 typeStr, static_cast<unsigned>(frame.data & 0xFFFF), static_cast<unsigned>(frame.data & 0xFFFF));
+    } else if (frame.bits == 24) {
+        snprintf(payload, sizeof(payload), R"({"type":"%s","bits":24,"data":"%06X","value":%u})",
+                 typeStr, static_cast<unsigned>(frame.data & 0xFFFFFF), static_cast<unsigned>(frame.data & 0xFFFFFF));
+    } else {
+        snprintf(payload, sizeof(payload), R"({"type":"%s","bits":%u,"data":"%02X","value":%u})",
+                 typeStr, static_cast<unsigned>(frame.bits),
+                 static_cast<unsigned>(frame.data & 0xFF), static_cast<unsigned>(frame.data & 0xFF));
+    }
+
+    m_mqtt.publish(monTopic, payload, 0, false);
+}
+
+void MqttBridge::haReplayTaskRunner(void* arg) {
+    auto* self = static_cast<MqttBridge*>(arg);
+    vTaskDelay(pdMS_TO_TICKS(300));
+    self->replayAllCachedStates();
+    self->m_replayInProgress.store(false);
+    vTaskDelete(nullptr);
+}
+
+void MqttBridge::groupRefreshTaskRunner(void* arg) {
+    auto* self = static_cast<MqttBridge*>(arg);
+    self->m_daliRegistry.refreshGroupAssignmentsFromBus();
+    self->publishAllDeviceGroups();
+    self->handleGroupConfigGetCommand();
+    vTaskDelete(nullptr);
+}
+
+void MqttBridge::configRebootTaskRunner(void*) {
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    esp_restart();
+}
+
+void MqttBridge::busScanTaskRunner(void* arg) {
+    auto* self = static_cast<MqttBridge*>(arg);
+    self->m_daliRegistry.scanBus();
+    self->m_daliRegistry.refreshGroupAssignmentsFromBus();
+
+    self->publishBusSyncStatus("idle", "scan_complete");
+    ESP_LOGI(TAG, "MQTT-initiated DALI scan finished.");
+    self->m_busOperationBusy.store(false);
+    vTaskDelete(nullptr);
+}
+
+void MqttBridge::busInitTaskRunner(void* arg) {
+    auto* self = static_cast<MqttBridge*>(arg);
+    self->m_daliRegistry.commissionNewDevices();
+    self->m_daliRegistry.refreshGroupAssignmentsFromBus();
+
+    self->publishBusSyncStatus("idle", "init_complete");
+    ESP_LOGI(TAG, "MQTT-initiated DALI commissioning finished.");
+    self->m_busOperationBusy.store(false);
+    vTaskDelete(nullptr);
+}
+
+void MqttBridge::inputInitTaskRunner(void* arg) {
+    auto* self = static_cast<MqttBridge*>(arg);
+    self->m_daliRegistry.commission24BitDevices();
+    self->m_daliRegistry.refreshGroupAssignmentsFromBus();
+
+    self->publishBusSyncStatus("idle", "input_init_complete");
+    ESP_LOGI(TAG, "MQTT-initiated Input Device commissioning finished.");
+    self->m_busOperationBusy.store(false);
+    vTaskDelete(nullptr);
 }
 
 void MqttBridge::handleHomeAssistantStatus(std::string_view payload) const {
@@ -371,16 +475,7 @@ void MqttBridge::handleHomeAssistantStatus(std::string_view payload) const {
         }
 
         ESP_LOGI(TAG, "Home Assistant is ONLINE (Birth Message received). Scheduling state replay...");
-
-        xTaskCreate(
-            [](void* arg) {
-                auto* self = static_cast<const MqttBridge*>(arg);
-                vTaskDelay(pdMS_TO_TICKS(300));
-                self->replayAllCachedStates();
-                self->m_replayInProgress.store(false);
-                vTaskDelete(nullptr);
-            },
-            "ha_replay_task", 4096, const_cast<MqttBridge*>(this), 3, nullptr);
+        xTaskCreate(haReplayTaskRunner, "ha_replay_task", 4096, const_cast<MqttBridge*>(this), 3, nullptr);
 
     } else if (payload == "offline") {
         ESP_LOGW(TAG, "Home Assistant is OFFLINE (LWT)");
@@ -406,7 +501,9 @@ void MqttBridge::routeIncomingCommand(std::string_view topic, std::string_view p
     std::string_view subTopic = topic;
     subTopic.remove_prefix(m_baseTopic.length());
 
-    if (subTopic.starts_with("/light/")) {
+    if (subTopic == "/raw/tx") {
+        handleRawTxCommand(payload);
+    } else if (subTopic.starts_with("/light/")) {
         subTopic.remove_prefix(7);
         handleLightCommand(subTopic, payload);
     } else if (subTopic.starts_with("/scene/bus/")) {
@@ -454,6 +551,82 @@ void MqttBridge::routeIncomingCommand(std::string_view topic, std::string_view p
     }
 }
 
+void MqttBridge::handleRawTxCommand(std::string_view payload) const {
+    JsonDocument doc;
+    if (deserializeJson(doc, payload.data(), payload.size()) != DeserializationError::Ok) {
+        return;
+    }
+
+    uint32_t rawData = 0;
+    uint8_t bits = 16;
+    bool hasData = false;
+
+    auto parseDataField = [&](JsonVariantConst v) {
+        if (v.is<const char*>()) {
+            std::string_view sv(v.as<const char*>());
+            if (sv.starts_with("0x") || sv.starts_with("0X")) {
+                sv.remove_prefix(2);
+            }
+            auto [ptr, ec] = std::from_chars(sv.data(), sv.data() + sv.size(), rawData, 16);
+            if (ec == std::errc{}) {
+                hasData = true;
+                if (sv.length() > 4) {
+                    bits = 24;
+                }
+            }
+        } else if (v.is<uint32_t>()) {
+            rawData = v.as<uint32_t>();
+            hasData = true;
+            if (rawData > 0xFFFF) {
+                bits = 24;
+            }
+        }
+    };
+
+    if (!doc["data"].isNull()) {
+        parseDataField(doc["data"]);
+    } else if (!doc["frame"].isNull()) {
+        parseDataField(doc["frame"]);
+    }
+
+    if (!hasData) {
+        return;
+    }
+    if (doc["bits"].is<uint8_t>()) {
+        bits = doc["bits"].as<uint8_t>();
+    }
+
+    const bool twice = doc["twice"].is<bool>() ? doc["twice"].as<bool>() : false;
+    const bool isQuery = doc["query"].is<bool>() ? doc["query"].as<bool>() : false;
+    const auto res = m_daliBus.sendRawFrame(rawData, bits, isQuery, twice);
+
+    if (!doc["id"].isNull()) {
+        JsonDocument respDoc;
+        respDoc["id"] = doc["id"];
+
+        if (res.err == ESP_OK) {
+            respDoc["status"] = "ok";
+            if (isQuery && res.response.has_value()) {
+                char hexBuf[4];
+                snprintf(hexBuf, sizeof(hexBuf), "%02X", *res.response);
+                respDoc["data"] = hexBuf;
+                respDoc["value"] = *res.response;
+            }
+        } else if (res.err == ESP_ERR_TIMEOUT) {
+            respDoc["status"] = isQuery ? "timeout" : "error";
+        } else {
+            respDoc["status"] = "error";
+        }
+
+        char resPayload[128];
+        serializeJson(respDoc, resPayload, sizeof(resPayload));
+
+        char resTopic[128];
+        snprintf(resTopic, sizeof(resTopic), "%s/raw/rx", m_baseTopic.c_str());
+        m_mqtt.publish(resTopic, resPayload, 0, false);
+    }
+}
+
 void MqttBridge::handleLightCommand(std::string_view targetPath, std::string_view payload) const {
     if (!targetPath.ends_with("/set"))
         return;
@@ -478,13 +651,15 @@ void MqttBridge::handleLightCommand(std::string_view targetPath, std::string_vie
     }
 
     if (targetPath == "broadcast") {
-        if (brightness.has_value())
+        if (brightness.has_value()) {
             m_daliBus.sendDAPC(DaliAddressType::Broadcast, 0, *brightness);
-        else if (powerState.has_value()) {
+            m_daliRegistry.requestBroadcastSync(200, 100);
+        } else if (powerState.has_value()) {
             if (*powerState)
                 m_daliBus.sendGearCommand(DaliAddressType::Broadcast, 0, OpCode::RecallMaxLevel);
             else
                 m_daliBus.sendGearCommand(DaliAddressType::Broadcast, 0, OpCode::Off);
+            m_daliRegistry.requestBroadcastSync(200, 100);
         }
         return;
     }
@@ -612,15 +787,7 @@ void MqttBridge::handleGroupConfigGetCommand() const {
 
 void MqttBridge::handleGroupRefreshCommand() const {
     ESP_LOGI(TAG, "MQTT requested group refresh from DALI bus...");
-    xTaskCreate(
-        [](void* arg) {
-            auto* self = static_cast<const MqttBridge*>(arg);
-            self->m_daliRegistry.refreshGroupAssignmentsFromBus();
-            self->publishAllDeviceGroups();
-            self->handleGroupConfigGetCommand();
-            vTaskDelete(nullptr);
-        },
-        "mqtt_grp_ref", 4096, const_cast<MqttBridge*>(this), 4, nullptr);
+    xTaskCreate(groupRefreshTaskRunner, "mqtt_grp_ref", 4096, const_cast<MqttBridge*>(this), 4, nullptr);
 }
 
 void MqttBridge::handleGroupConfigCommand(std::string_view payload) const {
@@ -825,12 +992,7 @@ void MqttBridge::handleConfigSetCommand(std::string_view payload) const {
 
     if (result.requiresReboot) {
         ESP_LOGW(TAG, "Critical configuration changed via MQTT. Rebooting in 1s...");
-        xTaskCreate(
-            [](void*) {
-                vTaskDelay(pdMS_TO_TICKS(1000));
-                esp_restart();
-            },
-            "mqtt_reboot_task", 2048, nullptr, 5, nullptr);
+        xTaskCreate(configRebootTaskRunner, "mqtt_reboot_task", 2048, nullptr, 5, nullptr);
     }
 }
 
@@ -1008,19 +1170,7 @@ void MqttBridge::handleBusScanCommand() const {
 
     ESP_LOGI(TAG, "Starting MQTT-initiated asynchronous DALI bus scan...");
     publishBusSyncStatus("scanning");
-
-    xTaskCreate(
-        [](void* arg) {
-            auto* self = static_cast<const MqttBridge*>(arg);
-            self->m_daliRegistry.scanBus();
-            self->m_daliRegistry.refreshGroupAssignmentsFromBus();
-
-            self->publishBusSyncStatus("idle", "scan_complete");
-            ESP_LOGI(TAG, "MQTT-initiated DALI scan finished.");
-            self->m_busOperationBusy.store(false);
-            vTaskDelete(nullptr);
-        },
-        "mqtt_scan_task", 4096, const_cast<MqttBridge*>(this), 4, nullptr);
+    xTaskCreate(busScanTaskRunner, "mqtt_scan_task", 4096, const_cast<MqttBridge*>(this), 4, nullptr);
 }
 
 void MqttBridge::handleBusInitializeCommand() const {
@@ -1031,19 +1181,7 @@ void MqttBridge::handleBusInitializeCommand() const {
 
     ESP_LOGI(TAG, "Starting MQTT-initiated DALI commissioning (Control Gear)...");
     publishBusSyncStatus("initializing");
-
-    xTaskCreate(
-        [](void* arg) {
-            auto* self = static_cast<const MqttBridge*>(arg);
-            self->m_daliRegistry.commissionNewDevices();
-            self->m_daliRegistry.refreshGroupAssignmentsFromBus();
-
-            self->publishBusSyncStatus("idle", "init_complete");
-            ESP_LOGI(TAG, "MQTT-initiated DALI commissioning finished.");
-            self->m_busOperationBusy.store(false);
-            vTaskDelete(nullptr);
-        },
-        "mqtt_init_task", 4096, const_cast<MqttBridge*>(this), 4, nullptr);
+    xTaskCreate(busInitTaskRunner, "mqtt_init_task", 4096, const_cast<MqttBridge*>(this), 4, nullptr);
 }
 
 void MqttBridge::handleInputDeviceInitializeCommand() const {
@@ -1054,19 +1192,7 @@ void MqttBridge::handleInputDeviceInitializeCommand() const {
 
     ESP_LOGI(TAG, "Starting MQTT-initiated DALI commissioning (24-bit Input Devices)...");
     publishBusSyncStatus("initializing");
-
-    xTaskCreate(
-        [](void* arg) {
-            auto* self = static_cast<const MqttBridge*>(arg);
-            self->m_daliRegistry.commission24BitDevices();
-            self->m_daliRegistry.refreshGroupAssignmentsFromBus();
-
-            self->publishBusSyncStatus("idle", "input_init_complete");
-            ESP_LOGI(TAG, "MQTT-initiated Input Device commissioning finished.");
-            self->m_busOperationBusy.store(false);
-            vTaskDelete(nullptr);
-        },
-        "mqtt_inp_init_task", 4096, const_cast<MqttBridge*>(this), 4, nullptr);
+    xTaskCreate(inputInitTaskRunner, "mqtt_inp_init_task", 4096, const_cast<MqttBridge*>(this), 4, nullptr);
 }
 
 void MqttBridge::onDaliDeviceAttributesLoaded(const ControlGear& gear, void* ctx) {

@@ -30,7 +30,7 @@ class MqttBridge {
                DaliBusEngine& daliBus,
                ConfigStore& config,
                OtaService& ota,
-                const NetworkPlatform& network);
+               const NetworkPlatform& network);
     ~MqttBridge();
 
     MqttBridge(const MqttBridge&) = delete;
@@ -52,9 +52,17 @@ class MqttBridge {
     static void onDaliInputEvent(const InputDeviceEvent& event, void* ctx);
     static void onOtaProgressChanged(const OtaProgressEvent& event, void* ctx);
     static void onOtaVersionReceived(const OtaVersionInfo& info, void* ctx);
+    static void onRawBusFrameObserved(const DaliRawFrame& frame, uint8_t busId, void* ctx);
 
     static void bridgeTaskRunner(void* arg);
     [[noreturn]] void bridgeWorkerLoop() const;
+
+    static void haReplayTaskRunner(void* arg);
+    static void groupRefreshTaskRunner(void* arg);
+    static void configRebootTaskRunner(void* arg);
+    static void busScanTaskRunner(void* arg);
+    static void busInitTaskRunner(void* arg);
+    static void inputInitTaskRunner(void* arg);
 
     void routeIncomingCommand(std::string_view topic, std::string_view payload) const;
     void handleLightCommand(std::string_view targetPath, std::string_view payload) const;
@@ -63,6 +71,7 @@ class MqttBridge {
     void handleGroupRefreshCommand() const;
     void handleSceneCommand(std::string_view busStr, std::string_view payload) const;
     void handleRawDaliCommand(std::string_view payload) const;
+    void handleRawTxCommand(std::string_view payload) const;
     void handleSyncCommand(std::string_view payload) const;
     void handleConfigGetCommand() const;
     void handleConfigSetCommand(std::string_view payload) const;
@@ -86,7 +95,7 @@ class MqttBridge {
     void publishDeviceGroups(DaliLongAddress_t longAddr, const GroupMask& groups) const;
     void publishAllDeviceGroups() const;
     void publishDeviceStateInternal(const DeviceStateChangeEvent& event) const;
-
+    void publishRawMonitorFrame(const DaliRawFrame& frame) const;
     MqttClient& m_mqtt;
     DaliDeviceRegistry& m_daliRegistry;
     DaliBusEngine& m_daliBus;
@@ -95,6 +104,7 @@ class MqttBridge {
     OtaService& m_ota;
     const NetworkPlatform& m_network;
     HomeAssistantDiscovery m_discovery;
+    QueueHandle_t m_rawMonitorQueue{nullptr};
 
     mutable std::mutex m_arenaMutex{};
     mutable memory::StaticArena<6144> m_bridgeArena{};

@@ -47,7 +47,7 @@ class AppCoordinator {
 
     void start();
     void handleConfigReload() const;
-    void factoryReset() const;
+    void factoryReset();
     inline void handleSystemEvent(SystemEventType event);
     [[nodiscard]] inline AppState getState() const noexcept;
     inline void eventLoop(uint32_t waitMs);
@@ -56,6 +56,7 @@ class AppCoordinator {
     void handleNetworkConnected();
     void handleNetworkDisconnected();
 
+    static void factoryResetTaskRunner(void* arg);
     static void onFactoryResetRequestedEntry(void* ctx);
     static void onMinuteTelemetry(void* ctx);
     static void onBusHealthCheck(void* ctx);

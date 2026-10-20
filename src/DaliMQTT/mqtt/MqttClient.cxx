@@ -40,6 +40,7 @@ esp_err_t MqttClient::init(const ConfigStructure& config) {
 
     esp_mqtt_client_config_t mqttCfg{};
     mqttCfg.session.protocol_ver = MQTT_PROTOCOL_V_3_1_1;
+    mqttCfg.buffer.size = 2048;
     mqttCfg.broker.address.uri = config.mqttUri.c_str();
     mqttCfg.credentials.client_id = config.clientId.c_str();
 

@@ -42,7 +42,7 @@ concept DaliBusConcept = requires(
     { b.sendDeviceSpecial(data, data, false) } -> std::same_as<esp_err_t>;
     { b.queryDevice(shortAddr, data) } -> std::same_as<std::optional<uint8_t>>;
     { b.queryInstance(shortAddr, instance, data) } -> std::same_as<std::optional<uint8_t>>;
-
+    { b.sendRaw(rawData, 16U, false) } -> std::same_as<esp_err_t>;
     { b.queryRaw(rawData, 16U) } -> std::same_as<std::optional<uint8_t>>;
     { b.setDtr0(data) } -> std::same_as<esp_err_t>;
     { b.setDtr1(data) } -> std::same_as<esp_err_t>;

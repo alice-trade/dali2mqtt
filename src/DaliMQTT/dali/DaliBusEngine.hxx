@@ -22,6 +22,11 @@ namespace daliMQTT {
 using BusSnifferCallback = void (*)(const DaliRawFrame& frame, uint8_t busId, void* userCtx);
 enum class BusHealth : uint8_t { Ok, ShortCircuit, HardwareFault };
 
+struct RawTransactionResult {
+    esp_err_t err{ESP_FAIL};
+    std::optional<uint8_t> response{std::nullopt};
+};
+
 class DaliBusEngine {
   public:
     DaliBusEngine(RmtDaliTransceiver& transceiver, uint8_t busId);
@@ -44,7 +49,10 @@ class DaliBusEngine {
     inline std::optional<uint8_t> queryGearSpecial(SpecialOpCode opcode, uint8_t data) const;
     inline std::optional<uint8_t> queryDevice(uint8_t shortAddr, uint8_t opcode) const;
     inline std::optional<uint8_t> queryInstance(uint8_t shortAddr, uint8_t instance, uint8_t opcode) const;
-    std::optional<uint8_t> queryRaw(uint32_t rawData, uint8_t bits = 16) const;
+    RawTransactionResult sendRawFrame(uint32_t rawData, uint8_t bits = 16, bool isQuery = false,
+                                      bool sendTwice = false) const;
+    inline esp_err_t sendRaw(uint32_t rawData, uint8_t bits = 16, bool sendTwice = false) const;
+    inline std::optional<uint8_t> queryRaw(uint32_t rawData, uint8_t bits = 16) const;
     bool readMemoryBlock(uint8_t shortAddr, uint8_t bank, uint8_t startOffset, uint8_t* outBuffer,
                          uint8_t length) const;
     inline esp_err_t setDtr0(uint8_t value) const;
@@ -52,18 +60,16 @@ class DaliBusEngine {
     inline esp_err_t setDtr2(uint8_t value) const;
     inline std::optional<uint8_t> readMemoryLocation(uint8_t shortAddr, uint8_t bank, uint8_t offset) const;
 
-    inline void lockBus() const { xSemaphoreTakeRecursive(m_busMutex, portMAX_DELAY); }
-    inline void unlockBus() const { xSemaphoreGiveRecursive(m_busMutex); }
+    inline void lockBus() const;
+    inline void unlockBus() const;
 
     uint32_t findAddressBinarySearch(bool is24BitInputDevice) const;
 
     [[nodiscard]] inline BusHealth checkHealth() const noexcept;
     [[nodiscard]] inline uint8_t getBusId() const noexcept { return m_busId; }
     [[nodiscard]] inline bool isInitialized() const noexcept { return m_running.load(std::memory_order_relaxed); }
-    inline void setSnifferCallback(BusSnifferCallback cb, void* ctx) noexcept {
-        m_snifferCb = cb;
-        m_snifferCtx = ctx;
-    }
+    inline void setSnifferCallback(BusSnifferCallback cb, void* ctx) noexcept;
+    inline void setRawSnifferCallback(BusSnifferCallback cb, void* ctx) noexcept;
 
   private:
     struct TransactionResponse {
@@ -93,7 +99,6 @@ class DaliBusEngine {
     static constexpr uint32_t makeFrame16(uint8_t addressByte, uint8_t opcodeByte) noexcept;
     static constexpr uint32_t makeFrame24(uint8_t addrByte, uint8_t instByte, uint8_t opcodeByte) noexcept;
 
-    static constexpr UBaseType_t NOTIFY_INDEX = 0;
     static constexpr size_t QUEUE_SIZE = 16;
 
     RmtDaliTransceiver& m_transceiver;
@@ -106,8 +111,10 @@ class DaliBusEngine {
 
     BusSnifferCallback m_snifferCb{nullptr};
     void* m_snifferCtx{nullptr};
+    BusSnifferCallback m_rawSnifferCb{nullptr};
+    void* m_rawSnifferCtx{nullptr};
 
-    static constexpr size_t BUS_ENG_STACK_SIZE = 4096 / sizeof(StackType_t);
+    static constexpr size_t BUS_ENG_STACK_SIZE = 5120 / sizeof(StackType_t);
     StackType_t m_workerStack[BUS_ENG_STACK_SIZE]{};
     StaticTask_t m_workerTaskBuffer{};
 

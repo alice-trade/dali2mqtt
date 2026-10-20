@@ -101,16 +101,16 @@ void AppCoordinator::onFactoryResetRequestedEntry(void* ctx) {
     }
 }
 
-void AppCoordinator::factoryReset() const {
-    xTaskCreate(
-        [](void* arg) {
-            auto* self = static_cast<const AppCoordinator*>(arg);
-            ESP_LOGW(TAG, "Factory Reset confirmed. Erasing NVS and rebooting...");
-            self->m_deps.config.factoryReset();
-            vTaskDelay(pdMS_TO_TICKS(1000));
-            esp_restart();
-        },
-        "fact_rst_task", 4096, const_cast<AppCoordinator*>(this), 5, nullptr);
+void AppCoordinator::factoryResetTaskRunner(void* arg) {
+    auto* self = static_cast<AppCoordinator*>(arg);
+    ESP_LOGW(TAG, "Factory Reset confirmed. Erasing NVS and rebooting...");
+    self->m_deps.config.factoryReset();
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    esp_restart();
+}
+
+void AppCoordinator::factoryReset() {
+    xTaskCreate(factoryResetTaskRunner, "fact_rst_task", 4096, this, 5, nullptr);
 }
 
 void AppCoordinator::onMinuteTelemetry(void* ctx) {

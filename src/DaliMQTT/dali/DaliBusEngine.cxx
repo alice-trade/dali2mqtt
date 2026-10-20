@@ -120,25 +120,22 @@ void DaliBusEngine::busWorkerTaskRunner(void* arg) {
 
         if (xQueueReceive(m_phyEventQueue, &frame, waitTicks) == pdTRUE) {
             if (frame.type == DaliFrameType::Wakeup) {
-                // pass
-            } else if (state == EngineState::Idle) {
+                continue;
+            }
+
+            if (m_rawSnifferCb && (frame.isValid() || frame.type == DaliFrameType::Collision)) {
+                m_rawSnifferCb(frame, m_busId, m_rawSnifferCtx);
+            }
+
+            switch (state) {
+            case EngineState::Idle:
                 if (frame.isValid() && m_snifferCb) {
                     m_snifferCb(frame, m_busId, m_snifferCtx);
                 }
-            } else if (state == EngineState::Transmitting) {
-                if (activeTx.isQuery && frame.isBackward()) {
-                    finish(ESP_OK, static_cast<uint8_t>(frame.data & 0xFF));
-                } else if (frame.type == DaliFrameType::Collision || frame.type == DaliFrameType::NoiseCorrupted) {
-                    if (++retryCount <= 2) {
-                        currentBackoffUs = 15'000 + (esp_random() % 25'000);
-                        ESP_LOGW(TAG, "Bus collision, backing off and retrying (%d/2)...", retryCount);
-                        state = EngineState::CollisionBackoff;
-                        stateEnterTimeUs = esp_timer_get_time();
-                    } else {
-                        ESP_LOGE(TAG, "Bus collision retry limit exceeded");
-                        finish(ESP_FAIL, 0);
-                    }
-                } else if (frame.type == DaliFrameType::TxEchoSuccess) {
+                break;
+
+            case EngineState::Transmitting:
+                if (frame.type == DaliFrameType::TxEchoSuccess) {
                     const int64_t now = esp_timer_get_time();
                     if (activeTx.sendTwice) {
                         state = EngineState::TwiceDelay;
@@ -149,14 +146,31 @@ void DaliBusEngine::busWorkerTaskRunner(void* arg) {
                     } else {
                         finish(ESP_OK, 0);
                     }
+                } else if (frame.type == DaliFrameType::Collision || frame.type == DaliFrameType::NoiseCorrupted) {
+                    if (++retryCount <= 2) {
+                        currentBackoffUs = 15'000 + (esp_random() % 25'000);
+                        ESP_LOGW(TAG, "Bus collision on TX, backing off (%d/2)...", retryCount);
+                        state = EngineState::CollisionBackoff;
+                        stateEnterTimeUs = esp_timer_get_time();
+                    } else {
+                        ESP_LOGE(TAG, "Bus collision retry limit exceeded");
+                        finish(ESP_FAIL, 0);
+                    }
                 }
-            } else if (state == EngineState::AwaitingReply) {
+                break;
+
+            case EngineState::AwaitingReply:
                 if (frame.isBackward()) {
                     finish(ESP_OK, static_cast<uint8_t>(frame.data & 0xFF));
                 } else if (activeTx.acceptAnyReplyAsYes &&
                            (frame.type == DaliFrameType::Collision || frame.type == DaliFrameType::NoiseCorrupted)) {
                     finish(ESP_OK, 0xFF);
                 }
+                break;
+
+            case EngineState::TwiceDelay:
+            case EngineState::CollisionBackoff:
+                break;
             }
         }
 
@@ -178,6 +192,7 @@ void DaliBusEngine::busWorkerTaskRunner(void* arg) {
                 stateEnterTimeUs = nowUs;
             }
             break;
+
         case EngineState::TwiceDelay:
             if (nowUs - stateEnterTimeUs >= 40'000) {
                 activeTx.sendTwice = false;
@@ -261,15 +276,18 @@ esp_err_t DaliBusEngine::executeTransaction(const TransactionRequest& request, u
     return finalErr;
 }
 
-std::optional<uint8_t> DaliBusEngine::queryRaw(const uint32_t rawData, const uint8_t bits) const {
+RawTransactionResult DaliBusEngine::sendRawFrame(const uint32_t rawData, const uint8_t bits, const bool isQuery,
+                                                 const bool sendTwice) const {
     uint8_t response = 0;
     const TransactionRequest req{
-        .data = rawData, .bits = bits, .isQuery = true, .sendTwice = false, .acceptAnyReplyAsYes = false};
+        .data = rawData, .bits = bits, .isQuery = isQuery, .sendTwice = sendTwice, .acceptAnyReplyAsYes = false};
 
-    if (executeTransaction(req, &response) == ESP_OK) {
-        return response;
+    const esp_err_t err = executeTransaction(req, isQuery ? &response : nullptr);
+    RawTransactionResult res{.err = err};
+    if (err == ESP_OK && isQuery) {
+        res.response = response;
     }
-    return std::nullopt;
+    return res;
 }
 
 uint32_t DaliBusEngine::findAddressBinarySearch(const bool is24BitInputDevice) const {

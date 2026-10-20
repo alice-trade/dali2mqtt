@@ -96,6 +96,15 @@ inline std::optional<uint8_t> DaliBusEngine::queryGearSpecial(const SpecialOpCod
     return queryRaw(makeFrame16(static_cast<uint8_t>(opcode), data), 16);
 }
 
+inline esp_err_t DaliBusEngine::sendRaw(const uint32_t rawData, const uint8_t bits, const bool sendTwice) const {
+    return sendRawFrame(rawData, bits, false, sendTwice).err;
+}
+
+inline std::optional<uint8_t> DaliBusEngine::queryRaw(const uint32_t rawData, const uint8_t bits) const {
+    const auto res = sendRawFrame(rawData, bits, true, false);
+    return (res.err == ESP_OK) ? res.response : std::nullopt;
+}
+
 inline esp_err_t DaliBusEngine::setDtr0(const uint8_t value) const {
     return sendGearSpecial(SpecialOpCode::Dtr0, value, false);
 }
@@ -107,6 +116,22 @@ inline esp_err_t DaliBusEngine::setDtr1(const uint8_t value) const {
 inline esp_err_t DaliBusEngine::setDtr2(const uint8_t value) const {
     return sendGearSpecial(SpecialOpCode::Dtr2, value, false);
 }
+
+inline void DaliBusEngine::setSnifferCallback(BusSnifferCallback cb, void* ctx) noexcept {
+    m_snifferCb = cb;
+    m_snifferCtx = ctx;
+}
+inline void DaliBusEngine::setRawSnifferCallback(BusSnifferCallback cb, void* ctx) noexcept {
+    m_rawSnifferCb = cb;
+    m_rawSnifferCtx = ctx;
+}
+inline void DaliBusEngine::lockBus() const {
+    xSemaphoreTakeRecursive(m_busMutex, portMAX_DELAY);
+}
+inline void DaliBusEngine::unlockBus() const {
+    xSemaphoreGiveRecursive(m_busMutex);
+}
+
 
 inline std::optional<uint8_t> DaliBusEngine::readMemoryLocation(const uint8_t shortAddr, const uint8_t bank,
                                                                 const uint8_t offset) const {

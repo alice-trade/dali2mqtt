@@ -42,6 +42,7 @@ list(APPEND SDKCONFIG_DEFAULTS_LIST "${PROJDIR}/support/sdkconfig.defaults")
 option(ENABLE_ADVANCED_APP_CTRL "Enable DALI-2 App Controller" OFF)
 option(ENABLE_ETHERNET "Compile for Ethernet instead of Wi-Fi" OFF)
 option(DISABLE_WEBUI "Opt-out WebUI" OFF)
+option(DISABLE_HASS_DISCOVERY "Opt-out HA Discovery" OFF)
 option(ENABLE_LTO "Enable LTO for production firmware" OFF)
 option(ENABLE_COVERAGE "Enable embedded test coverage" OFF)
 
@@ -76,6 +77,10 @@ endif()
 
 if(DISABLE_WEBUI)
     file(APPEND ${_OVERRIDES_FILE} "CONFIG_DALI2MQTT_ENABLE_WEBUI=n\n")
+endif()
+
+if(DISABLE_HASS_DISCOVERY)
+    file(APPEND ${_OVERRIDES_FILE} "CONFIG_DALI2MQTT_MQTT_HOMEASSISTANT_DISCOVERY_ENABLED=n\n")
 endif()
 
 string(TOLOWER "${CMAKE_BUILD_TYPE}" _BUILD_TYPE_LOWER)

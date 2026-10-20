@@ -58,8 +58,8 @@ esp_err_t ConfigStore::load() {
             if (err == ESP_OK && len > 1) {
                 dest = buf;
             } else if (err == ESP_ERR_NVS_INVALID_LENGTH) {
-                ESP_LOGW(TAG, "NVS key '%s' value exceeds capacity (%zu bytes), skipping invalid entry.",
-                         key, capacity);
+                ESP_LOGW(TAG, "NVS key '%s' value exceeds capacity (%zu bytes), skipping invalid entry.", key,
+                         capacity);
             }
         };
 
@@ -129,8 +129,11 @@ esp_err_t ConfigStore::save(const ConfigStructure& newConfig) {
         return ESP_FAIL;
 
     auto writeStr = [&](const char* key, const auto& src) {
-        if (!src.empty())
+        if (!src.empty()) {
             nvs_set_str(nvs.get(), key, src.c_str());
+        } else {
+            nvs_erase_key(nvs.get(), key);
+        }
     };
 
     writeStr("wifi_ssid", newConfig.wifiSsid);

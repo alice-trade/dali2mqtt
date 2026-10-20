@@ -29,6 +29,42 @@ enum class DaliOperationStatus : uint8_t { Idle, Scanning, Initializing, Refresh
 
 static std::atomic<DaliOperationStatus> g_daliStatus{DaliOperationStatus::Idle};
 
+void ApiHandlers::webRebootTaskRunner(void*) {
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    esp_restart();
+}
+
+void ApiHandlers::webScanTaskRunner(void* arg) {
+    auto* c = static_cast<ApiContext*>(arg);
+    c->daliRegistry.scanBus();
+    c->daliRegistry.refreshGroupAssignmentsFromBus();
+    g_daliStatus.store(DaliOperationStatus::Idle, std::memory_order_release);
+    vTaskDelete(nullptr);
+}
+
+void ApiHandlers::webInitTaskRunner(void* arg) {
+    auto* c = static_cast<ApiContext*>(arg);
+    c->daliRegistry.commissionNewDevices();
+    c->daliRegistry.refreshGroupAssignmentsFromBus();
+    g_daliStatus.store(DaliOperationStatus::Idle, std::memory_order_release);
+    vTaskDelete(nullptr);
+}
+
+void ApiHandlers::webInputInitTaskRunner(void* arg) {
+    auto* c = static_cast<ApiContext*>(arg);
+    c->daliRegistry.commission24BitDevices();
+    c->daliRegistry.refreshGroupAssignmentsFromBus();
+    g_daliStatus.store(DaliOperationStatus::Idle, std::memory_order_release);
+    vTaskDelete(nullptr);
+}
+
+void ApiHandlers::webGroupRefreshTaskRunner(void* arg) {
+    auto* c = static_cast<ApiContext*>(arg);
+    c->daliRegistry.refreshGroupAssignmentsFromBus();
+    g_daliStatus.store(DaliOperationStatus::Idle, std::memory_order_release);
+    vTaskDelete(nullptr);
+}
+
 static char* readRequestBodyToArena(httpd_req_t* req, ApiContext* ctx, const size_t maxLen, size_t* outReceived = nullptr) {
     if (req->content_len == 0 || req->content_len > maxLen) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Payload too large or empty");
@@ -157,12 +193,7 @@ esp_err_t ApiHandlers::setConfig(httpd_req_t* req) {
     if (result.requiresReboot) {
         httpd_resp_send(req, R"({"status":"ok","message":"Settings saved. Restarting device..."})",
                         HTTPD_RESP_USE_STRLEN);
-        xTaskCreate(
-            [](void*) {
-                vTaskDelay(pdMS_TO_TICKS(1000));
-                esp_restart();
-            },
-            "web_reboot", 2048, nullptr, 5, nullptr);
+        xTaskCreate(webRebootTaskRunner, "web_reboot", 2048, nullptr, 5, nullptr);
     } else {
         httpd_resp_send(req, R"({"status":"ok","message":"Settings saved successfully."})", HTTPD_RESP_USE_STRLEN);
     }
@@ -337,16 +368,7 @@ esp_err_t ApiHandlers::scanDaliBus(httpd_req_t* req) {
         return ESP_OK;
     }
 
-    const BaseType_t ret = xTaskCreate(
-        [](void* arg) {
-            auto* c = static_cast<ApiContext*>(arg);
-            c->daliRegistry.scanBus();
-            c->daliRegistry.refreshGroupAssignmentsFromBus();
-            g_daliStatus.store(DaliOperationStatus::Idle, std::memory_order_release);
-            vTaskDelete(nullptr);
-        },
-        "web_scan", 4096, ctx, 4, nullptr);
-
+    const BaseType_t ret = xTaskCreate(webScanTaskRunner, "web_scan", 4096, ctx, 4, nullptr);
     if (ret != pdPASS) {
         g_daliStatus.store(DaliOperationStatus::Idle, std::memory_order_release);
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Task create failed");
@@ -370,16 +392,7 @@ esp_err_t ApiHandlers::initializeDaliBus(httpd_req_t* req) {
         return ESP_OK;
     }
 
-    const BaseType_t ret = xTaskCreate(
-        [](void* arg) {
-            const auto* c = static_cast<ApiContext*>(arg);
-            c->daliRegistry.commissionNewDevices();
-            c->daliRegistry.refreshGroupAssignmentsFromBus();
-            g_daliStatus.store(DaliOperationStatus::Idle, std::memory_order_release);
-            vTaskDelete(nullptr);
-        },
-        "web_init", 4096, ctx, 4, nullptr);
-
+    const BaseType_t ret = xTaskCreate(webInitTaskRunner, "web_init", 4096, ctx, 4, nullptr);
     if (ret != pdPASS) {
         g_daliStatus.store(DaliOperationStatus::Idle, std::memory_order_release);
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Task creation failed");
@@ -403,16 +416,7 @@ esp_err_t ApiHandlers::initializeDaliInputs(httpd_req_t* req) {
         return ESP_OK;
     }
 
-    const BaseType_t ret = xTaskCreate(
-        [](void* arg) {
-            auto* c = static_cast<ApiContext*>(arg);
-            c->daliRegistry.commission24BitDevices();
-            c->daliRegistry.refreshGroupAssignmentsFromBus();
-            g_daliStatus.store(DaliOperationStatus::Idle, std::memory_order_release);
-            vTaskDelete(nullptr);
-        },
-        "web_inp_init", 4096, ctx, 4, nullptr);
-
+    const BaseType_t ret = xTaskCreate(webInputInitTaskRunner, "web_inp_init", 4096, ctx, 4, nullptr);
     if (ret != pdPASS) {
         g_daliStatus.store(DaliOperationStatus::Idle, std::memory_order_release);
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Task creation failed");
@@ -611,14 +615,7 @@ esp_err_t ApiHandlers::refreshDaliGroups(httpd_req_t* req) {
         return ESP_FAIL;
 
     g_daliStatus.store(DaliOperationStatus::RefreshingGroups);
-    xTaskCreate(
-        [](void* arg) {
-            auto* c = static_cast<ApiContext*>(arg);
-            c->daliRegistry.refreshGroupAssignmentsFromBus();
-            g_daliStatus.store(DaliOperationStatus::Idle);
-            vTaskDelete(nullptr);
-        },
-        "web_grp", 4096, ctx, 4, nullptr);
+    xTaskCreate(webGroupRefreshTaskRunner, "web_grp", 4096, ctx, 4, nullptr);
 
     httpd_resp_send(req, R"({"status":"ok"})", HTTPD_RESP_USE_STRLEN);
     return ESP_OK;
