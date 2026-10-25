@@ -380,36 +380,51 @@ esp_err_t DaliDeviceRegistry::setColorTemp(const DaliLongAddress_t longAddr, con
     const uint8_t shortAddr = intAddrOpt->shortAddr();
     DaliBusLock bus_lock(m_bus);
 
-    m_bus.setDtr1(static_cast<uint8_t>((mireds >> 8) & 0xFF));
-    m_bus.setDtr0(static_cast<uint8_t>(mireds & 0xFF));
-    m_bus.sendGearSpecial(SpecialOpCode::EnableDeviceTypeX, 8);
-    m_bus.sendGearCommand(DaliAddressType::Short, shortAddr, static_cast<OpCode>(DT8OpCode::SetTempTc));
-    m_bus.sendGearSpecial(SpecialOpCode::EnableDeviceTypeX, 8);
-    const esp_err_t err =
-        m_bus.sendGearCommand(DaliAddressType::Short, shortAddr, static_cast<OpCode>(DT8OpCode::Activate));
+    esp_err_t err = m_bus.setDtr1(static_cast<uint8_t>((mireds >> 8) & 0xFF));
+    if (err != ESP_OK)
+        return err;
 
-    if (err == ESP_OK) {
-        ControlGear copyGear;
-        bool found = false;
-        {
-            std::lock_guard<std::mutex> lock(m_registryMutex);
-            for (auto& dev : m_devices) {
-                if (getIdentity(dev).longAddress == longAddr) {
-                    if (auto* gear = etl::get_if<ControlGear>(&dev)) {
-                        if (!gear->color.has_value())
-                            gear->color = ColorFeatures();
-                        gear->color->currentTc = mireds;
-                        copyGear = *gear;
-                        found = true;
-                    }
-                    break;
+    err = m_bus.setDtr0(static_cast<uint8_t>(mireds & 0xFF));
+    if (err != ESP_OK)
+        return err;
+
+    err = m_bus.sendGearSpecial(SpecialOpCode::EnableDeviceTypeX, 8);
+    if (err != ESP_OK)
+        return err;
+
+    err = m_bus.sendGearCommand(DaliAddressType::Short, shortAddr, static_cast<OpCode>(DT8OpCode::SetTempTc));
+    if (err != ESP_OK)
+        return err;
+
+    err = m_bus.sendGearSpecial(SpecialOpCode::EnableDeviceTypeX, 8);
+    if (err != ESP_OK)
+        return err;
+
+    err = m_bus.sendGearCommand(DaliAddressType::Short, shortAddr, static_cast<OpCode>(DT8OpCode::Activate));
+    if (err != ESP_OK)
+        return err;
+
+    ControlGear copyGear;
+    bool found = false;
+    {
+        std::lock_guard<std::mutex> lock(m_registryMutex);
+        for (auto& dev : m_devices) {
+            if (getIdentity(dev).longAddress == longAddr) {
+                if (auto* gear = etl::get_if<ControlGear>(&dev)) {
+                    if (!gear->color.has_value())
+                        gear->color = ColorFeatures();
+                    gear->color->currentTc = mireds;
+                    copyGear = *gear;
+                    found = true;
                 }
+                break;
             }
         }
-        if (found)
-            notifyDeviceChange(copyGear);
     }
-    return err;
+    if (found)
+        notifyDeviceChange(copyGear);
+
+    return ESP_OK;
 }
 
 esp_err_t DaliDeviceRegistry::setColor(const DaliLongAddress_t longAddr, const uint8_t r, const uint8_t g,
@@ -422,48 +437,71 @@ esp_err_t DaliDeviceRegistry::setColor(const DaliLongAddress_t longAddr, const u
     const uint8_t shortAddr = intAddrOpt->shortAddr();
     DaliBusLock bus_lock(m_bus);
 
-    m_bus.setDtr2(b);
-    m_bus.setDtr1(g);
-    m_bus.setDtr0(r);
+    esp_err_t err = m_bus.setDtr2(b);
+    if (err != ESP_OK)
+        return err;
+    err = m_bus.setDtr1(g);
+    if (err != ESP_OK)
+        return err;
+    err = m_bus.setDtr0(r);
+    if (err != ESP_OK)
+        return err;
 
-    m_bus.sendGearSpecial(SpecialOpCode::EnableDeviceTypeX, 8);
-    m_bus.sendGearCommand(DaliAddressType::Short, shortAddr, static_cast<OpCode>(DT8OpCode::SetTempRGB));
+    err = m_bus.sendGearSpecial(SpecialOpCode::EnableDeviceTypeX, 8);
+    if (err != ESP_OK)
+        return err;
+    err = m_bus.sendGearCommand(DaliAddressType::Short, shortAddr, static_cast<OpCode>(DT8OpCode::SetTempRGB));
+    if (err != ESP_OK)
+        return err;
 
     if (w.has_value() || a.has_value() || f.has_value()) {
-        m_bus.setDtr2(f.value_or(0xFF));
-        m_bus.setDtr1(a.value_or(0xFF));
-        m_bus.setDtr0(w.value_or(0xFF));
-        m_bus.sendGearSpecial(SpecialOpCode::EnableDeviceTypeX, 8);
-        m_bus.sendGearCommand(DaliAddressType::Short, shortAddr, static_cast<OpCode>(DT8OpCode::SetTempWAF));
+        err = m_bus.setDtr2(f.value_or(0xFF));
+        if (err != ESP_OK)
+            return err;
+        err = m_bus.setDtr1(a.value_or(0xFF));
+        if (err != ESP_OK)
+            return err;
+        err = m_bus.setDtr0(w.value_or(0xFF));
+        if (err != ESP_OK)
+            return err;
+
+        err = m_bus.sendGearSpecial(SpecialOpCode::EnableDeviceTypeX, 8);
+        if (err != ESP_OK)
+            return err;
+        err = m_bus.sendGearCommand(DaliAddressType::Short, shortAddr, static_cast<OpCode>(DT8OpCode::SetTempWAF));
+        if (err != ESP_OK)
+            return err;
     }
 
-    m_bus.sendGearSpecial(SpecialOpCode::EnableDeviceTypeX, 8);
-    const esp_err_t err =
-        m_bus.sendGearCommand(DaliAddressType::Short, shortAddr, static_cast<OpCode>(DT8OpCode::Activate));
+    err = m_bus.sendGearSpecial(SpecialOpCode::EnableDeviceTypeX, 8);
+    if (err != ESP_OK)
+        return err;
+    err = m_bus.sendGearCommand(DaliAddressType::Short, shortAddr, static_cast<OpCode>(DT8OpCode::Activate));
+    if (err != ESP_OK)
+        return err;
 
-    if (err == ESP_OK) {
-        ControlGear copyGear;
-        bool found = false;
-        {
-            std::lock_guard lock(m_registryMutex);
-            for (auto& dev : m_devices) {
-                if (getIdentity(dev).longAddress == longAddr) {
-                    if (auto* gear = etl::get_if<ControlGear>(&dev)) {
-                        if (!gear->color.has_value())
-                            gear->color = ColorFeatures();
-                        gear->color->currentRgb = DaliRGB{r, g, b};
-                        gear->color->activeMode = DaliColorMode::Rgb;
-                        copyGear = *gear;
-                        found = true;
-                    }
-                    break;
+    ControlGear copyGear;
+    bool found = false;
+    {
+        std::lock_guard lock(m_registryMutex);
+        for (auto& dev : m_devices) {
+            if (getIdentity(dev).longAddress == longAddr) {
+                if (auto* gear = etl::get_if<ControlGear>(&dev)) {
+                    if (!gear->color.has_value())
+                        gear->color = ColorFeatures();
+                    gear->color->currentRgb = DaliRGB{r, g, b};
+                    gear->color->activeMode = DaliColorMode::Rgb;
+                    copyGear = *gear;
+                    found = true;
                 }
+                break;
             }
         }
-        if (found)
-            notifyDeviceChange(copyGear);
     }
-    return err;
+    if (found)
+        notifyDeviceChange(copyGear);
+
+    return ESP_OK;
 }
 
 esp_err_t DaliDeviceRegistry::setGroupColorTemp(const uint8_t busId, const uint8_t groupId, const uint16_t mireds) {
@@ -471,46 +509,59 @@ esp_err_t DaliDeviceRegistry::setGroupColorTemp(const uint8_t busId, const uint8
         return ESP_ERR_INVALID_ARG;
 
     DaliBusLock bus_lock(m_bus);
-    m_bus.setDtr1(static_cast<uint8_t>((mireds >> 8) & 0xFF));
-    m_bus.setDtr0(static_cast<uint8_t>(mireds & 0xFF));
-    m_bus.sendGearSpecial(SpecialOpCode::EnableDeviceTypeX, 8);
-    m_bus.sendGearCommand(DaliAddressType::Group, groupId, static_cast<OpCode>(DT8OpCode::SetTempTc));
-    m_bus.sendGearSpecial(SpecialOpCode::EnableDeviceTypeX, 8);
-    const esp_err_t err =
-        m_bus.sendGearCommand(DaliAddressType::Group, groupId, static_cast<OpCode>(DT8OpCode::Activate));
+    esp_err_t err = m_bus.setDtr1(static_cast<uint8_t>((mireds >> 8) & 0xFF));
+    if (err != ESP_OK)
+        return err;
 
-    if (err == ESP_OK) {
-        DaliGroupState updatedState;
-        etl::vector<ControlGear, 64> affectedGears;
+    err = m_bus.setDtr0(static_cast<uint8_t>(mireds & 0xFF));
+    if (err != ESP_OK)
+        return err;
 
-        {
-            std::lock_guard<std::mutex> lock(m_registryMutex);
-            m_groupStates[busId][groupId].colorTemp = mireds;
-            updatedState = m_groupStates[busId][groupId];
+    err = m_bus.sendGearSpecial(SpecialOpCode::EnableDeviceTypeX, 8);
+    if (err != ESP_OK)
+        return err;
 
-            for (auto& dev : m_devices) {
-                if (auto* gear = etl::get_if<ControlGear>(&dev)) {
-                    if (gear->internalAddress.bus() != busId)
-                        continue;
+    err = m_bus.sendGearCommand(DaliAddressType::Group, groupId, static_cast<OpCode>(DT8OpCode::SetTempTc));
+    if (err != ESP_OK)
+        return err;
 
-                    auto it = m_groupAssignments.find(gear->longAddress);
-                    if (it != m_groupAssignments.end() && it->second.test(groupId)) {
-                        if (gear->color.has_value() && gear->color->supportsTc) {
-                            gear->color->currentTc = mireds;
-                            gear->color->activeMode = DaliColorMode::Tc;
-                            affectedGears.push_back(*gear);
-                        }
+    err = m_bus.sendGearSpecial(SpecialOpCode::EnableDeviceTypeX, 8);
+    if (err != ESP_OK)
+        return err;
+
+    err = m_bus.sendGearCommand(DaliAddressType::Group, groupId, static_cast<OpCode>(DT8OpCode::Activate));
+    if (err != ESP_OK)
+        return err;
+
+    DaliGroupState updatedState;
+    etl::vector<ControlGear, 64> affectedGears;
+    {
+        std::lock_guard<std::mutex> lock(m_registryMutex);
+        m_groupStates[busId][groupId].colorTemp = mireds;
+        updatedState = m_groupStates[busId][groupId];
+
+        for (auto& dev : m_devices) {
+            if (auto* gear = etl::get_if<ControlGear>(&dev)) {
+                if (gear->internalAddress.bus() != busId)
+                    continue;
+
+                auto it = m_groupAssignments.find(gear->longAddress);
+                if (it != m_groupAssignments.end() && it->second.test(groupId)) {
+                    if (gear->color.has_value() && gear->color->supportsTc) {
+                        gear->color->currentTc = mireds;
+                        gear->color->activeMode = DaliColorMode::Tc;
+                        affectedGears.push_back(*gear);
                     }
                 }
             }
         }
-
-        notifyGroupChange(busId, groupId, updatedState);
-        for (const auto& gear : affectedGears) {
-            notifyDeviceChange(gear);
-        }
     }
-    return err;
+
+    notifyGroupChange(busId, groupId, updatedState);
+    for (const auto& gear : affectedGears) {
+        notifyDeviceChange(gear);
+    }
+    return ESP_OK;
 }
 
 esp_err_t DaliDeviceRegistry::setGroupColor(const uint8_t busId, const uint8_t groupId, const uint8_t r,
@@ -521,56 +572,78 @@ esp_err_t DaliDeviceRegistry::setGroupColor(const uint8_t busId, const uint8_t g
 
     DaliBusLock bus_lock(m_bus);
 
-    m_bus.setDtr2(b);
-    m_bus.setDtr1(g);
-    m_bus.setDtr0(r);
-    m_bus.sendGearSpecial(SpecialOpCode::EnableDeviceTypeX, 8);
-    m_bus.sendGearCommand(DaliAddressType::Group, groupId, static_cast<OpCode>(DT8OpCode::SetTempRGB));
+    esp_err_t err = m_bus.setDtr2(b);
+    if (err != ESP_OK)
+        return err;
+    err = m_bus.setDtr1(g);
+    if (err != ESP_OK)
+        return err;
+    err = m_bus.setDtr0(r);
+    if (err != ESP_OK)
+        return err;
+
+    err = m_bus.sendGearSpecial(SpecialOpCode::EnableDeviceTypeX, 8);
+    if (err != ESP_OK)
+        return err;
+    err = m_bus.sendGearCommand(DaliAddressType::Group, groupId, static_cast<OpCode>(DT8OpCode::SetTempRGB));
+    if (err != ESP_OK)
+        return err;
 
     if (w.has_value() || a.has_value() || f.has_value()) {
-        m_bus.setDtr2(f.value_or(0xFF));
-        m_bus.setDtr1(a.value_or(0xFF));
-        m_bus.setDtr0(w.value_or(0xFF));
-        m_bus.sendGearSpecial(SpecialOpCode::EnableDeviceTypeX, 8);
-        m_bus.sendGearCommand(DaliAddressType::Group, groupId, static_cast<OpCode>(DT8OpCode::SetTempWAF));
+        err = m_bus.setDtr2(f.value_or(0xFF));
+        if (err != ESP_OK)
+            return err;
+        err = m_bus.setDtr1(a.value_or(0xFF));
+        if (err != ESP_OK)
+            return err;
+        err = m_bus.setDtr0(w.value_or(0xFF));
+        if (err != ESP_OK)
+            return err;
+
+        err = m_bus.sendGearSpecial(SpecialOpCode::EnableDeviceTypeX, 8);
+        if (err != ESP_OK)
+            return err;
+        err = m_bus.sendGearCommand(DaliAddressType::Group, groupId, static_cast<OpCode>(DT8OpCode::SetTempWAF));
+        if (err != ESP_OK)
+            return err;
     }
 
-    m_bus.sendGearSpecial(SpecialOpCode::EnableDeviceTypeX, 8);
-    const esp_err_t err =
-        m_bus.sendGearCommand(DaliAddressType::Group, groupId, static_cast<OpCode>(DT8OpCode::Activate));
+    err = m_bus.sendGearSpecial(SpecialOpCode::EnableDeviceTypeX, 8);
+    if (err != ESP_OK)
+        return err;
+    err = m_bus.sendGearCommand(DaliAddressType::Group, groupId, static_cast<OpCode>(DT8OpCode::Activate));
+    if (err != ESP_OK)
+        return err;
 
-    if (err == ESP_OK) {
-        DaliGroupState updatedState;
-        etl::vector<ControlGear, 64> affectedGears;
+    DaliGroupState updatedState;
+    etl::vector<ControlGear, 64> affectedGears;
+    {
+        std::lock_guard<std::mutex> lock(m_registryMutex);
+        m_groupStates[busId][groupId].rgb = DaliRGB{r, g, b};
+        updatedState = m_groupStates[busId][groupId];
 
-        {
-            std::lock_guard<std::mutex> lock(m_registryMutex);
-            m_groupStates[busId][groupId].rgb = DaliRGB{r, g, b};
-            updatedState = m_groupStates[busId][groupId];
+        for (auto& dev : m_devices) {
+            if (auto* gear = etl::get_if<ControlGear>(&dev)) {
+                if (gear->internalAddress.bus() != busId)
+                    continue;
 
-            for (auto& dev : m_devices) {
-                if (auto* gear = etl::get_if<ControlGear>(&dev)) {
-                    if (gear->internalAddress.bus() != busId)
-                        continue;
-
-                    auto it = m_groupAssignments.find(gear->longAddress);
-                    if (it != m_groupAssignments.end() && it->second.test(groupId)) {
-                        if (gear->color.has_value() && gear->color->supportsRgb) {
-                            gear->color->currentRgb = DaliRGB{r, g, b};
-                            gear->color->activeMode = DaliColorMode::Rgb;
-                            affectedGears.push_back(*gear);
-                        }
+                auto it = m_groupAssignments.find(gear->longAddress);
+                if (it != m_groupAssignments.end() && it->second.test(groupId)) {
+                    if (gear->color.has_value() && gear->color->supportsRgb) {
+                        gear->color->currentRgb = DaliRGB{r, g, b};
+                        gear->color->activeMode = DaliColorMode::Rgb;
+                        affectedGears.push_back(*gear);
                     }
                 }
             }
         }
-
-        notifyGroupChange(busId, groupId, updatedState);
-        for (const auto& gear : affectedGears) {
-            notifyDeviceChange(gear);
-        }
     }
-    return err;
+
+    notifyGroupChange(busId, groupId, updatedState);
+    for (const auto& gear : affectedGears) {
+        notifyDeviceChange(gear);
+    }
+    return ESP_OK;
 }
 
 esp_err_t DaliDeviceRegistry::setGroupBrightness(const uint8_t busId, const uint8_t groupId, const uint8_t level) {
@@ -710,9 +783,14 @@ esp_err_t DaliDeviceRegistry::saveSceneLevels(const uint8_t, const uint8_t scene
         const uint8_t lvl = levels[sa];
         if (lvl != 255) {
             DaliBusLock lock(m_bus);
-            m_bus.setDtr0(lvl);
+            esp_err_t err = m_bus.setDtr0(lvl);
+            if (err != ESP_OK)
+                return err;
+
             const auto storeOp = static_cast<OpCode>(0x40 + sceneId);
-            m_bus.sendGearCommand(DaliAddressType::Short, sa, storeOp, true);
+            err = m_bus.sendGearCommand(DaliAddressType::Short, sa, storeOp, true);
+            if (err != ESP_OK)
+                return err;
         }
         vTaskDelay(pdMS_TO_TICKS(CONFIG_DALI2MQTT_DALI_POLL_DELAY_MS));
     }
@@ -873,6 +951,14 @@ void DaliDeviceRegistry::pollSingleDevice(const DaliInternalAddr addr) {
     const auto levelOpt = m_bus.queryGear(DaliAddressType::Short, addr.shortAddr(), OpCode::QueryActualLevel);
     const bool isOnline = levelOpt.has_value();
 
+    uint8_t currentStatus = 0;
+    if (isOnline) {
+        const auto statusOpt = m_bus.queryGear(DaliAddressType::Short, addr.shortAddr(), OpCode::QueryStatus);
+        if (statusOpt.has_value()) {
+            currentStatus = *statusOpt;
+        }
+    }
+
     ControlGear copyGear;
     bool shouldNotify = false;
     bool needFetchMetadata = false;
@@ -887,7 +973,10 @@ void DaliDeviceRegistry::pollSingleDevice(const DaliInternalAddr addr) {
                 if (auto* gear = etl::get_if<ControlGear>(&dev)) {
                     if (isOnline) {
                         const bool levelChanged = (gear->currentLevel != *levelOpt);
+                        const bool statusChanged = (gear->statusByte != currentStatus);
+
                         gear->currentLevel = *levelOpt;
+                        gear->statusByte = currentStatus;
                         if (*levelOpt > 0)
                             gear->lastLevel = *levelOpt;
 
@@ -895,7 +984,7 @@ void DaliDeviceRegistry::pollSingleDevice(const DaliInternalAddr addr) {
                             needFetchMetadata = true;
                         }
 
-                        if (levelChanged || availChanged || gear->initialSyncNeeded) {
+                        if (levelChanged || statusChanged || availChanged || gear->initialSyncNeeded) {
                             gear->initialSyncNeeded = false;
                             copyGear = *gear;
                             shouldNotify = true;
@@ -960,8 +1049,10 @@ void DaliDeviceRegistry::scanBus() {
     const uint8_t busId = m_bus.getBusId();
 
     for (uint8_t sa = 0; sa < 64; ++sa) {
-        if (m_bus.queryGear(DaliAddressType::Short, sa, OpCode::QueryStatus).has_value()) {
+        const auto statusOpt = m_bus.queryGear(DaliAddressType::Short, sa, OpCode::QueryStatus);
+        if (statusOpt.has_value()) {
             seenGears.set(sa);
+            const uint8_t devStatus = *statusOpt;
 
             const auto existingLa = getLongAddress(DaliInternalAddr(busId, sa), false);
             DaliLongAddress_t longAddr;
@@ -996,11 +1087,13 @@ void DaliDeviceRegistry::scanBus() {
                         m_internalToLongMap[(busId * 64) + oldSa] = InvalidLongAddr;
                     }
                     gear.internalAddress = DaliInternalAddr(busId, sa);
+                    gear.statusByte = devStatus;
                     gear.available = true;
                 } else if (!m_devices.full()) {
                     ControlGear gear;
                     gear.longAddress = longAddr;
                     gear.internalAddress = DaliInternalAddr(busId, sa);
+                    gear.statusByte = devStatus;
                     gear.available = true;
                     gear.initialSyncNeeded = true;
                     m_devices.push_back(gear);
@@ -1423,25 +1516,26 @@ StaticMetadata DaliDeviceRegistry::queryDeviceMetadataFromBus(const uint8_t sa) 
     const uint8_t dt = meta.deviceType.value_or(0xFF);
     if (dt == 8 || dt == 255) {
         DaliBusLock busLock(m_bus);
-        m_bus.sendGearSpecial(SpecialOpCode::EnableDeviceTypeX, 8);
-        auto colourTypeOpt =
-            m_bus.queryGear(DaliAddressType::Short, sa, static_cast<OpCode>(DT8OpCode::QueryColourType));
+        if (m_bus.sendGearSpecial(SpecialOpCode::EnableDeviceTypeX, 8) == ESP_OK) {
+            auto colourTypeOpt =
+                m_bus.queryGear(DaliAddressType::Short, sa, static_cast<OpCode>(DT8OpCode::QueryColourType));
 
-        if (!colourTypeOpt.has_value()) {
-            colourTypeOpt = m_bus.readMemoryLocation(sa, 205, 0x09);
-        }
+            if (!colourTypeOpt.has_value()) {
+                colourTypeOpt = m_bus.readMemoryLocation(sa, 205, 0x09);
+            }
 
-        if (colourTypeOpt.has_value()) {
-            const uint8_t val = *colourTypeOpt;
-            ColorFeatures cf;
-            cf.supportsTc = (val & 0x02) != 0;
-            const uint8_t rgbwafChannels = (val >> 5) & 0x07;
-            cf.supportsRgb = (rgbwafChannels >= 3);
-            cf.rgbChannels = rgbwafChannels;
+            if (colourTypeOpt.has_value()) {
+                const uint8_t val = *colourTypeOpt;
+                ColorFeatures cf;
+                cf.supportsTc = (val & 0x02) != 0;
+                const uint8_t rgbwafChannels = (val >> 5) & 0x07;
+                cf.supportsRgb = (rgbwafChannels >= 3);
+                cf.rgbChannels = rgbwafChannels;
 
-            if (cf.supportsTc || cf.supportsRgb) {
-                meta.color = cf;
-                meta.deviceType = 8;
+                if (cf.supportsTc || cf.supportsRgb) {
+                    meta.color = cf;
+                    meta.deviceType = 8;
+                }
             }
         }
     }

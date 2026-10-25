@@ -295,15 +295,19 @@ uint32_t DaliBusEngine::findAddressBinarySearch(const bool is24BitInputDevice) c
     uint32_t high = 0xFFFFFF;
     uint32_t searchAddr = 0xFFFFFF;
 
-    auto sendSearchAddr = [&](const uint32_t addr) {
+    auto sendSearchAddr = [&](const uint32_t addr) -> bool {
         if (is24BitInputDevice) {
-            sendDeviceSpecial(0x05, static_cast<uint8_t>((addr >> 16) & 0xFF), false);
-            sendDeviceSpecial(0x06, static_cast<uint8_t>((addr >> 8) & 0xFF), false);
-            sendDeviceSpecial(0x07, static_cast<uint8_t>(addr & 0xFF), false);
+            if (sendDeviceSpecial(0x05, static_cast<uint8_t>((addr >> 16) & 0xFF), false) != ESP_OK)
+                return false;
+            if (sendDeviceSpecial(0x06, static_cast<uint8_t>((addr >> 8) & 0xFF), false) != ESP_OK)
+                return false;
+            return (sendDeviceSpecial(0x07, static_cast<uint8_t>(addr & 0xFF), false) == ESP_OK);
         } else {
-            sendGearSpecial(SpecialOpCode::SearchAddrH, static_cast<uint8_t>((addr >> 16) & 0xFF), false);
-            sendGearSpecial(SpecialOpCode::SearchAddrM, static_cast<uint8_t>((addr >> 8) & 0xFF), false);
-            sendGearSpecial(SpecialOpCode::SearchAddrL, static_cast<uint8_t>(addr & 0xFF), false);
+            if (sendGearSpecial(SpecialOpCode::SearchAddrH, static_cast<uint8_t>((addr >> 16) & 0xFF), false) != ESP_OK)
+                return false;
+            if (sendGearSpecial(SpecialOpCode::SearchAddrM, static_cast<uint8_t>((addr >> 8) & 0xFF), false) != ESP_OK)
+                return false;
+            return (sendGearSpecial(SpecialOpCode::SearchAddrL, static_cast<uint8_t>(addr & 0xFF), false) == ESP_OK);
         }
     };
 
@@ -328,15 +332,17 @@ uint32_t DaliBusEngine::findAddressBinarySearch(const bool is24BitInputDevice) c
         return InvalidLongAddr;
     }
 
-    sendSearchAddr(0xFFFFFF);
-    if (!sendCompare(true)) {
+    if (!sendSearchAddr(0xFFFFFF) || !sendCompare(true)) {
         xSemaphoreGiveRecursive(m_busMutex);
         return InvalidLongAddr;
     }
 
     while ((high - low) > 0) {
         searchAddr = low + (high - low) / 2;
-        sendSearchAddr(searchAddr);
+        if (!sendSearchAddr(searchAddr)) {
+            xSemaphoreGiveRecursive(m_busMutex);
+            return InvalidLongAddr;
+        }
 
         if (sendCompare(true)) {
             high = searchAddr;
@@ -346,7 +352,10 @@ uint32_t DaliBusEngine::findAddressBinarySearch(const bool is24BitInputDevice) c
     }
 
     searchAddr = low;
-    sendSearchAddr(searchAddr);
+    if (!sendSearchAddr(searchAddr)) {
+        xSemaphoreGiveRecursive(m_busMutex);
+        return InvalidLongAddr;
+    }
 
     const bool verifiedClean = sendCompare(false);
 
