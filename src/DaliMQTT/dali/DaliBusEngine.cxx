@@ -89,7 +89,7 @@ void DaliBusEngine::busWorkerTaskRunner(void* arg) {
         int64_t targetTimeoutUs = 0;
         switch (state) {
         case EngineState::CollisionBackoff:
-            targetTimeoutUs = 35'000;
+            targetTimeoutUs = currentBackoffUs;
             break;
         case EngineState::TwiceDelay:
             targetTimeoutUs = 40'000;
@@ -118,10 +118,8 @@ void DaliBusEngine::busWorkerTaskRunner(void* arg) {
         DaliRawFrame frame{};
         const TickType_t waitTicks = getDynamicWaitTicks();
 
-        if (xQueueReceive(m_phyEventQueue, &frame, waitTicks) == pdTRUE) {
-            if (frame.type == DaliFrameType::Wakeup) {
-                continue;
-            }
+        if (xQueueReceive(m_phyEventQueue, &frame, waitTicks) == pdTRUE &&
+           frame.type != DaliFrameType::Wakeup) {
 
             if (m_rawSnifferCb && (frame.isValid() || frame.type == DaliFrameType::Collision)) {
                 m_rawSnifferCb(frame, m_busId, m_rawSnifferCtx);

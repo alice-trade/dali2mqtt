@@ -1,6 +1,6 @@
 # DALI-to-MQTT Bridge for ESP
 
-A bridge between the DALI lighting control bus and the MQTT for ESP32 platform. This project allows you to integrate DALI lighting systems into smart home ecosystems such as Home Assistant, Node-RED, and others.
+A bridge between the DALI  bus and the MQTT for ESP32 platform. This project allows you to integrate DALI lighting systems into smart home ecosystems such as Home Assistant, Node-RED, and others.
 
 ## Architecture
 
@@ -30,18 +30,19 @@ graph LR
 
 ## Hardware Requirements
 
-1.  **ESP-based Board**: Any board with an ESP32-S3, ESP32-C3 or ESP32-C6 module (e.g., ESP32-S3-DevKitC) with Wifi module.
+1.  **ESP-based Board**: Any board with an ESP32-S3, ESP32-C6 (ESP32-S2 and ESP32 are experimental) module (e.g., ESP32-S3-DevKitC) with Wifi module.
 2.  **DALI Transceiver/Power Supply**: A specialized circuit/device that provides DALI bus power and converts ESP32 logic levels to DALI electrical signals.
 
 ## Software Requirements
 
-1.  **ESP-IDF** (v5.2+ and v6+): [Installation Guide](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/index.html).
+1.  **ESP-IDF** (v5.3+ and v6+): [Installation Guide](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/index.html).
 2.  **GCC** (xtensa/riscv-esp-elf-g++): The C/C++ compiler provided by ESP-IDF.
 3.  **Git**: To clone the repository and fetching dependencies.
 4.  **CMake**: Build system. Ninja or GMake also required
 5.  **Python 3**: Required by ESP-IDF also for pytest suites.
 6.  **Node.js and npm**: To build the Web UI frontend.
 
+_bootstrap.py script can be used to download esp-idf_
 ## Building and Flashing
 
 ### 1. Clone the Repository
