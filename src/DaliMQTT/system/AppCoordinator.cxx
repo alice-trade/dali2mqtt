@@ -122,20 +122,22 @@ void AppCoordinator::onMinuteTelemetry(void* ctx) {
 
 void AppCoordinator::onBusHealthCheck(void* ctx) {
     auto* self = static_cast<AppCoordinator*>(ctx);
+    if (!self->m_deps.mqttClient.isConnected()) {
+        return;
+    }
+
     const auto health = self->m_deps.dali.checkHealth();
     static auto lastHealth = BusHealth::Ok;
 
     if (health != lastHealth) {
         lastHealth = health;
-        if (self->m_deps.mqttClient.isConnected()) {
-            const auto cfg = self->m_deps.config.get();
-            char topic[128];
-            snprintf(topic, sizeof(topic), "%s/system/fault", cfg->mqttBaseTopic.c_str());
-            const char* payload = (health == BusHealth::ShortCircuit)
-                ? R"({"bus_fault":"short_circuit_or_no_power"})"
-                : R"({"bus_fault":"none"})";
-            self->m_deps.mqttClient.publish(topic, payload, 1, true);
-        }
+        const auto cfg = self->m_deps.config.get();
+        char topic[128];
+        snprintf(topic, sizeof(topic), "%s/system/fault", cfg->mqttBaseTopic.c_str());
+        const char* payload = (health == BusHealth::ShortCircuit)
+            ? R"({"bus_fault":"short_circuit_or_no_power"})"
+            : R"({"bus_fault":"none"})";
+        self->m_deps.mqttClient.publish(topic, payload, 1, true);
     }
 }
 

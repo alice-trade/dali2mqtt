@@ -83,8 +83,15 @@ inline void RmtDaliTransceiver::decodeSymbols(const rmt_symbol_word_t* symbols, 
             const uint32_t dur = durs[p];
             const uint8_t lvl = lvls[p];
 
-            if (dur == 0)
-                continue;
+            if (dur == 0) {
+                if (lvl == Timing::LEVEL_IDLE) {
+                    stopConditionFound = true;
+                    break;
+                }
+                m_txState.active = false;
+                dispatchFrame(DaliFrameType::NoiseCorrupted, 0, 0);
+                return;
+            }
 
             if (dur < Timing::GLITCH_FILTER_US) {
                 m_txState.active = false;
