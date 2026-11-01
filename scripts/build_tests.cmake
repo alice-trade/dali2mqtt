@@ -74,7 +74,7 @@ if(BUILD_TESTING)
                 --target ${TARGET}
                 --app-path ${CMAKE_BINARY_DIR}
                 ${PYTEST_PORT_ARG}
-                DEPENDS ${app} webui
+                DEPENDS ${app}
                 WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
                 COMMENT "Running Firmware Integration Tests via Pytest Embedded..."
                 USES_TERMINAL

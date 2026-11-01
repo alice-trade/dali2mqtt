@@ -70,6 +70,31 @@ void DaliDeviceRegistry::notifyDeviceChange(const ControlGear& gear) const {
     m_deviceStateCb(ev, m_deviceStateCtx);
 }
 
+void DaliDeviceRegistry::notifyAffectedDevices(const std::bitset<MAX_TOTAL_DEVICES>& affectedMask) const {
+    if (!m_deviceStateCb || affectedMask.none())
+        return;
+
+    for (size_t i = 0; i < MAX_TOTAL_DEVICES; ++i) {
+        if (!affectedMask.test(i))
+            continue;
+
+        ControlGear copyGear;
+        bool found = false;
+        {
+            std::lock_guard<std::mutex> lock(m_registryMutex);
+            if (i < m_devices.size()) {
+                if (const auto* gear = etl::get_if<ControlGear>(&m_devices[i])) {
+                    copyGear = *gear;
+                    found = true;
+                }
+            }
+        }
+        if (found) {
+            notifyDeviceChange(copyGear);
+        }
+    }
+}
+
 void DaliDeviceRegistry::notifyGroupChange(const uint8_t busId, const uint8_t groupId,
                                            const DaliGroupState& state) const {
     if (!m_groupStateCb)
@@ -534,14 +559,14 @@ esp_err_t DaliDeviceRegistry::setGroupColorTemp(const uint8_t busId, const uint8
         return err;
 
     DaliGroupState updatedState;
-    etl::vector<ControlGear, 64> affectedGears;
+    std::bitset<MAX_TOTAL_DEVICES> affectedMask;
     {
         std::lock_guard<std::mutex> lock(m_registryMutex);
         m_groupStates[busId][groupId].colorTemp = mireds;
         updatedState = m_groupStates[busId][groupId];
 
-        for (auto& dev : m_devices) {
-            if (auto* gear = etl::get_if<ControlGear>(&dev)) {
+        for (size_t i = 0; i < m_devices.size(); ++i) {
+            if (auto* gear = etl::get_if<ControlGear>(&m_devices[i])) {
                 if (gear->internalAddress.bus() != busId)
                     continue;
 
@@ -550,7 +575,7 @@ esp_err_t DaliDeviceRegistry::setGroupColorTemp(const uint8_t busId, const uint8
                     if (gear->color.has_value() && gear->color->supportsTc) {
                         gear->color->currentTc = mireds;
                         gear->color->activeMode = DaliColorMode::Tc;
-                        affectedGears.push_back(*gear);
+                        affectedMask.set(i);
                     }
                 }
             }
@@ -558,9 +583,7 @@ esp_err_t DaliDeviceRegistry::setGroupColorTemp(const uint8_t busId, const uint8
     }
 
     notifyGroupChange(busId, groupId, updatedState);
-    for (const auto& gear : affectedGears) {
-        notifyDeviceChange(gear);
-    }
+    notifyAffectedDevices(affectedMask);
     return ESP_OK;
 }
 
@@ -616,14 +639,14 @@ esp_err_t DaliDeviceRegistry::setGroupColor(const uint8_t busId, const uint8_t g
         return err;
 
     DaliGroupState updatedState;
-    etl::vector<ControlGear, 64> affectedGears;
+    std::bitset<MAX_TOTAL_DEVICES> affectedMask;
     {
         std::lock_guard<std::mutex> lock(m_registryMutex);
         m_groupStates[busId][groupId].rgb = DaliRGB{r, g, b};
         updatedState = m_groupStates[busId][groupId];
 
-        for (auto& dev : m_devices) {
-            if (auto* gear = etl::get_if<ControlGear>(&dev)) {
+        for (size_t i = 0; i < m_devices.size(); ++i) {
+            if (auto* gear = etl::get_if<ControlGear>(&m_devices[i])) {
                 if (gear->internalAddress.bus() != busId)
                     continue;
 
@@ -632,7 +655,7 @@ esp_err_t DaliDeviceRegistry::setGroupColor(const uint8_t busId, const uint8_t g
                     if (gear->color.has_value() && gear->color->supportsRgb) {
                         gear->color->currentRgb = DaliRGB{r, g, b};
                         gear->color->activeMode = DaliColorMode::Rgb;
-                        affectedGears.push_back(*gear);
+                        affectedMask.set(i);
                     }
                 }
             }
@@ -640,9 +663,7 @@ esp_err_t DaliDeviceRegistry::setGroupColor(const uint8_t busId, const uint8_t g
     }
 
     notifyGroupChange(busId, groupId, updatedState);
-    for (const auto& gear : affectedGears) {
-        notifyDeviceChange(gear);
-    }
+    notifyAffectedDevices(affectedMask);
     return ESP_OK;
 }
 
@@ -652,7 +673,7 @@ esp_err_t DaliDeviceRegistry::setGroupBrightness(const uint8_t busId, const uint
     const esp_err_t err = m_bus.sendDAPC(DaliAddressType::Group, groupId, level);
     if (err == ESP_OK) {
         DaliGroupState updatedState;
-        etl::vector<ControlGear, 64> affectedGears;
+        std::bitset<MAX_TOTAL_DEVICES> affectedMask;
 
         {
             std::lock_guard<std::mutex> lock(m_registryMutex);
@@ -661,8 +682,8 @@ esp_err_t DaliDeviceRegistry::setGroupBrightness(const uint8_t busId, const uint
                 m_groupStates[busId][groupId].lastLevel = level;
             updatedState = m_groupStates[busId][groupId];
 
-            for (auto& dev : m_devices) {
-                if (auto* gear = etl::get_if<ControlGear>(&dev)) {
+            for (size_t i = 0; i < m_devices.size(); ++i) {
+                if (auto* gear = etl::get_if<ControlGear>(&m_devices[i])) {
                     if (gear->internalAddress.bus() != busId)
                         continue;
 
@@ -671,16 +692,14 @@ esp_err_t DaliDeviceRegistry::setGroupBrightness(const uint8_t busId, const uint
                         gear->currentLevel = level;
                         if (level > 0)
                             gear->lastLevel = level;
-                        affectedGears.push_back(*gear);
+                        affectedMask.set(i);
                     }
                 }
             }
         }
 
         notifyGroupChange(busId, groupId, updatedState);
-        for (const auto& gear : affectedGears) {
-            notifyDeviceChange(gear);
-        }
+        notifyAffectedDevices(affectedMask);
     }
     return err;
 }
@@ -692,12 +711,27 @@ esp_err_t DaliDeviceRegistry::setGroupPower(const uint8_t busId, const uint8_t g
         const esp_err_t err = m_bus.sendGearCommand(DaliAddressType::Group, groupId, OpCode::Off);
         if (err == ESP_OK) {
             DaliGroupState updatedState;
+            std::bitset<MAX_TOTAL_DEVICES> affectedMask;
             {
                 std::lock_guard<std::mutex> lock(m_registryMutex);
                 m_groupStates[busId][groupId].currentLevel = 0;
                 updatedState = m_groupStates[busId][groupId];
+
+                for (size_t i = 0; i < m_devices.size(); ++i) {
+                    if (auto* gear = etl::get_if<ControlGear>(&m_devices[i])) {
+                        if (gear->internalAddress.bus() != busId)
+                            continue;
+
+                        auto it = m_groupAssignments.find(gear->longAddress);
+                        if (it != m_groupAssignments.end() && it->second.test(groupId)) {
+                            gear->currentLevel = 0;
+                            affectedMask.set(i);
+                        }
+                    }
+                }
             }
             notifyGroupChange(busId, groupId, updatedState);
+            notifyAffectedDevices(affectedMask);
         }
         return err;
     }
@@ -742,6 +776,7 @@ esp_err_t DaliDeviceRegistry::setAllGroupAssignments(const GroupAssignments& new
 
 esp_err_t DaliDeviceRegistry::refreshGroupAssignmentsFromBus() {
     ESP_LOGI(TAG, "Refreshing group assignments from DALI bus...");
+    ScanCommissionGuard guard(m_scanCommissionActive, m_bus);
 
     GroupAssignments freshAssignments;
 
@@ -768,11 +803,15 @@ esp_err_t DaliDeviceRegistry::refreshGroupAssignmentsFromBus() {
     return ESP_OK;
 }
 
-esp_err_t DaliDeviceRegistry::activateScene(const uint8_t, const uint8_t sceneId) const {
+esp_err_t DaliDeviceRegistry::activateScene(const uint8_t, const uint8_t sceneId) {
     if (sceneId >= 16)
         return ESP_ERR_INVALID_ARG;
     const auto op = static_cast<OpCode>(static_cast<uint8_t>(OpCode::GoToScene0) + sceneId);
-    return m_bus.sendGearCommand(DaliAddressType::Broadcast, 0, op, false);
+    const esp_err_t err = m_bus.sendGearCommand(DaliAddressType::Broadcast, 0, op, false);
+    if (err == ESP_OK) {
+        requestBroadcastSync(400, 100);
+    }
+    return err;
 }
 
 esp_err_t DaliDeviceRegistry::saveSceneLevels(const uint8_t, const uint8_t sceneId, const SceneLevels& levels) const {
@@ -1332,9 +1371,24 @@ void DaliDeviceRegistry::commission24BitDevices() {
     scanBus();
 }
 
-etl::vector<DaliDevice, DaliDeviceRegistry::MAX_TOTAL_DEVICES> DaliDeviceRegistry::getDevicesSnapshot() const {
+void DaliDeviceRegistry::getGroupColorCapabilities(const uint8_t busId, const uint8_t groupId, bool& supportsTc,
+                                                   bool& supportsRgb) const {
+    supportsTc = false;
+    supportsRgb = false;
     std::lock_guard<std::mutex> lock(m_registryMutex);
-    return m_devices;
+    for (const auto& dev : m_devices) {
+        if (const auto* gear = etl::get_if<ControlGear>(&dev)) {
+            if (gear->internalAddress.bus() != busId || !gear->color.has_value())
+                continue;
+            auto it = m_groupAssignments.find(gear->longAddress);
+            if (it != m_groupAssignments.end() && it->second.test(groupId)) {
+                if (gear->color->supportsTc)
+                    supportsTc = true;
+                if (gear->color->supportsRgb)
+                    supportsRgb = true;
+            }
+        }
+    }
 }
 
 bool DaliDeviceRegistry::loadAddressMapFromNvs() {

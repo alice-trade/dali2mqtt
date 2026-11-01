@@ -68,7 +68,6 @@ void SystemControls::onButtonHeldTimer(TimerHandle_t xTimer) {
 
         if (heldDurationMs >= BUTTON_LONG_PRESS_MS) {
             xTimerStop(self->m_resetTimer, 0);
-            ESP_LOGW(TAG, "BOOT Button held for 5 seconds. Factory Reset triggered!");
             if (self->m_resetCb) {
                 self->m_resetCb(self->m_resetCtx);
             }

@@ -55,7 +55,7 @@ class MqttBridge {
     static void onRawBusFrameObserved(const DaliRawFrame& frame, uint8_t busId, void* ctx);
 
     static void bridgeTaskRunner(void* arg);
-    [[noreturn]] void bridgeWorkerLoop() const;
+    void bridgeWorkerLoop();
 
     static void haReplayTaskRunner(void* arg);
     static void groupRefreshTaskRunner(void* arg);
@@ -90,7 +90,6 @@ class MqttBridge {
     
     static void onDaliDeviceAttributesLoaded(const ControlGear& gear, void* ctx);
     void publishDeviceAttributes(const ControlGear& gear) const;
-    mutable std::atomic<bool> m_busOperationBusy{false};
 
     void publishDeviceGroups(DaliLongAddress_t longAddr, const GroupMask& groups) const;
     void publishAllDeviceGroups() const;
@@ -113,7 +112,8 @@ class MqttBridge {
 
     etl::string<64> m_baseTopic{"dali_bridge"};
     QueueHandle_t m_cmdQueue{nullptr};
-    TaskHandle_t m_taskHandle{nullptr};
+    std::atomic<TaskHandle_t> m_taskHandle{nullptr};
+    std::atomic<bool> m_running{false};
 
     static constexpr size_t BRIDGE_TASK_STACK_SIZE = 6144 / sizeof(StackType_t);
     StackType_t m_bridgeTaskStack[BRIDGE_TASK_STACK_SIZE]{};

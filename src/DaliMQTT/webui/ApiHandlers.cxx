@@ -23,12 +23,6 @@ namespace daliMQTT {
 
 static constexpr char TAG[] = "WebApi";
 
-namespace {
-enum class DaliOperationStatus : uint8_t { Idle, Scanning, Initializing, RefreshingGroups };
-}
-
-static std::atomic<DaliOperationStatus> g_daliStatus{DaliOperationStatus::Idle};
-
 void ApiHandlers::webRebootTaskRunner(void*) {
     vTaskDelay(pdMS_TO_TICKS(1000));
     esp_restart();
@@ -38,7 +32,7 @@ void ApiHandlers::webScanTaskRunner(void* arg) {
     auto* c = static_cast<ApiContext*>(arg);
     c->daliRegistry.scanBus();
     c->daliRegistry.refreshGroupAssignmentsFromBus();
-    g_daliStatus.store(DaliOperationStatus::Idle, std::memory_order_release);
+    c->daliRegistry.endOperation();
     vTaskDelete(nullptr);
 }
 
@@ -46,7 +40,7 @@ void ApiHandlers::webInitTaskRunner(void* arg) {
     auto* c = static_cast<ApiContext*>(arg);
     c->daliRegistry.commissionNewDevices();
     c->daliRegistry.refreshGroupAssignmentsFromBus();
-    g_daliStatus.store(DaliOperationStatus::Idle, std::memory_order_release);
+    c->daliRegistry.endOperation();
     vTaskDelete(nullptr);
 }
 
@@ -54,14 +48,14 @@ void ApiHandlers::webInputInitTaskRunner(void* arg) {
     auto* c = static_cast<ApiContext*>(arg);
     c->daliRegistry.commission24BitDevices();
     c->daliRegistry.refreshGroupAssignmentsFromBus();
-    g_daliStatus.store(DaliOperationStatus::Idle, std::memory_order_release);
+    c->daliRegistry.endOperation();
     vTaskDelete(nullptr);
 }
 
 void ApiHandlers::webGroupRefreshTaskRunner(void* arg) {
     auto* c = static_cast<ApiContext*>(arg);
     c->daliRegistry.refreshGroupAssignmentsFromBus();
-    g_daliStatus.store(DaliOperationStatus::Idle, std::memory_order_release);
+    c->daliRegistry.endOperation();
     vTaskDelete(nullptr);
 }
 
@@ -96,41 +90,45 @@ static char* readRequestBodyToArena(httpd_req_t* req, ApiContext* ctx, const siz
     return buf;
 }
 
+static esp_err_t sendUnauthorized(httpd_req_t* req, const char* msg = "Auth required") {
+    httpd_resp_set_status(req, "401 Unauthorized");
+    httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"DALI Bridge\"");
+    httpd_resp_send(req, msg, HTTPD_RESP_USE_STRLEN);
+    return ESP_FAIL;
+}
+
 static esp_err_t checkAuth(httpd_req_t* req, const ApiContext* ctx) {
     char authHdr[128];
     if (httpd_req_get_hdr_value_str(req, "Authorization", authHdr, sizeof(authHdr)) != ESP_OK) {
-        httpd_resp_set_status(req, "401 Unauthorized");
-        httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"DALI Bridge\"");
-        httpd_resp_send(req, "Auth required", HTTPD_RESP_USE_STRLEN);
-        return ESP_FAIL;
+        return sendUnauthorized(req);
     }
 
     std::string_view authSv(authHdr);
-    if (!authSv.starts_with("Basic "))
-        return ESP_FAIL;
+    if (!authSv.starts_with("Basic ")) {
+        return sendUnauthorized(req, "Malformed Authorization header");
+    }
     authSv.remove_prefix(6);
 
     unsigned char decoded[128]{0};
     size_t decodedLen = 0;
     if (mbedtls_base64_decode(decoded, sizeof(decoded) - 1, &decodedLen,
                               reinterpret_cast<const unsigned char*>(authSv.data()), authSv.length()) != 0) {
-        return ESP_FAIL;
+        return sendUnauthorized(req, "Invalid Base64 credentials");
     }
 
     decoded[decodedLen] = '\0';
     std::string_view creds(reinterpret_cast<char*>(decoded));
     const size_t colonPos = creds.find(':');
-    if (colonPos == std::string_view::npos)
-        return ESP_FAIL;
+    if (colonPos == std::string_view::npos) {
+        return sendUnauthorized(req, "Malformed credentials");
+    }
 
     const auto cfg = ctx->config.get();
     if (creds.substr(0, colonPos) == cfg->httpUser.c_str() && creds.substr(colonPos + 1) == cfg->httpPass.c_str()) {
         return ESP_OK;
     }
 
-    httpd_resp_set_status(req, "401 Unauthorized");
-    httpd_resp_send(req, "Invalid credentials", HTTPD_RESP_USE_STRLEN);
-    return ESP_FAIL;
+    return sendUnauthorized(req, "Invalid credentials");
 }
 
 esp_err_t ApiHandlers::getConfig(httpd_req_t* req) {
@@ -230,10 +228,11 @@ esp_err_t ApiHandlers::getInfo(httpd_req_t* req) {
     doc["network_type"] = NetworkPlatform::getInterfaceName();
     doc["mqtt_status"] = ctx->mqttClient.isConnected() ? "Connected" : "Disconnected";
     doc["net_status"] = ctx->network.isConnected() ? "Connected" : "Disconnected";
-    doc["dali_status"] = (g_daliStatus.load() == DaliOperationStatus::Idle)           ? "Idle"
-                         : (g_daliStatus.load() == DaliOperationStatus::Scanning)     ? "Scanning"
-                         : (g_daliStatus.load() == DaliOperationStatus::Initializing) ? "Initializing"
-                                                                                      : "Busy";
+    const auto daliOp = ctx->daliRegistry.getOperationStatus();
+    doc["dali_status"] = (daliOp == DaliOperationStatus::Idle)           ? "Idle"
+                         : (daliOp == DaliOperationStatus::Scanning)     ? "Scanning"
+                         : (daliOp == DaliOperationStatus::Initializing) ? "Initializing"
+                                                                         : "Busy";
     doc["configured"] = ctx->config.isConfigured();
 
     const auto ota = ctx->ota.getVersionInfo();
@@ -262,7 +261,7 @@ esp_err_t ApiHandlers::getDaliDevices(httpd_req_t* req) {
     if (checkAuth(req, ctx) != ESP_OK)
         return ESP_FAIL;
 
-    const auto devices = ctx->daliRegistry.getDevicesSnapshot();
+    const size_t devCount = ctx->daliRegistry.getDeviceCount();
 
     std::lock_guard<std::mutex> lock(ctx->arenaMutex);
     ctx->arena.reset();
@@ -273,7 +272,11 @@ esp_err_t ApiHandlers::getDaliDevices(httpd_req_t* req) {
     stream.write(reinterpret_cast<const uint8_t*>("["), 1);
     bool first = true;
 
-    for (const auto& dev : devices) {
+    for (size_t i = 0; i < devCount; ++i) {
+        const auto devOpt = ctx->daliRegistry.getDeviceAt(i);
+        if (!devOpt)
+            break;
+        const auto& dev = *devOpt;
         ctx->arena.reset();
         memory::JsonArenaAllocator allocator(ctx->arena);
         JsonDocument itemDoc(&allocator);
@@ -361,8 +364,7 @@ esp_err_t ApiHandlers::scanDaliBus(httpd_req_t* req) {
     if (checkAuth(req, ctx) != ESP_OK)
         return ESP_FAIL;
 
-    auto expected = DaliOperationStatus::Idle;
-    if (!g_daliStatus.compare_exchange_strong(expected, DaliOperationStatus::Scanning, std::memory_order_acq_rel)) {
+    if (!ctx->daliRegistry.tryBeginOperation(DaliOperationStatus::Scanning)) {
         httpd_resp_set_status(req, "409 Conflict");
         httpd_resp_send(req, "Operation in progress", HTTPD_RESP_USE_STRLEN);
         return ESP_OK;
@@ -370,7 +372,7 @@ esp_err_t ApiHandlers::scanDaliBus(httpd_req_t* req) {
 
     const BaseType_t ret = xTaskCreate(webScanTaskRunner, "web_scan", 4096, ctx, 4, nullptr);
     if (ret != pdPASS) {
-        g_daliStatus.store(DaliOperationStatus::Idle, std::memory_order_release);
+        ctx->daliRegistry.endOperation();
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Task create failed");
         return ESP_FAIL;
     }
@@ -385,8 +387,7 @@ esp_err_t ApiHandlers::initializeDaliBus(httpd_req_t* req) {
     if (checkAuth(req, ctx) != ESP_OK)
         return ESP_FAIL;
 
-    auto expected = DaliOperationStatus::Idle;
-    if (!g_daliStatus.compare_exchange_strong(expected, DaliOperationStatus::Initializing, std::memory_order_acq_rel)) {
+    if (!ctx->daliRegistry.tryBeginOperation(DaliOperationStatus::Initializing)) {
         httpd_resp_set_status(req, "409 Conflict");
         httpd_resp_send(req, "Operation in progress", HTTPD_RESP_USE_STRLEN);
         return ESP_OK;
@@ -394,7 +395,7 @@ esp_err_t ApiHandlers::initializeDaliBus(httpd_req_t* req) {
 
     const BaseType_t ret = xTaskCreate(webInitTaskRunner, "web_init", 4096, ctx, 4, nullptr);
     if (ret != pdPASS) {
-        g_daliStatus.store(DaliOperationStatus::Idle, std::memory_order_release);
+        ctx->daliRegistry.endOperation();
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Task creation failed");
         return ESP_FAIL;
     }
@@ -409,8 +410,7 @@ esp_err_t ApiHandlers::initializeDaliInputs(httpd_req_t* req) {
     if (checkAuth(req, ctx) != ESP_OK)
         return ESP_FAIL;
 
-    auto expected = DaliOperationStatus::Idle;
-    if (!g_daliStatus.compare_exchange_strong(expected, DaliOperationStatus::Initializing, std::memory_order_acq_rel)) {
+    if (!ctx->daliRegistry.tryBeginOperation(DaliOperationStatus::Initializing)) {
         httpd_resp_set_status(req, "409 Conflict");
         httpd_resp_send(req, "Operation in progress", HTTPD_RESP_USE_STRLEN);
         return ESP_OK;
@@ -418,7 +418,7 @@ esp_err_t ApiHandlers::initializeDaliInputs(httpd_req_t* req) {
 
     const BaseType_t ret = xTaskCreate(webInputInitTaskRunner, "web_inp_init", 4096, ctx, 4, nullptr);
     if (ret != pdPASS) {
-        g_daliStatus.store(DaliOperationStatus::Idle, std::memory_order_release);
+        ctx->daliRegistry.endOperation();
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Task creation failed");
         return ESP_FAIL;
     }
@@ -434,7 +434,7 @@ esp_err_t ApiHandlers::getDaliStatus(httpd_req_t* req) {
         return ESP_FAIL;
 
     auto s = "idle";
-    switch (g_daliStatus.load()) {
+    switch (ctx->daliRegistry.getOperationStatus()) {
     case DaliOperationStatus::Scanning:
         s = "scanning";
         break;
@@ -614,8 +614,17 @@ esp_err_t ApiHandlers::refreshDaliGroups(httpd_req_t* req) {
     if (checkAuth(req, ctx) != ESP_OK)
         return ESP_FAIL;
 
-    g_daliStatus.store(DaliOperationStatus::RefreshingGroups);
-    xTaskCreate(webGroupRefreshTaskRunner, "web_grp", 4096, ctx, 4, nullptr);
+    if (!ctx->daliRegistry.tryBeginOperation(DaliOperationStatus::RefreshingGroups)) {
+        httpd_resp_set_status(req, "409 Conflict");
+        httpd_resp_send(req, "Operation in progress", HTTPD_RESP_USE_STRLEN);
+        return ESP_OK;
+    }
+
+    if (xTaskCreate(webGroupRefreshTaskRunner, "web_grp", 4096, ctx, 4, nullptr) != pdPASS) {
+        ctx->daliRegistry.endOperation();
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Task creation failed");
+        return ESP_FAIL;
+    }
 
     httpd_resp_send(req, R"({"status":"ok"})", HTTPD_RESP_USE_STRLEN);
     return ESP_OK;

@@ -50,13 +50,16 @@ esp_err_t MqttBridge::start() {
     m_mqtt.setConnectedCallback(&onMqttConnectedBridge, this);
     m_mqtt.setDataCallback(&onMqttDataReceivedBridge, this);
 
-    if (!m_taskHandle) {
-        m_taskHandle = xTaskCreateStatic(bridgeTaskRunner, "mqtt_bridge_task", BRIDGE_TASK_STACK_SIZE, this, 6,
-                                         m_bridgeTaskStack, &m_bridgeTaskBuffer);
-        if (!m_taskHandle) {
+    if (m_taskHandle.load(std::memory_order_acquire) == nullptr) {
+        m_running.store(true, std::memory_order_release);
+        TaskHandle_t handle = xTaskCreateStatic(bridgeTaskRunner, "mqtt_bridge_task", BRIDGE_TASK_STACK_SIZE, this, 6,
+                                                m_bridgeTaskStack, &m_bridgeTaskBuffer);
+        if (!handle) {
+            m_running.store(false, std::memory_order_release);
             ESP_LOGE(TAG, "Failed to start bridge worker task");
             return ESP_ERR_NO_MEM;
         }
+        m_taskHandle.store(handle, std::memory_order_release);
     }
 
     ESP_LOGI(TAG, "MQTT Bridge initialized (Base Topic: %s)", m_baseTopic.c_str());
@@ -64,10 +67,24 @@ esp_err_t MqttBridge::start() {
 }
 
 void MqttBridge::stop() {
+    if (!m_running.exchange(false, std::memory_order_acq_rel)) {
+        return;
+    }
+
     m_daliBus.setRawSnifferCallback(nullptr, nullptr);
-    if (m_taskHandle) {
-        vTaskDelete(m_taskHandle);
-        m_taskHandle = nullptr;
+    m_daliRegistry.setDeviceStateCallback(nullptr, nullptr);
+    m_daliRegistry.setGroupStateCallback(nullptr, nullptr);
+    m_daliRegistry.setInputEventCallback(nullptr, nullptr);
+    m_daliRegistry.setDeviceAttributesCallback(nullptr, nullptr);
+    m_mqtt.setConnectedCallback(nullptr, nullptr);
+    m_mqtt.setDataCallback(nullptr, nullptr);
+
+    for (int i = 0; i < 50 && m_taskHandle.load(std::memory_order_acquire) != nullptr; ++i) {
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+
+    if (TaskHandle_t task = m_taskHandle.exchange(nullptr, std::memory_order_acq_rel)) {
+        vTaskDelete(task);
     }
 }
 
@@ -278,9 +295,12 @@ void MqttBridge::onOtaProgressChanged(const OtaProgressEvent& event, void* ctx) 
 void MqttBridge::replayAllCachedStates() const {
     ESP_LOGI(TAG, "Replaying cached states from RAM to MQTT...");
 
-    const auto devices = m_daliRegistry.getDevicesSnapshot();
-    for (const auto& dev : devices) {
-        if (const auto* gear = etl::get_if<ControlGear>(&dev)) {
+    const size_t devCount = m_daliRegistry.getDeviceCount();
+    for (size_t i = 0; i < devCount; ++i) {
+        const auto devOpt = m_daliRegistry.getDeviceAt(i);
+        if (!devOpt)
+            break;
+        if (const auto* gear = etl::get_if<ControlGear>(&(*devOpt))) {
             DeviceStateChangeEvent ev{.longAddress = gear->longAddress,
                                       .internalAddress = gear->internalAddress,
                                       .level = gear->currentLevel,
@@ -361,11 +381,11 @@ void MqttBridge::bridgeTaskRunner(void* arg) {
     static_cast<MqttBridge*>(arg)->bridgeWorkerLoop();
 }
 
-[[noreturn]] void MqttBridge::bridgeWorkerLoop() const {
+void MqttBridge::bridgeWorkerLoop() {
     DeviceStateChangeEvent daliEv{};
     DaliRawFrame rawFrame{};
 
-    while (true) {
+    while (m_running.load(std::memory_order_acquire)) {
         if (xQueueReceive(m_cmdQueue, &m_currentMsg, pdMS_TO_TICKS(10)) == pdTRUE) {
             const std::string_view topic(m_currentMsg.topic.c_str(), m_currentMsg.topic.length());
             const std::string_view payload(m_currentMsg.payload.c_str(), m_currentMsg.payload.length());
@@ -381,6 +401,9 @@ void MqttBridge::bridgeTaskRunner(void* arg) {
             publishRawMonitorFrame(rawFrame);
         }
     }
+
+    m_taskHandle.store(nullptr, std::memory_order_release);
+    vTaskDelete(nullptr);
 }
 
 void MqttBridge::publishRawMonitorFrame(const DaliRawFrame& frame) const {
@@ -426,6 +449,7 @@ void MqttBridge::groupRefreshTaskRunner(void* arg) {
     self->m_daliRegistry.refreshGroupAssignmentsFromBus();
     self->publishAllDeviceGroups();
     self->handleGroupConfigGetCommand();
+    self->m_daliRegistry.endOperation();
     vTaskDelete(nullptr);
 }
 
@@ -441,7 +465,7 @@ void MqttBridge::busScanTaskRunner(void* arg) {
 
     self->publishBusSyncStatus("idle", "scan_complete");
     ESP_LOGI(TAG, "MQTT-initiated DALI scan finished.");
-    self->m_busOperationBusy.store(false);
+    self->m_daliRegistry.endOperation();
     vTaskDelete(nullptr);
 }
 
@@ -452,7 +476,7 @@ void MqttBridge::busInitTaskRunner(void* arg) {
 
     self->publishBusSyncStatus("idle", "init_complete");
     ESP_LOGI(TAG, "MQTT-initiated DALI commissioning finished.");
-    self->m_busOperationBusy.store(false);
+    self->m_daliRegistry.endOperation();
     vTaskDelete(nullptr);
 }
 
@@ -463,7 +487,7 @@ void MqttBridge::inputInitTaskRunner(void* arg) {
 
     self->publishBusSyncStatus("idle", "input_init_complete");
     ESP_LOGI(TAG, "MQTT-initiated Input Device commissioning finished.");
-    self->m_busOperationBusy.store(false);
+    self->m_daliRegistry.endOperation();
     vTaskDelete(nullptr);
 }
 
@@ -786,8 +810,14 @@ void MqttBridge::handleGroupConfigGetCommand() const {
 }
 
 void MqttBridge::handleGroupRefreshCommand() const {
+    if (!m_daliRegistry.tryBeginOperation(DaliOperationStatus::RefreshingGroups)) {
+        ESP_LOGW(TAG, "Bus operation is already in progress. Ignoring group refresh request.");
+        return;
+    }
     ESP_LOGI(TAG, "MQTT requested group refresh from DALI bus...");
-    xTaskCreate(groupRefreshTaskRunner, "mqtt_grp_ref", 4096, const_cast<MqttBridge*>(this), 4, nullptr);
+    if (xTaskCreate(groupRefreshTaskRunner, "mqtt_grp_ref", 4096, const_cast<MqttBridge*>(this), 4, nullptr) != pdPASS) {
+        m_daliRegistry.endOperation();
+    }
 }
 
 void MqttBridge::handleGroupConfigCommand(std::string_view payload) const {
@@ -1163,36 +1193,42 @@ void MqttBridge::publishBusSyncStatus(const char* status, const char* lastAction
 }
 
 void MqttBridge::handleBusScanCommand() const {
-    if (m_busOperationBusy.exchange(true)) {
+    if (!m_daliRegistry.tryBeginOperation(DaliOperationStatus::Scanning)) {
         ESP_LOGW(TAG, "Bus operation is already in progress. Ignoring scan request.");
         return;
     }
 
     ESP_LOGI(TAG, "Starting MQTT-initiated asynchronous DALI bus scan...");
     publishBusSyncStatus("scanning");
-    xTaskCreate(busScanTaskRunner, "mqtt_scan_task", 4096, const_cast<MqttBridge*>(this), 4, nullptr);
+    if (xTaskCreate(busScanTaskRunner, "mqtt_scan_task", 4096, const_cast<MqttBridge*>(this), 4, nullptr) != pdPASS) {
+        m_daliRegistry.endOperation();
+    }
 }
 
 void MqttBridge::handleBusInitializeCommand() const {
-    if (m_busOperationBusy.exchange(true)) {
+    if (!m_daliRegistry.tryBeginOperation(DaliOperationStatus::Initializing)) {
         ESP_LOGW(TAG, "Bus operation is already in progress. Ignoring commissioning request.");
         return;
     }
 
     ESP_LOGI(TAG, "Starting MQTT-initiated DALI commissioning (Control Gear)...");
     publishBusSyncStatus("initializing");
-    xTaskCreate(busInitTaskRunner, "mqtt_init_task", 4096, const_cast<MqttBridge*>(this), 4, nullptr);
+    if (xTaskCreate(busInitTaskRunner, "mqtt_init_task", 4096, const_cast<MqttBridge*>(this), 4, nullptr) != pdPASS) {
+        m_daliRegistry.endOperation();
+    }
 }
 
 void MqttBridge::handleInputDeviceInitializeCommand() const {
-    if (m_busOperationBusy.exchange(true)) {
+    if (!m_daliRegistry.tryBeginOperation(DaliOperationStatus::Initializing)) {
         ESP_LOGW(TAG, "Bus operation is already in progress. Ignoring input device init request.");
         return;
     }
 
     ESP_LOGI(TAG, "Starting MQTT-initiated DALI commissioning (24-bit Input Devices)...");
     publishBusSyncStatus("initializing");
-    xTaskCreate(inputInitTaskRunner, "mqtt_inp_init_task", 4096, const_cast<MqttBridge*>(this), 4, nullptr);
+    if (xTaskCreate(inputInitTaskRunner, "mqtt_inp_init_task", 4096, const_cast<MqttBridge*>(this), 4, nullptr) != pdPASS) {
+        m_daliRegistry.endOperation();
+    }
 }
 
 void MqttBridge::onDaliDeviceAttributesLoaded(const ControlGear& gear, void* ctx) {

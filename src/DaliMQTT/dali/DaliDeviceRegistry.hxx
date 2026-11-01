@@ -59,6 +59,8 @@ using SceneLevels = std::array<uint8_t, 64>;
 using GroupMask = std::bitset<16>;
 using GroupAssignments = etl::flat_map<DaliLongAddress_t, GroupMask, 64>;
 
+enum class DaliOperationStatus : uint8_t { Idle, Scanning, Initializing, RefreshingGroups };
+
 class DaliDeviceRegistry {
   public:
     static constexpr size_t MAX_DEVICES_PER_BUS = 128;
@@ -73,6 +75,10 @@ class DaliDeviceRegistry {
 
     esp_err_t init();
     void start();
+
+    [[nodiscard]] inline bool tryBeginOperation(DaliOperationStatus op) noexcept;
+    inline void endOperation() noexcept;
+    [[nodiscard]] inline DaliOperationStatus getOperationStatus() const noexcept;
 
     esp_err_t setBrightness(DaliLongAddress_t longAddr, uint8_t level);
     esp_err_t setPower(DaliLongAddress_t longAddr, bool on);
@@ -95,7 +101,7 @@ class DaliDeviceRegistry {
     void processSnifferFrame(const DaliRawFrame& frame);
     void processInputDeviceFrame(const DaliRawFrame& frame) const;
 
-    esp_err_t activateScene(uint8_t busId, uint8_t sceneId) const;
+    esp_err_t activateScene(uint8_t busId, uint8_t sceneId);
     esp_err_t saveSceneLevels(uint8_t busId, uint8_t sceneId, const SceneLevels& levels) const;
     [[nodiscard]] SceneLevels querySceneLevels(uint8_t busId, uint8_t sceneId) const;
 
@@ -103,7 +109,9 @@ class DaliDeviceRegistry {
     void commissionNewDevices();
     void commission24BitDevices();
 
-    [[nodiscard]] etl::vector<DaliDevice, MAX_TOTAL_DEVICES> getDevicesSnapshot() const;
+    [[nodiscard]] inline size_t getDeviceCount() const noexcept;
+    [[nodiscard]] inline std::optional<DaliDevice> getDeviceAt(size_t index) const noexcept;
+    void getGroupColorCapabilities(uint8_t busId, uint8_t groupId, bool& supportsTc, bool& supportsRgb) const;
     [[nodiscard]] inline std::optional<DaliInternalAddr> getInternalAddress(DaliLongAddress_t longAddr) const;
     [[nodiscard]] inline std::optional<DaliLongAddress_t> getLongAddress(DaliInternalAddr internalAddr,
                                                                          bool isInput = false) const;
@@ -164,6 +172,7 @@ class DaliDeviceRegistry {
     void pollSingleDevice(DaliInternalAddr addr);
 
     void notifyDeviceChange(const ControlGear& gear) const;
+    void notifyAffectedDevices(const std::bitset<MAX_TOTAL_DEVICES>& affectedMask) const;
     void notifyGroupChange(uint8_t busId, uint8_t groupId, const DaliGroupState& state) const;
     void notifyInputEvent(const InputDeviceEvent& ev) const;
 
@@ -192,6 +201,7 @@ class DaliDeviceRegistry {
     DeviceStateCallback m_deviceStateCb{nullptr};
     void* m_deviceStateCtx{nullptr};
     std::atomic<bool> m_scanCommissionActive{false};
+    std::atomic<DaliOperationStatus> m_operationStatus{DaliOperationStatus::Idle};
 
     GroupStateCallback m_groupStateCb{nullptr};
     void* m_groupStateCtx{nullptr};

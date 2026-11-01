@@ -59,9 +59,11 @@ class OtaService {
     void notifyProgress(OtaStatus status, uint8_t percentage, const char* desc);
 
     std::atomic<bool> m_isUpdating{false};
+    std::atomic<bool> m_isCheckingVersion{false};
     std::atomic<OtaStatus> m_status{OtaStatus::Idle};
 
     etl::string<256> m_targetUrl{};
+    etl::string<256> m_manifestUrl{};
     mutable std::mutex m_infoMutex{};
     OtaVersionInfo m_versionInfo{};
     OtaVersionCallback m_versionCb{nullptr};

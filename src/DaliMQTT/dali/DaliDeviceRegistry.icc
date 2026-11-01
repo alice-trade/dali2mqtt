@@ -6,6 +6,19 @@
 
 namespace daliMQTT {
 
+inline size_t DaliDeviceRegistry::getDeviceCount() const noexcept {
+    std::lock_guard<std::mutex> lock(m_registryMutex);
+    return m_devices.size();
+}
+
+inline std::optional<DaliDevice> DaliDeviceRegistry::getDeviceAt(const size_t index) const noexcept {
+    std::lock_guard<std::mutex> lock(m_registryMutex);
+    if (index < m_devices.size()) {
+        return m_devices[index];
+    }
+    return std::nullopt;
+}
+
 inline DaliGroupState DaliDeviceRegistry::getGroupState(const uint8_t busId, const uint8_t groupId) const {
     std::lock_guard<std::mutex> lock(m_registryMutex);
     if (busId < BUS_COUNT && groupId < 16) {
@@ -76,6 +89,19 @@ inline void DaliDeviceRegistry::setInputEventCallback(InputEventCallback cb, voi
 inline void DaliDeviceRegistry::setDeviceAttributesCallback(DeviceAttributesCallback cb, void* ctx) noexcept {
     m_attributesCb = cb;
     m_attributesCtx = ctx;
+}
+
+inline bool DaliDeviceRegistry::tryBeginOperation(const DaliOperationStatus op) noexcept {
+    auto expected = DaliOperationStatus::Idle;
+    return m_operationStatus.compare_exchange_strong(expected, op, std::memory_order_acq_rel);
+}
+
+inline void DaliDeviceRegistry::endOperation() noexcept {
+    m_operationStatus.store(DaliOperationStatus::Idle, std::memory_order_release);
+}
+
+inline DaliOperationStatus DaliDeviceRegistry::getOperationStatus() const noexcept {
+    return m_operationStatus.load(std::memory_order_acquire);
 }
 } // namespace daliMQTT
 

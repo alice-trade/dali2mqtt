@@ -6,8 +6,8 @@ include(${PROJDIR}/scripts/idf_overrides.cmake)
 message(NOTICE "IDF framework at: " $ENV{IDF_PATH})
 message(NOTICE "IDF Version: ${IDF_VERSION_MAJOR}.${IDF_VERSION_MINOR}.${IDF_VERSION_PATCH}")
 
-if(IDF_VERSION_MAJOR LESS 5 OR (IDF_VERSION_MAJOR EQUAL 5 AND IDF_VERSION_MINOR LESS 2))
-    message(FATAL_ERROR "Build requires ESP-IDF v5.2+ or v6.x. Current version: ${IDF_VERSION_MAJOR}.${IDF_VERSION_MINOR}")
+if(IDF_VERSION_MAJOR LESS 5 OR (IDF_VERSION_MAJOR EQUAL 5 AND IDF_VERSION_MINOR LESS 4))
+    message(FATAL_ERROR "Build requires ESP-IDF v5.4+ or v6.x. Current version: ${IDF_VERSION_MAJOR}.${IDF_VERSION_MINOR}")
 endif()
 
 message(STATUS "External dependencies are being processed...")

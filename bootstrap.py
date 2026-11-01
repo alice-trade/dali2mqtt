@@ -259,7 +259,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "-v", "--version",
         default="v6.1",
-        help="ESP-IDF release version to download (e.g. v6.1, v5.4, v5.3.2)"
+        help="ESP-IDF release version to download (e.g. v6.1, v5.4)"
     )
     parser.add_argument(
         "-u", "--url",

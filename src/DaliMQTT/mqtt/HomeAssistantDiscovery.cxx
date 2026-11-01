@@ -20,9 +20,12 @@ void HomeAssistantDiscovery::publishAll(const ConfigStructure& config) const {
 
     ESP_LOGI(TAG, "Publishing Home Assistant MQTT Discovery (Prefix: %s)...", config.hassDiscoveryPrefix.c_str());
 
-    const auto devices = m_registry.getDevicesSnapshot();
-    for (const auto& dev : devices) {
-        if (const auto* gear = etl::get_if<ControlGear>(&dev)) {
+    const size_t devCount = m_registry.getDeviceCount();
+    for (size_t i = 0; i < devCount; ++i) {
+        const auto devOpt = m_registry.getDeviceAt(i);
+        if (!devOpt)
+            break;
+        if (const auto* gear = etl::get_if<ControlGear>(&(*devOpt))) {
             publishLight(*gear, config);
         }
     }
@@ -162,22 +165,7 @@ void HomeAssistantDiscovery::publishGroup(const uint8_t busId, const uint8_t gro
 
     bool groupSupportsTc = false;
     bool groupSupportsRgb = false;
-
-    const auto devices = m_registry.getDevicesSnapshot();
-    const auto assignments = m_registry.getGroupAssignments();
-
-    for (const auto& [longAddr, mask] : assignments) {
-        if (mask.test(groupId)) {
-            for (const auto& dev : devices) {
-                if (const auto* gear = etl::get_if<ControlGear>(&dev)) {
-                    if (gear->longAddress == longAddr && gear->color.has_value()) {
-                        if (gear->color->supportsTc) groupSupportsTc = true;
-                        if (gear->color->supportsRgb) groupSupportsRgb = true;
-                    }
-                }
-            }
-        }
-    }
+    m_registry.getGroupColorCapabilities(busId, groupId, groupSupportsTc, groupSupportsRgb);
 
     if (groupSupportsTc || groupSupportsRgb) {
         const auto modes = doc["supported_color_modes"].to<JsonArray>();

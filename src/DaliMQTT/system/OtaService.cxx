@@ -20,6 +20,22 @@ static constexpr char TAG[] = "OtaService";
 static constexpr size_t SECTOR_SIZE = 4096;
 static constexpr size_t STREAM_BUFFER_SIZE = SECTOR_SIZE;
 
+namespace {
+struct EspHttpStreamReader {
+    esp_http_client_handle_t client;
+
+    int read() {
+        char c = 0;
+        return (esp_http_client_read(client, &c, 1) == 1) ? static_cast<unsigned char>(c) : -1;
+    }
+
+    size_t readBytes(char* buffer, size_t length) {
+        const int r = esp_http_client_read(client, buffer, static_cast<int>(length));
+        return (r > 0) ? static_cast<size_t>(r) : 0;
+    }
+};
+} // namespace
+
 OtaService::OtaService() = default;
 
 OtaService::~OtaService() {
@@ -34,11 +50,10 @@ esp_err_t OtaService::startUpdate(const char* url) {
         return ESP_ERR_INVALID_STATE;
     }
 
+    m_targetUrl.clear();
     if (!url || strlen(url) == 0) {
         std::lock_guard<std::mutex> lock(m_infoMutex);
-        if (!m_versionInfo.firmwareUrl.empty()) {
-            m_targetUrl = m_versionInfo.firmwareUrl;
-        }
+        m_targetUrl = m_versionInfo.firmwareUrl;
     } else {
         m_targetUrl = url;
     }
@@ -128,19 +143,32 @@ esp_err_t OtaService::performAppOta(const char* appUrl) {
 }
 
 esp_err_t OtaService::checkForUpdateAsync(const char* manifestUrl) {
-    if (m_isUpdating.load())
-        return ESP_ERR_INVALID_STATE;
     if (!manifestUrl || strlen(manifestUrl) == 0)
         return ESP_ERR_INVALID_ARG;
+    if (m_isUpdating.load() || m_isCheckingVersion.exchange(true))
+        return ESP_ERR_INVALID_STATE;
 
-    m_targetUrl = manifestUrl;
-    xTaskCreate(versionCheckTaskRunner, "ota_ver_chk", 10240, this, 3, nullptr);
+    {
+        std::lock_guard<std::mutex> lock(m_infoMutex);
+        m_manifestUrl = manifestUrl;
+    }
+
+    if (xTaskCreate(versionCheckTaskRunner, "ota_ver_chk", 10240, this, 3, nullptr) != pdPASS) {
+        m_isCheckingVersion.store(false);
+        return ESP_ERR_NO_MEM;
+    }
     return ESP_OK;
 }
 
 void OtaService::versionCheckTaskRunner(void* arg) {
     auto* self = static_cast<OtaService*>(arg);
-    self->performVersionCheck(self->m_targetUrl.c_str());
+    etl::string<256> urlCopy;
+    {
+        std::lock_guard<std::mutex> lock(self->m_infoMutex);
+        urlCopy = self->m_manifestUrl;
+    }
+    self->performVersionCheck(urlCopy.c_str());
+    self->m_isCheckingVersion.store(false);
     vTaskDelete(nullptr);
 }
 
@@ -169,21 +197,32 @@ void OtaService::performVersionCheck(const char* url) {
         return;
     }
 
-    esp_http_client_fetch_headers(client);
+    const int64_t contentLen = esp_http_client_fetch_headers(client);
+    const int statusCode = esp_http_client_get_status_code(client);
+    if (statusCode != 200 || contentLen == 0) {
+        esp_http_client_close(client);
+        esp_http_client_cleanup(client);
+        m_status.store(OtaStatus::Idle);
+        return;
+    }
 
-    char responseBuffer[2048];
-    const int readBytes = esp_http_client_read_response(client, responseBuffer, sizeof(responseBuffer) - 1);
+    JsonDocument filter;
+    filter["tag_name"] = true;
+    filter["version"] = true;
+    filter["html_url"] = true;
+    filter["release_url"] = true;
+    filter["firmware_url"] = true;
+    filter["assets"][0]["browser_download_url"] = true;
+
+    JsonDocument doc;
+    EspHttpStreamReader reader{client};
+    const DeserializationError err = deserializeJson(doc, reader, DeserializationOption::Filter(filter));
     esp_http_client_close(client);
     esp_http_client_cleanup(client);
 
     m_status.store(OtaStatus::Idle);
 
-    if (readBytes <= 0)
-        return;
-    responseBuffer[readBytes] = '\0';
-
-    JsonDocument doc;
-    if (deserializeJson(doc, responseBuffer) != DeserializationError::Ok) {
+    if (err != DeserializationError::Ok) {
         ESP_LOGW(TAG, "Failed to parse release JSON");
         return;
     }
@@ -208,6 +247,19 @@ void OtaService::performVersionCheck(const char* url) {
 
     if (doc["firmware_url"].is<const char*>()) {
         info.firmwareUrl = doc["firmware_url"].as<const char*>();
+    } else if (doc["assets"].is<JsonArrayConst>()) {
+        for (JsonObjectConst asset : doc["assets"].as<JsonArrayConst>()) {
+            if (asset["browser_download_url"].is<const char*>()) {
+                const char* dlUrl = asset["browser_download_url"].as<const char*>();
+                if (std::string_view(dlUrl).ends_with(".bin")) {
+                    info.firmwareUrl = dlUrl;
+                    break;
+                }
+                if (info.firmwareUrl.empty()) {
+                    info.firmwareUrl = dlUrl;
+                }
+            }
+        }
     }
 
     if (!info.latestVersion.empty()) {
