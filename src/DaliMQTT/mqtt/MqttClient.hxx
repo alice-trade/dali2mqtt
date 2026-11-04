@@ -46,7 +46,7 @@ class MqttClient {
     static void mqttEventHandler(void* handlerArgs, esp_event_base_t base, int32_t eventId, void* eventData);
 
     mutable std::mutex m_mutex{};
-    esp_mqtt_client_handle_t m_clientHandle{nullptr};
+    std::atomic<esp_mqtt_client_handle_t> m_clientHandle{nullptr};
     std::atomic<MqttStatus> m_status{MqttStatus::Disconnected};
 
     MqttConnectedCallback m_connectedCb{nullptr};

@@ -114,73 +114,38 @@ void MqttBridge::onMqttConnectedBridge(void* ctx) {
     snprintf(metaTopic, sizeof(metaTopic), "%s/ip_addr", self->m_baseTopic.c_str());
     self->m_mqtt.publish(metaTopic, self->m_network.getIpAddress().c_str(), 0, true);
 
+    static constexpr const char* kSubSuffixes[] = {
+        "/raw/tx",
+        "/light/+/set",
+        "/light/broadcast/set",
+        "/light/bus/+/short/+/set",
+        "/light/bus/+/group/+/set",
+        "/scene/bus/+/set",
+        "/cmd/send",
+        "/cmd/sync",
+        "/cmd/query",
+        "/config/get",
+        "/config/set",
+        "/config/group/set",
+        "/config/group/get",
+        "/config/group/refresh",
+        "/config/scene/get",
+        "/config/scene/set",
+        "/config/names/get",
+        "/config/names/set",
+        "/config/bus/scan",
+        "/config/bus/initialize",
+        "/config/input_device/initialize",
+        "/config/discovery/publish",
+        "/update/check",
+        "/update/install",
+    };
+
     char topicBuf[128];
-
-    snprintf(topicBuf, sizeof(topicBuf), "%s/raw/tx", self->m_baseTopic.c_str());
-    self->m_mqtt.subscribe(topicBuf);
-
-    snprintf(topicBuf, sizeof(topicBuf), "%s/light/+/set", self->m_baseTopic.c_str());
-    self->m_mqtt.subscribe(topicBuf);
-
-    snprintf(topicBuf, sizeof(topicBuf), "%s/light/broadcast/set", self->m_baseTopic.c_str());
-    self->m_mqtt.subscribe(topicBuf);
-
-    snprintf(topicBuf, sizeof(topicBuf), "%s/light/bus/+/short/+/set", self->m_baseTopic.c_str());
-    self->m_mqtt.subscribe(topicBuf);
-
-    snprintf(topicBuf, sizeof(topicBuf), "%s/light/bus/+/group/+/set", self->m_baseTopic.c_str());
-    self->m_mqtt.subscribe(topicBuf);
-
-    snprintf(topicBuf, sizeof(topicBuf), "%s/scene/bus/+/set", self->m_baseTopic.c_str());
-    self->m_mqtt.subscribe(topicBuf);
-
-    snprintf(topicBuf, sizeof(topicBuf), "%s/cmd/send", self->m_baseTopic.c_str());
-    self->m_mqtt.subscribe(topicBuf);
-
-    snprintf(topicBuf, sizeof(topicBuf), "%s/cmd/sync", self->m_baseTopic.c_str());
-    self->m_mqtt.subscribe(topicBuf);
-
-    snprintf(topicBuf, sizeof(topicBuf), "%s/cmd/query", self->m_baseTopic.c_str());
-    self->m_mqtt.subscribe(topicBuf);
-
-    snprintf(topicBuf, sizeof(topicBuf), "%s/config/get", self->m_baseTopic.c_str());
-    self->m_mqtt.subscribe(topicBuf);
-    snprintf(topicBuf, sizeof(topicBuf), "%s/config/set", self->m_baseTopic.c_str());
-    self->m_mqtt.subscribe(topicBuf);
-
-    snprintf(topicBuf, sizeof(topicBuf), "%s/config/group/set", self->m_baseTopic.c_str());
-    self->m_mqtt.subscribe(topicBuf);
-    snprintf(topicBuf, sizeof(topicBuf), "%s/config/group/get", self->m_baseTopic.c_str());
-    self->m_mqtt.subscribe(topicBuf);
-    snprintf(topicBuf, sizeof(topicBuf), "%s/config/group/refresh", self->m_baseTopic.c_str());
-    self->m_mqtt.subscribe(topicBuf);
-
-    snprintf(topicBuf, sizeof(topicBuf), "%s/config/scene/get", self->m_baseTopic.c_str());
-    self->m_mqtt.subscribe(topicBuf);
-    snprintf(topicBuf, sizeof(topicBuf), "%s/config/scene/set", self->m_baseTopic.c_str());
-    self->m_mqtt.subscribe(topicBuf);
-
-    snprintf(topicBuf, sizeof(topicBuf), "%s/config/names/get", self->m_baseTopic.c_str());
-    self->m_mqtt.subscribe(topicBuf);
-    snprintf(topicBuf, sizeof(topicBuf), "%s/config/names/set", self->m_baseTopic.c_str());
-    self->m_mqtt.subscribe(topicBuf);
-
-    snprintf(topicBuf, sizeof(topicBuf), "%s/config/bus/scan", self->m_baseTopic.c_str());
-    self->m_mqtt.subscribe(topicBuf);
-    snprintf(topicBuf, sizeof(topicBuf), "%s/config/bus/initialize", self->m_baseTopic.c_str());
-    self->m_mqtt.subscribe(topicBuf);
-
-    snprintf(topicBuf, sizeof(topicBuf), "%s/config/input_device/initialize", self->m_baseTopic.c_str());
-    self->m_mqtt.subscribe(topicBuf);
-
-    snprintf(topicBuf, sizeof(topicBuf), "%s/config/discovery/publish", self->m_baseTopic.c_str());
-    self->m_mqtt.subscribe(topicBuf);
-
-    snprintf(topicBuf, sizeof(topicBuf), "%s/update/check", self->m_baseTopic.c_str());
-    self->m_mqtt.subscribe(topicBuf);
-
-    snprintf(topicBuf, sizeof(topicBuf), "%s/update/install", self->m_baseTopic.c_str());
-    self->m_mqtt.subscribe(topicBuf);
+    for (const char* suffix : kSubSuffixes) {
+        snprintf(topicBuf, sizeof(topicBuf), "%s%s", self->m_baseTopic.c_str(), suffix);
+        self->m_mqtt.subscribe(topicBuf);
+    }
 
     const auto otaInfo = self->m_ota.getVersionInfo();
     if (otaInfo.lastCheckTsSec > 0) {
@@ -188,13 +153,12 @@ void MqttBridge::onMqttConnectedBridge(void* ctx) {
     }
 
     if (cfg->hassDiscoveryEnabled) {
-        self->publishHomeAssistantDiscovery();
-
         char haStatusTopic[64];
         snprintf(haStatusTopic, sizeof(haStatusTopic), "%s/status", cfg->hassDiscoveryPrefix.c_str());
         self->m_mqtt.subscribe(haStatusTopic);
     }
-    self->replayAllCachedStates();
+
+    self->m_initialSyncPending.store(true, std::memory_order_release);
 }
 
 void MqttBridge::onMqttDataReceivedBridge(const char* topic, const int tLen, const char* data, int dLen, void* ctx) {
@@ -310,7 +274,7 @@ void MqttBridge::replayAllCachedStates() const {
                 ev.colorTemp = gear->color->currentTc;
                 ev.rgb = gear->color->currentRgb;
             }
-            onDaliDeviceStateChanged(ev, const_cast<MqttBridge*>(this));
+            publishDeviceStateInternal(ev);
             if (gear->staticDataLoaded) {
                 publishDeviceAttributes(*gear);
             }
@@ -386,6 +350,13 @@ void MqttBridge::bridgeWorkerLoop() {
     DaliRawFrame rawFrame{};
 
     while (m_running.load(std::memory_order_acquire)) {
+        if (m_initialSyncPending.exchange(false, std::memory_order_acq_rel)) {
+            if (m_config.get()->hassDiscoveryEnabled) {
+                publishHomeAssistantDiscovery();
+            }
+            replayAllCachedStates();
+        }
+
         if (xQueueReceive(m_cmdQueue, &m_currentMsg, pdMS_TO_TICKS(10)) == pdTRUE) {
             const std::string_view topic(m_currentMsg.topic.c_str(), m_currentMsg.topic.length());
             const std::string_view payload(m_currentMsg.payload.c_str(), m_currentMsg.payload.length());
@@ -444,51 +415,23 @@ void MqttBridge::haReplayTaskRunner(void* arg) {
     vTaskDelete(nullptr);
 }
 
-void MqttBridge::groupRefreshTaskRunner(void* arg) {
-    auto* self = static_cast<MqttBridge*>(arg);
-    self->m_daliRegistry.refreshGroupAssignmentsFromBus();
-    self->publishAllDeviceGroups();
-    self->handleGroupConfigGetCommand();
-    self->m_daliRegistry.endOperation();
-    vTaskDelete(nullptr);
-}
-
 void MqttBridge::configRebootTaskRunner(void*) {
     vTaskDelay(pdMS_TO_TICKS(1000));
     esp_restart();
 }
 
-void MqttBridge::busScanTaskRunner(void* arg) {
-    auto* self = static_cast<MqttBridge*>(arg);
-    self->m_daliRegistry.scanBus();
-    self->m_daliRegistry.refreshGroupAssignmentsFromBus();
-
-    self->publishBusSyncStatus("idle", "scan_complete");
-    ESP_LOGI(TAG, "MQTT-initiated DALI scan finished.");
-    self->m_daliRegistry.endOperation();
-    vTaskDelete(nullptr);
-}
-
-void MqttBridge::busInitTaskRunner(void* arg) {
-    auto* self = static_cast<MqttBridge*>(arg);
-    self->m_daliRegistry.commissionNewDevices();
-    self->m_daliRegistry.refreshGroupAssignmentsFromBus();
-
-    self->publishBusSyncStatus("idle", "init_complete");
-    ESP_LOGI(TAG, "MQTT-initiated DALI commissioning finished.");
-    self->m_daliRegistry.endOperation();
-    vTaskDelete(nullptr);
-}
-
-void MqttBridge::inputInitTaskRunner(void* arg) {
-    auto* self = static_cast<MqttBridge*>(arg);
-    self->m_daliRegistry.commission24BitDevices();
-    self->m_daliRegistry.refreshGroupAssignmentsFromBus();
-
-    self->publishBusSyncStatus("idle", "input_init_complete");
-    ESP_LOGI(TAG, "MQTT-initiated Input Device commissioning finished.");
-    self->m_daliRegistry.endOperation();
-    vTaskDelete(nullptr);
+void MqttBridge::startAsyncBusOperation(const DaliOperationStatus opStatus, const char* taskName,
+                                        const char* startStatus, void (*runner)(void*)) const {
+    if (!m_daliRegistry.tryBeginOperation(opStatus)) {
+        ESP_LOGW(TAG, "Bus operation is already in progress. Ignoring %s request.", taskName);
+        return;
+    }
+    if (startStatus) {
+        publishBusSyncStatus(startStatus);
+    }
+    if (xTaskCreate(runner, taskName, 4096, const_cast<MqttBridge*>(this), 4, nullptr) != pdPASS) {
+        m_daliRegistry.endOperation();
+    }
 }
 
 void MqttBridge::handleHomeAssistantStatus(std::string_view payload) const {
@@ -674,6 +617,45 @@ void MqttBridge::handleLightCommand(std::string_view targetPath, std::string_vie
         brightness = static_cast<uint8_t>(std::clamp(doc["brightness"].as<int>(), 0, 254));
     }
 
+    std::optional<uint16_t> colorTemp;
+    if (doc["color_temp"].is<int>()) {
+        colorTemp = static_cast<uint16_t>(doc["color_temp"].as<int>());
+    }
+
+    struct ParsedColor {
+        uint8_t r{}, g{}, b{};
+        std::optional<uint8_t> w, a, f;
+    };
+    std::optional<ParsedColor> color;
+    if (doc["color"].is<JsonObject>()) {
+        JsonObject c = doc["color"];
+        if (c["r"].is<int>() && c["g"].is<int>() && c["b"].is<int>()) {
+            ParsedColor pc{
+                .r = static_cast<uint8_t>(std::clamp(c["r"].as<int>(), 0, 254)),
+                .g = static_cast<uint8_t>(std::clamp(c["g"].as<int>(), 0, 254)),
+                .b = static_cast<uint8_t>(std::clamp(c["b"].as<int>(), 0, 254)),
+            };
+            if (c["w"].is<int>()) pc.w = static_cast<uint8_t>(std::clamp(c["w"].as<int>(), 0, 254));
+            if (c["a"].is<int>()) pc.a = static_cast<uint8_t>(std::clamp(c["a"].as<int>(), 0, 254));
+            if (c["f"].is<int>()) pc.f = static_cast<uint8_t>(std::clamp(c["f"].as<int>(), 0, 254));
+            color = pc;
+        }
+    }
+
+    auto applyToDevice = [&](const DaliLongAddress_t la) {
+        if (colorTemp.has_value()) {
+            m_daliRegistry.setColorTemp(la, *colorTemp);
+        }
+        if (color.has_value()) {
+            m_daliRegistry.setColor(la, color->r, color->g, color->b, color->w, color->a, color->f);
+        }
+        if (brightness.has_value()) {
+            m_daliRegistry.setBrightness(la, *brightness);
+        } else if (powerState.has_value()) {
+            m_daliRegistry.setPower(la, *powerState);
+        }
+    };
+
     if (targetPath == "broadcast") {
         if (brightness.has_value()) {
             m_daliBus.sendDAPC(DaliAddressType::Broadcast, 0, *brightness);
@@ -701,28 +683,13 @@ void MqttBridge::handleLightCommand(std::string_view targetPath, std::string_vie
             auto [p2, ec2] = std::from_chars(grpPart.data(), grpPart.data() + grpPart.size(), groupId);
 
             if (ec1 == std::errc{} && ec2 == std::errc{} && groupId < 16) {
-                if (doc["color_temp"].is<int>()) {
-                    m_daliRegistry.setGroupColorTemp(busId, groupId,
-                                                     static_cast<uint16_t>(doc["color_temp"].as<int>()));
+                if (colorTemp.has_value()) {
+                    m_daliRegistry.setGroupColorTemp(busId, groupId, *colorTemp);
                 }
-                if (doc["color"].is<JsonObject>()) {
-                    JsonObject c = doc["color"];
-                    if (c["r"].is<int>() && c["g"].is<int>() && c["b"].is<int>()) {
-                        const uint8_t r = static_cast<uint8_t>(std::clamp(c["r"].as<int>(), 0, 254));
-                        const uint8_t g = static_cast<uint8_t>(std::clamp(c["g"].as<int>(), 0, 254));
-                        const uint8_t b = static_cast<uint8_t>(std::clamp(c["b"].as<int>(), 0, 254));
-
-                        std::optional<uint8_t> w;
-                        std::optional<uint8_t> a;
-                        std::optional<uint8_t> f;
-                        if (c["w"].is<int>()) w = static_cast<uint8_t>(std::clamp(c["w"].as<int>(), 0, 254));
-                        if (c["a"].is<int>()) a = static_cast<uint8_t>(std::clamp(c["a"].as<int>(), 0, 254));
-                        if (c["f"].is<int>()) f = static_cast<uint8_t>(std::clamp(c["f"].as<int>(), 0, 254));
-
-                        m_daliRegistry.setGroupColor(busId, groupId, r, g, b, w, a, f);
-                    }
+                if (color.has_value()) {
+                    m_daliRegistry.setGroupColor(busId, groupId, color->r, color->g, color->b, color->w, color->a,
+                                                 color->f);
                 }
-
                 if (brightness.has_value())
                     m_daliRegistry.setGroupBrightness(busId, groupId, *brightness);
                 else if (powerState.has_value())
@@ -744,10 +711,7 @@ void MqttBridge::handleLightCommand(std::string_view targetPath, std::string_vie
             if (ec1 == std::errc{} && ec2 == std::errc{} && sa < 64) {
                 auto longAddrOpt = m_daliRegistry.getLongAddress(DaliInternalAddr(busId, sa));
                 if (longAddrOpt) {
-                    if (brightness.has_value())
-                        m_daliRegistry.setBrightness(*longAddrOpt, *brightness);
-                    else if (powerState.has_value())
-                        m_daliRegistry.setPower(*longAddrOpt, *powerState);
+                    applyToDevice(*longAddrOpt);
                 }
             }
             return;
@@ -758,34 +722,7 @@ void MqttBridge::handleLightCommand(std::string_view targetPath, std::string_vie
     if (!longAddrOpt)
         return;
 
-    const DaliLongAddress_t longAddr = *longAddrOpt;
-
-    if (doc["color_temp"].is<int>()) {
-        m_daliRegistry.setColorTemp(longAddr, static_cast<uint16_t>(doc["color_temp"].as<int>()));
-    }
-    if (doc["color"].is<JsonObject>()) {
-        JsonObject c = doc["color"];
-        if (c["r"].is<int>() && c["g"].is<int>() && c["b"].is<int>()) {
-            const uint8_t r = static_cast<uint8_t>(std::clamp(c["r"].as<int>(), 0, 254));
-            const uint8_t g = static_cast<uint8_t>(std::clamp(c["g"].as<int>(), 0, 254));
-            const uint8_t b = static_cast<uint8_t>(std::clamp(c["b"].as<int>(), 0, 254));
-
-            std::optional<uint8_t> w;
-            std::optional<uint8_t> a;
-            std::optional<uint8_t> f;
-            if (c["w"].is<int>()) w = static_cast<uint8_t>(std::clamp(c["w"].as<int>(), 0, 254));
-            if (c["a"].is<int>()) a = static_cast<uint8_t>(std::clamp(c["a"].as<int>(), 0, 254));
-            if (c["f"].is<int>()) f = static_cast<uint8_t>(std::clamp(c["f"].as<int>(), 0, 254));
-
-            m_daliRegistry.setColor(longAddr, r, g, b, w, a, f);
-        }
-    }
-
-    if (brightness.has_value()) {
-        m_daliRegistry.setBrightness(longAddr, *brightness);
-    } else if (powerState.has_value()) {
-        m_daliRegistry.setPower(longAddr, *powerState);
-    }
+    applyToDevice(*longAddrOpt);
 }
 
 void MqttBridge::handleGroupConfigGetCommand() const {
@@ -810,14 +747,14 @@ void MqttBridge::handleGroupConfigGetCommand() const {
 }
 
 void MqttBridge::handleGroupRefreshCommand() const {
-    if (!m_daliRegistry.tryBeginOperation(DaliOperationStatus::RefreshingGroups)) {
-        ESP_LOGW(TAG, "Bus operation is already in progress. Ignoring group refresh request.");
-        return;
-    }
-    ESP_LOGI(TAG, "MQTT requested group refresh from DALI bus...");
-    if (xTaskCreate(groupRefreshTaskRunner, "mqtt_grp_ref", 4096, const_cast<MqttBridge*>(this), 4, nullptr) != pdPASS) {
-        m_daliRegistry.endOperation();
-    }
+    startAsyncBusOperation(DaliOperationStatus::RefreshingGroups, "mqtt_grp_ref", nullptr, [](void* arg) {
+        auto* self = static_cast<MqttBridge*>(arg);
+        self->m_daliRegistry.refreshGroupAssignmentsFromBus();
+        self->publishAllDeviceGroups();
+        self->handleGroupConfigGetCommand();
+        self->m_daliRegistry.endOperation();
+        vTaskDelete(nullptr);
+    });
 }
 
 void MqttBridge::handleGroupConfigCommand(std::string_view payload) const {
@@ -1193,42 +1130,36 @@ void MqttBridge::publishBusSyncStatus(const char* status, const char* lastAction
 }
 
 void MqttBridge::handleBusScanCommand() const {
-    if (!m_daliRegistry.tryBeginOperation(DaliOperationStatus::Scanning)) {
-        ESP_LOGW(TAG, "Bus operation is already in progress. Ignoring scan request.");
-        return;
-    }
-
-    ESP_LOGI(TAG, "Starting MQTT-initiated asynchronous DALI bus scan...");
-    publishBusSyncStatus("scanning");
-    if (xTaskCreate(busScanTaskRunner, "mqtt_scan_task", 4096, const_cast<MqttBridge*>(this), 4, nullptr) != pdPASS) {
-        m_daliRegistry.endOperation();
-    }
+    startAsyncBusOperation(DaliOperationStatus::Scanning, "mqtt_scan_task", "scanning", [](void* arg) {
+        auto* self = static_cast<MqttBridge*>(arg);
+        self->m_daliRegistry.scanBus();
+        self->m_daliRegistry.refreshGroupAssignmentsFromBus();
+        self->publishBusSyncStatus("idle", "scan_complete");
+        self->m_daliRegistry.endOperation();
+        vTaskDelete(nullptr);
+    });
 }
 
 void MqttBridge::handleBusInitializeCommand() const {
-    if (!m_daliRegistry.tryBeginOperation(DaliOperationStatus::Initializing)) {
-        ESP_LOGW(TAG, "Bus operation is already in progress. Ignoring commissioning request.");
-        return;
-    }
-
-    ESP_LOGI(TAG, "Starting MQTT-initiated DALI commissioning (Control Gear)...");
-    publishBusSyncStatus("initializing");
-    if (xTaskCreate(busInitTaskRunner, "mqtt_init_task", 4096, const_cast<MqttBridge*>(this), 4, nullptr) != pdPASS) {
-        m_daliRegistry.endOperation();
-    }
+    startAsyncBusOperation(DaliOperationStatus::Initializing, "mqtt_init_task", "initializing", [](void* arg) {
+        auto* self = static_cast<MqttBridge*>(arg);
+        self->m_daliRegistry.commissionNewDevices();
+        self->m_daliRegistry.refreshGroupAssignmentsFromBus();
+        self->publishBusSyncStatus("idle", "init_complete");
+        self->m_daliRegistry.endOperation();
+        vTaskDelete(nullptr);
+    });
 }
 
 void MqttBridge::handleInputDeviceInitializeCommand() const {
-    if (!m_daliRegistry.tryBeginOperation(DaliOperationStatus::Initializing)) {
-        ESP_LOGW(TAG, "Bus operation is already in progress. Ignoring input device init request.");
-        return;
-    }
-
-    ESP_LOGI(TAG, "Starting MQTT-initiated DALI commissioning (24-bit Input Devices)...");
-    publishBusSyncStatus("initializing");
-    if (xTaskCreate(inputInitTaskRunner, "mqtt_inp_init_task", 4096, const_cast<MqttBridge*>(this), 4, nullptr) != pdPASS) {
-        m_daliRegistry.endOperation();
-    }
+    startAsyncBusOperation(DaliOperationStatus::Initializing, "mqtt_inp_init_task", "initializing", [](void* arg) {
+        auto* self = static_cast<MqttBridge*>(arg);
+        self->m_daliRegistry.commission24BitDevices();
+        self->m_daliRegistry.refreshGroupAssignmentsFromBus();
+        self->publishBusSyncStatus("idle", "input_init_complete");
+        self->m_daliRegistry.endOperation();
+        vTaskDelete(nullptr);
+    });
 }
 
 void MqttBridge::onDaliDeviceAttributesLoaded(const ControlGear& gear, void* ctx) {

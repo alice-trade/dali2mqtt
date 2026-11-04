@@ -160,6 +160,10 @@ class DaliDeviceRegistry {
         QuiescentModeGuard& operator=(const QuiescentModeGuard&) = delete;
     };
 
+    esp_err_t sendDt8ColorTemp(DaliAddressType addrType, uint8_t addr, uint16_t mireds) const;
+    esp_err_t sendDt8Color(DaliAddressType addrType, uint8_t addr, uint8_t r, uint8_t g, uint8_t b,
+                           std::optional<uint8_t> w, std::optional<uint8_t> a, std::optional<uint8_t> f) const;
+
     StaticMetadata queryDeviceMetadataFromBus(uint8_t shortAddr) const;
 
     static void snifferCallbackEntry(const DaliRawFrame& frame, uint8_t busId, void* ctx);

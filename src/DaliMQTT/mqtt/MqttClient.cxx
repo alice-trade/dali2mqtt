@@ -16,17 +16,15 @@ MqttClient::MqttClient() = default;
 MqttClient::~MqttClient() {
     disconnect();
     std::lock_guard<std::mutex> lock(m_mutex);
-    if (m_clientHandle) {
-        esp_mqtt_client_destroy(m_clientHandle);
-        m_clientHandle = nullptr;
+    if (auto* client = m_clientHandle.exchange(nullptr, std::memory_order_acq_rel)) {
+        esp_mqtt_client_destroy(client);
     }
 }
 
 esp_err_t MqttClient::init(const ConfigStructure& config) {
     std::lock_guard<std::mutex> lock(m_mutex);
-    if (m_clientHandle) {
-        esp_mqtt_client_destroy(m_clientHandle);
-        m_clientHandle = nullptr;
+    if (auto* client = m_clientHandle.exchange(nullptr, std::memory_order_acq_rel)) {
+        esp_mqtt_client_destroy(client);
     }
 
     if (config.mqttUri.empty()) {
@@ -68,13 +66,14 @@ esp_err_t MqttClient::init(const ConfigStructure& config) {
 
     mqttCfg.task.stack_size = 8192;
 
-    m_clientHandle = esp_mqtt_client_init(&mqttCfg);
-    if (!m_clientHandle) {
+    esp_mqtt_client_handle_t client = esp_mqtt_client_init(&mqttCfg);
+    if (!client) {
         ESP_LOGE(TAG, "Failed to initialize ESP-MQTT client");
         return ESP_FAIL;
     }
 
-    esp_mqtt_client_register_event(m_clientHandle, MQTT_EVENT_ANY, mqttEventHandler, this);
+    esp_mqtt_client_register_event(client, MQTT_EVENT_ANY, mqttEventHandler, this);
+    m_clientHandle.store(client, std::memory_order_release);
     m_status.store(MqttStatus::Disconnected);
 
     ESP_LOGI(TAG, "MQTT Client initialized (URI: %s, ClientID: %s, TLS: %s)", config.mqttUri.c_str(),
@@ -84,17 +83,17 @@ esp_err_t MqttClient::init(const ConfigStructure& config) {
 
 void MqttClient::connect() {
     std::lock_guard<std::mutex> lock(m_mutex);
-    if (m_clientHandle && m_status.load() == MqttStatus::Disconnected) {
+    if (auto* client = m_clientHandle.load(std::memory_order_acquire); client && m_status.load() == MqttStatus::Disconnected) {
         m_status.store(MqttStatus::Connecting);
-        esp_mqtt_client_start(m_clientHandle);
+        esp_mqtt_client_start(client);
     }
 }
 
 void MqttClient::disconnect() {
     std::lock_guard<std::mutex> lock(m_mutex);
-    if (m_clientHandle) {
+    if (auto* client = m_clientHandle.load(std::memory_order_acquire)) {
         m_status.store(MqttStatus::Disconnected);
-        esp_mqtt_client_stop(m_clientHandle);
+        esp_mqtt_client_stop(client);
     }
 }
 
@@ -105,19 +104,19 @@ void MqttClient::reload(const ConfigStructure& config) {
 }
 
 esp_err_t MqttClient::publish(const char* topic, const char* payload, const int qos, const bool retain) {
-    std::lock_guard<std::mutex> lock(m_mutex);
-    if (!m_clientHandle || !isConnected())
+    auto* client = m_clientHandle.load(std::memory_order_acquire);
+    if (!client || !isConnected())
         return ESP_ERR_INVALID_STATE;
     const int len = payload ? static_cast<int>(strlen(payload)) : 0;
-    const int msgId = esp_mqtt_client_publish(m_clientHandle, topic, payload, len, qos, retain ? 1 : 0);
+    const int msgId = esp_mqtt_client_publish(client, topic, payload, len, qos, retain ? 1 : 0);
     return (msgId >= 0) ? ESP_OK : ESP_FAIL;
 }
 
 esp_err_t MqttClient::subscribe(const char* topic, const int qos) {
-    std::lock_guard<std::mutex> lock(m_mutex);
-    if (!m_clientHandle || !isConnected())
+    auto* client = m_clientHandle.load(std::memory_order_acquire);
+    if (!client || !isConnected())
         return ESP_ERR_INVALID_STATE;
-    const int msgId = esp_mqtt_client_subscribe(m_clientHandle, topic, qos);
+    const int msgId = esp_mqtt_client_subscribe(client, topic, qos);
     return (msgId >= 0) ? ESP_OK : ESP_FAIL;
 }
 
@@ -142,7 +141,11 @@ void MqttClient::mqttEventHandler(void* handlerArgs, esp_event_base_t, int32_t e
 
     case MQTT_EVENT_DATA:
         if (self->m_dataCb && event->topic && event->data) {
-            self->m_dataCb(event->topic, event->topic_len, event->data, event->data_len, self->m_dataCtx);
+            if (event->current_data_offset == 0 && event->data_len == event->total_data_len) {
+                self->m_dataCb(event->topic, event->topic_len, event->data, event->data_len, self->m_dataCtx);
+            } else {
+                ESP_LOGW(TAG, "Ignored fragmented MQTT message (%d/%d bytes)", event->data_len, event->total_data_len);
+            }
         }
         break;
 

@@ -58,11 +58,10 @@ class MqttBridge {
     void bridgeWorkerLoop();
 
     static void haReplayTaskRunner(void* arg);
-    static void groupRefreshTaskRunner(void* arg);
     static void configRebootTaskRunner(void* arg);
-    static void busScanTaskRunner(void* arg);
-    static void busInitTaskRunner(void* arg);
-    static void inputInitTaskRunner(void* arg);
+
+    void startAsyncBusOperation(DaliOperationStatus opStatus, const char* taskName, const char* startStatus,
+                                void (*runner)(void*)) const;
 
     void routeIncomingCommand(std::string_view topic, std::string_view payload) const;
     void handleLightCommand(std::string_view targetPath, std::string_view payload) const;
@@ -109,6 +108,7 @@ class MqttBridge {
     mutable memory::StaticArena<6144> m_bridgeArena{};
     mutable MqttIncomingMessage m_currentMsg{};
     mutable std::atomic<bool> m_replayInProgress{false};
+    mutable std::atomic<bool> m_initialSyncPending{false};
 
     etl::string<64> m_baseTopic{"dali_bridge"};
     QueueHandle_t m_cmdQueue{nullptr};

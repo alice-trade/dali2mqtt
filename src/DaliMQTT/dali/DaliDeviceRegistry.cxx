@@ -397,12 +397,8 @@ esp_err_t DaliDeviceRegistry::setPower(const DaliLongAddress_t longAddr, const b
     return setBrightness(longAddr, restoreLevel);
 }
 
-esp_err_t DaliDeviceRegistry::setColorTemp(const DaliLongAddress_t longAddr, const uint16_t mireds) {
-    const auto intAddrOpt = getInternalAddress(longAddr);
-    if (!intAddrOpt)
-        return ESP_ERR_NOT_FOUND;
-
-    const uint8_t shortAddr = intAddrOpt->shortAddr();
+esp_err_t DaliDeviceRegistry::sendDt8ColorTemp(const DaliAddressType addrType, const uint8_t addr,
+                                               const uint16_t mireds) const {
     DaliBusLock bus_lock(m_bus);
 
     esp_err_t err = m_bus.setDtr1(static_cast<uint8_t>((mireds >> 8) & 0xFF));
@@ -417,7 +413,7 @@ esp_err_t DaliDeviceRegistry::setColorTemp(const DaliLongAddress_t longAddr, con
     if (err != ESP_OK)
         return err;
 
-    err = m_bus.sendGearCommand(DaliAddressType::Short, shortAddr, static_cast<OpCode>(DT8OpCode::SetTempTc));
+    err = m_bus.sendGearCommand(addrType, addr, static_cast<OpCode>(DT8OpCode::SetTempTc));
     if (err != ESP_OK)
         return err;
 
@@ -425,7 +421,62 @@ esp_err_t DaliDeviceRegistry::setColorTemp(const DaliLongAddress_t longAddr, con
     if (err != ESP_OK)
         return err;
 
-    err = m_bus.sendGearCommand(DaliAddressType::Short, shortAddr, static_cast<OpCode>(DT8OpCode::Activate));
+    return m_bus.sendGearCommand(addrType, addr, static_cast<OpCode>(DT8OpCode::Activate));
+}
+
+esp_err_t DaliDeviceRegistry::sendDt8Color(const DaliAddressType addrType, const uint8_t addr, const uint8_t r,
+                                           const uint8_t g, const uint8_t b, std::optional<uint8_t> w,
+                                           std::optional<uint8_t> a, std::optional<uint8_t> f) const {
+    DaliBusLock bus_lock(m_bus);
+
+    esp_err_t err = m_bus.setDtr2(b);
+    if (err != ESP_OK)
+        return err;
+    err = m_bus.setDtr1(g);
+    if (err != ESP_OK)
+        return err;
+    err = m_bus.setDtr0(r);
+    if (err != ESP_OK)
+        return err;
+
+    err = m_bus.sendGearSpecial(SpecialOpCode::EnableDeviceTypeX, 8);
+    if (err != ESP_OK)
+        return err;
+    err = m_bus.sendGearCommand(addrType, addr, static_cast<OpCode>(DT8OpCode::SetTempRGB));
+    if (err != ESP_OK)
+        return err;
+
+    if (w.has_value() || a.has_value() || f.has_value()) {
+        err = m_bus.setDtr2(f.value_or(0xFF));
+        if (err != ESP_OK)
+            return err;
+        err = m_bus.setDtr1(a.value_or(0xFF));
+        if (err != ESP_OK)
+            return err;
+        err = m_bus.setDtr0(w.value_or(0xFF));
+        if (err != ESP_OK)
+            return err;
+
+        err = m_bus.sendGearSpecial(SpecialOpCode::EnableDeviceTypeX, 8);
+        if (err != ESP_OK)
+            return err;
+        err = m_bus.sendGearCommand(addrType, addr, static_cast<OpCode>(DT8OpCode::SetTempWAF));
+        if (err != ESP_OK)
+            return err;
+    }
+
+    err = m_bus.sendGearSpecial(SpecialOpCode::EnableDeviceTypeX, 8);
+    if (err != ESP_OK)
+        return err;
+    return m_bus.sendGearCommand(addrType, addr, static_cast<OpCode>(DT8OpCode::Activate));
+}
+
+esp_err_t DaliDeviceRegistry::setColorTemp(const DaliLongAddress_t longAddr, const uint16_t mireds) {
+    const auto intAddrOpt = getInternalAddress(longAddr);
+    if (!intAddrOpt)
+        return ESP_ERR_NOT_FOUND;
+
+    const esp_err_t err = sendDt8ColorTemp(DaliAddressType::Short, intAddrOpt->shortAddr(), mireds);
     if (err != ESP_OK)
         return err;
 
@@ -439,6 +490,7 @@ esp_err_t DaliDeviceRegistry::setColorTemp(const DaliLongAddress_t longAddr, con
                     if (!gear->color.has_value())
                         gear->color = ColorFeatures();
                     gear->color->currentTc = mireds;
+                    gear->color->activeMode = DaliColorMode::Tc;
                     copyGear = *gear;
                     found = true;
                 }
@@ -459,49 +511,7 @@ esp_err_t DaliDeviceRegistry::setColor(const DaliLongAddress_t longAddr, const u
     if (!intAddrOpt)
         return ESP_ERR_NOT_FOUND;
 
-    const uint8_t shortAddr = intAddrOpt->shortAddr();
-    DaliBusLock bus_lock(m_bus);
-
-    esp_err_t err = m_bus.setDtr2(b);
-    if (err != ESP_OK)
-        return err;
-    err = m_bus.setDtr1(g);
-    if (err != ESP_OK)
-        return err;
-    err = m_bus.setDtr0(r);
-    if (err != ESP_OK)
-        return err;
-
-    err = m_bus.sendGearSpecial(SpecialOpCode::EnableDeviceTypeX, 8);
-    if (err != ESP_OK)
-        return err;
-    err = m_bus.sendGearCommand(DaliAddressType::Short, shortAddr, static_cast<OpCode>(DT8OpCode::SetTempRGB));
-    if (err != ESP_OK)
-        return err;
-
-    if (w.has_value() || a.has_value() || f.has_value()) {
-        err = m_bus.setDtr2(f.value_or(0xFF));
-        if (err != ESP_OK)
-            return err;
-        err = m_bus.setDtr1(a.value_or(0xFF));
-        if (err != ESP_OK)
-            return err;
-        err = m_bus.setDtr0(w.value_or(0xFF));
-        if (err != ESP_OK)
-            return err;
-
-        err = m_bus.sendGearSpecial(SpecialOpCode::EnableDeviceTypeX, 8);
-        if (err != ESP_OK)
-            return err;
-        err = m_bus.sendGearCommand(DaliAddressType::Short, shortAddr, static_cast<OpCode>(DT8OpCode::SetTempWAF));
-        if (err != ESP_OK)
-            return err;
-    }
-
-    err = m_bus.sendGearSpecial(SpecialOpCode::EnableDeviceTypeX, 8);
-    if (err != ESP_OK)
-        return err;
-    err = m_bus.sendGearCommand(DaliAddressType::Short, shortAddr, static_cast<OpCode>(DT8OpCode::Activate));
+    const esp_err_t err = sendDt8Color(DaliAddressType::Short, intAddrOpt->shortAddr(), r, g, b, w, a, f);
     if (err != ESP_OK)
         return err;
 
@@ -533,28 +543,7 @@ esp_err_t DaliDeviceRegistry::setGroupColorTemp(const uint8_t busId, const uint8
     if (groupId >= 16 || busId >= BUS_COUNT)
         return ESP_ERR_INVALID_ARG;
 
-    DaliBusLock bus_lock(m_bus);
-    esp_err_t err = m_bus.setDtr1(static_cast<uint8_t>((mireds >> 8) & 0xFF));
-    if (err != ESP_OK)
-        return err;
-
-    err = m_bus.setDtr0(static_cast<uint8_t>(mireds & 0xFF));
-    if (err != ESP_OK)
-        return err;
-
-    err = m_bus.sendGearSpecial(SpecialOpCode::EnableDeviceTypeX, 8);
-    if (err != ESP_OK)
-        return err;
-
-    err = m_bus.sendGearCommand(DaliAddressType::Group, groupId, static_cast<OpCode>(DT8OpCode::SetTempTc));
-    if (err != ESP_OK)
-        return err;
-
-    err = m_bus.sendGearSpecial(SpecialOpCode::EnableDeviceTypeX, 8);
-    if (err != ESP_OK)
-        return err;
-
-    err = m_bus.sendGearCommand(DaliAddressType::Group, groupId, static_cast<OpCode>(DT8OpCode::Activate));
+    const esp_err_t err = sendDt8ColorTemp(DaliAddressType::Group, groupId, mireds);
     if (err != ESP_OK)
         return err;
 
@@ -593,48 +582,7 @@ esp_err_t DaliDeviceRegistry::setGroupColor(const uint8_t busId, const uint8_t g
     if (groupId >= 16 || busId >= BUS_COUNT)
         return ESP_ERR_INVALID_ARG;
 
-    DaliBusLock bus_lock(m_bus);
-
-    esp_err_t err = m_bus.setDtr2(b);
-    if (err != ESP_OK)
-        return err;
-    err = m_bus.setDtr1(g);
-    if (err != ESP_OK)
-        return err;
-    err = m_bus.setDtr0(r);
-    if (err != ESP_OK)
-        return err;
-
-    err = m_bus.sendGearSpecial(SpecialOpCode::EnableDeviceTypeX, 8);
-    if (err != ESP_OK)
-        return err;
-    err = m_bus.sendGearCommand(DaliAddressType::Group, groupId, static_cast<OpCode>(DT8OpCode::SetTempRGB));
-    if (err != ESP_OK)
-        return err;
-
-    if (w.has_value() || a.has_value() || f.has_value()) {
-        err = m_bus.setDtr2(f.value_or(0xFF));
-        if (err != ESP_OK)
-            return err;
-        err = m_bus.setDtr1(a.value_or(0xFF));
-        if (err != ESP_OK)
-            return err;
-        err = m_bus.setDtr0(w.value_or(0xFF));
-        if (err != ESP_OK)
-            return err;
-
-        err = m_bus.sendGearSpecial(SpecialOpCode::EnableDeviceTypeX, 8);
-        if (err != ESP_OK)
-            return err;
-        err = m_bus.sendGearCommand(DaliAddressType::Group, groupId, static_cast<OpCode>(DT8OpCode::SetTempWAF));
-        if (err != ESP_OK)
-            return err;
-    }
-
-    err = m_bus.sendGearSpecial(SpecialOpCode::EnableDeviceTypeX, 8);
-    if (err != ESP_OK)
-        return err;
-    err = m_bus.sendGearCommand(DaliAddressType::Group, groupId, static_cast<OpCode>(DT8OpCode::Activate));
+    const esp_err_t err = sendDt8Color(DaliAddressType::Group, groupId, r, g, b, w, a, f);
     if (err != ESP_OK)
         return err;
 
