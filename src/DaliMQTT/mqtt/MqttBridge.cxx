@@ -240,20 +240,9 @@ void MqttBridge::onDaliGroupStateChanged(const GroupStateChangeEvent& event, voi
 
 void MqttBridge::onOtaProgressChanged(const OtaProgressEvent& event, void* ctx) {
     const auto* self = static_cast<MqttBridge*>(ctx);
-
-    char topic[128];
-    snprintf(topic, sizeof(topic), "%s/update/state", self->m_baseTopic.c_str());
-
-    JsonDocument doc;
-    doc["installed_version"] = DALIMQTT_VERSION;
-    doc["in_progress"] = (event.status == OtaStatus::InProgress);
-    if (event.status == OtaStatus::InProgress) {
-        doc["update_percentage"] = event.percentage;
-    }
-
-    char payload[192];
-    serializeJson(doc, payload, sizeof(payload));
-    self->m_mqtt.publish(topic, payload, 0, false);
+    const auto otaInfo = self->m_ota.getVersionInfo();
+    const bool inProgress = (event.status == OtaStatus::InProgress);
+    self->publishOtaState(otaInfo.latestVersion.c_str(), otaInfo.releaseUrl.c_str(), inProgress, event.percentage);
 }
 
 void MqttBridge::replayAllCachedStates() const {
@@ -518,11 +507,9 @@ void MqttBridge::routeIncomingCommand(std::string_view topic, std::string_view p
     } else if (subTopic == "/cmd/sync") {
         handleSyncCommand(payload);
     } else if (subTopic == "/update/check") {
-        ESP_LOGI(TAG, "MQTT command: check for updates");
-        m_ota.checkForUpdateAsync(cfg->otaBaseUrl.c_str());
+        handleOtaCommand(payload, false);
     } else if (subTopic == "/update/install") {
-        ESP_LOGI(TAG, "MQTT command: install update");
-        m_ota.startUpdate(nullptr);
+        handleOtaCommand(payload, true);
     } else if (subTopic == "/cmd/query") {
         ESP_LOGI(TAG, "External query command received, replaying state cache...");
         replayAllCachedStates();
@@ -887,10 +874,11 @@ void MqttBridge::publishOtaState(const char* latestVersion, const char* releaseU
     char topic[128];
     snprintf(topic, sizeof(topic), "%s/update/state", m_baseTopic.c_str());
 
+    const auto otaInfo = m_ota.getVersionInfo();
     JsonDocument doc;
     doc["installed_version"] = DALIMQTT_VERSION;
     doc["latest_version"] = (latestVersion && strlen(latestVersion) > 0) ? latestVersion : DALIMQTT_VERSION;
-    doc["update_available"] = (strcmp(doc["latest_version"], DALIMQTT_VERSION) != 0);
+    doc["update_available"] = otaInfo.updateAvailable;
     doc["in_progress"] = inProgress;
 
     if (inProgress) {
@@ -1237,4 +1225,53 @@ void MqttBridge::publishAllDeviceGroups() const {
     }
 }
 
+void MqttBridge::handleOtaCommand(std::string_view payload, const bool isInstallTopic) const {
+    const auto cfg = m_config.get();
+
+    if (payload.empty() || payload == "INSTALL" || payload == "CHECK") {
+        if (isInstallTopic) {
+            ESP_LOGI(TAG, "MQTT command: install update");
+            m_ota.startUpdate(nullptr);
+        } else {
+            ESP_LOGI(TAG, "MQTT command: check for updates");
+            m_ota.checkForUpdateAsync(cfg->otaBaseUrl.c_str());
+        }
+        return;
+    }
+
+    JsonDocument doc;
+    if (deserializeJson(doc, payload.data(), payload.size()) != DeserializationError::Ok) {
+        return;
+    }
+
+    const bool autoInstall = isInstallTopic || (doc["install"].is<bool>() && doc["install"].as<bool>());
+    const bool forceInstall = doc["force"].is<bool>() && doc["force"].as<bool>();
+
+    if (doc["manifest_url"].is<const char*>()) {
+        const char* manifestUrl = doc["manifest_url"].as<const char*>();
+        if (doc["save_url"].is<bool>() && doc["save_url"].as<bool>() &&
+            strlen(manifestUrl) <= cfg->otaBaseUrl.max_size()) {
+            auto newCfg = *cfg;
+            newCfg.otaBaseUrl = manifestUrl;
+            m_config.save(newCfg);
+        }
+        ESP_LOGI(TAG, "MQTT OTA: checking manifest URL '%s' (autoInstall=%d, force=%d)", manifestUrl, autoInstall,
+                 forceInstall);
+        m_ota.checkForUpdateAsync(manifestUrl, autoInstall, forceInstall);
+        return;
+    }
+
+    if (doc["version"].is<const char*>() || doc["tag_name"].is<const char*>() ||
+        doc["firmware_url"].is<const char*>() || doc["assets"].is<JsonArrayConst>()) {
+        ESP_LOGI(TAG, "MQTT OTA: applying inline manifest (autoInstall=%d, force=%d)", autoInstall, forceInstall);
+        m_ota.applyInlineManifest(doc, autoInstall, forceInstall);
+        return;
+    }
+
+    if (isInstallTopic && doc["url"].is<const char*>()) {
+        const char* directUrl = doc["url"].as<const char*>();
+        ESP_LOGI(TAG, "MQTT OTA: direct install from '%s'", directUrl);
+        m_ota.startUpdate(directUrl);
+    }
+}
 } // namespace daliMQTT

@@ -4,11 +4,13 @@
 #ifndef DALIMQTT_OTASERVICE_HXX
 #define DALIMQTT_OTASERVICE_HXX
 
+#include <ArduinoJson.h>
 #include <atomic>
 #include <esp_err.h>
 #include <etl/string.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include <mutex>
 
 namespace daliMQTT {
 struct OtaVersionInfo {
@@ -20,7 +22,6 @@ struct OtaVersionInfo {
 };
 
 enum class OtaStatus : uint8_t { Idle, CheckingVersion, InProgress, Verifying, Success, Failed };
-using OtaStreamReaderFn = int (*)(void* userCtx, char* buffer, size_t maxLen);
 
 struct OtaProgressEvent {
     OtaStatus status{OtaStatus::Idle};
@@ -44,7 +45,8 @@ class OtaService {
     [[nodiscard]] inline OtaStatus getStatus() const noexcept;
 
     inline void setProgressCallback(OtaProgressCallback cb, void* ctx) noexcept;
-    esp_err_t checkForUpdateAsync(const char* manifestUrl);
+    esp_err_t checkForUpdateAsync(const char* manifestUrl, bool autoInstall = false, bool forceInstall = false);
+    esp_err_t applyInlineManifest(const JsonDocument& doc, bool autoInstall = false, bool forceInstall = false);
 
     inline void setVersionCallback(OtaVersionCallback cb, void* ctx) noexcept;
     [[nodiscard]] inline OtaVersionInfo getVersionInfo() const noexcept;
@@ -53,13 +55,16 @@ class OtaService {
     static void otaTaskRunner(void* arg);
     [[noreturn]] void otaWorkerLoop();
     static void versionCheckTaskRunner(void* arg);
-    void performVersionCheck(const char* url);
+    void performVersionCheck(const char* url, bool autoInstall, bool forceInstall);
+    bool parseAndStoreManifest(const JsonDocument& doc, OtaVersionInfo& outInfo);
 
     esp_err_t performAppOta(const char* appUrl);
     void notifyProgress(OtaStatus status, uint8_t percentage, const char* desc);
 
     std::atomic<bool> m_isUpdating{false};
     std::atomic<bool> m_isCheckingVersion{false};
+    std::atomic<bool> m_autoInstallAfterCheck{false};
+    std::atomic<bool> m_forceInstallAfterCheck{false};
     std::atomic<OtaStatus> m_status{OtaStatus::Idle};
 
     etl::string<256> m_targetUrl{};

@@ -2,25 +2,47 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "system/OtaService.hxx"
-#include <ArduinoJson.h>
 #include <algorithm>
+#include <array>
+#include <charconv>
 #include <cstring>
-#include <esp_app_format.h>
 #include <esp_crt_bundle.h>
 #include <esp_http_client.h>
 #include <esp_https_ota.h>
 #include <esp_log.h>
-#include <esp_ota_ops.h>
-#include <esp_partition.h>
 #include <esp_system.h>
+#include <esp_timer.h>
+#include <string_view>
 
 namespace daliMQTT {
 
 static constexpr char TAG[] = "OtaService";
-static constexpr size_t SECTOR_SIZE = 4096;
-static constexpr size_t STREAM_BUFFER_SIZE = SECTOR_SIZE;
 
 namespace {
+constexpr std::array<uint32_t, 3> parseSemver(std::string_view ver) noexcept {
+    if (ver.starts_with("v") || ver.starts_with("V")) {
+        ver.remove_prefix(1);
+    }
+    std::array<uint32_t, 3> parts{0, 0, 0};
+    for (size_t i = 0; i < 3 && !ver.empty(); ++i) {
+        uint32_t val = 0;
+        const auto [ptr, ec] = std::from_chars(ver.data(), ver.data() + ver.size(), val);
+        if (ec == std::errc{}) {
+            parts[i] = val;
+        }
+        const size_t dot = ver.find('.');
+        if (dot == std::string_view::npos) {
+            break;
+        }
+        ver.remove_prefix(dot + 1);
+    }
+    return parts;
+}
+
+constexpr bool isNewerVersion(std::string_view latest, std::string_view installed) noexcept {
+    return parseSemver(latest) > parseSemver(installed);
+}
+
 struct EspHttpStreamReader {
     esp_http_client_handle_t client;
 
@@ -97,11 +119,13 @@ void OtaService::otaTaskRunner(void* arg) {
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "App OTA Failed: %s", esp_err_to_name(err));
         notifyProgress(OtaStatus::Failed, 0, "Firmware update failed");
+        m_taskHandle = nullptr;
         m_isUpdating.store(false);
         vTaskDelete(nullptr);
     }
 
     notifyProgress(OtaStatus::Success, 100, "Update successful. Rebooting...");
+    m_taskHandle = nullptr;
     vTaskDelay(pdMS_TO_TICKS(2000));
     esp_restart();
 }
@@ -120,16 +144,21 @@ esp_err_t OtaService::performAppOta(const char* appUrl) {
     esp_https_ota_handle_t otaHandle{nullptr};
     ESP_RETURN_ON_ERROR(esp_https_ota_begin(&otaCfg, &otaHandle), TAG, "HTTPS OTA Begin failed");
 
+    uint8_t lastNotifiedPct = 0;
     while (true) {
         const esp_err_t ret = esp_https_ota_perform(otaHandle);
         if (ret == ESP_ERR_HTTPS_OTA_IN_PROGRESS) {
             const int totalBytes = esp_https_ota_get_image_len_read(otaHandle);
             const int imageSize = esp_https_ota_get_image_size(otaHandle);
             if (imageSize > 0) {
-                const uint8_t pct = static_cast<uint8_t>(std::clamp((totalBytes * 80) / imageSize, 0, 80));
-                notifyProgress(OtaStatus::InProgress, pct, "Flashing application firmware...");
+                const uint8_t pct = static_cast<uint8_t>(
+                    std::clamp<int64_t>((static_cast<int64_t>(totalBytes) * 100) / imageSize, 0, 100));
+                if (pct >= lastNotifiedPct + 5 || (pct == 100 && lastNotifiedPct != 100)) {
+                    lastNotifiedPct = pct;
+                    notifyProgress(OtaStatus::InProgress, pct, "Flashing application firmware...");
+                }
             }
-            vTaskDelay(pdMS_TO_TICKS(5));
+            vTaskDelay(1);
         } else if (ret == ESP_OK) {
             ESP_LOGI(TAG, "App firmware written successfully");
             break;
@@ -142,12 +171,14 @@ esp_err_t OtaService::performAppOta(const char* appUrl) {
     return esp_https_ota_finish(otaHandle);
 }
 
-esp_err_t OtaService::checkForUpdateAsync(const char* manifestUrl) {
+esp_err_t OtaService::checkForUpdateAsync(const char* manifestUrl, const bool autoInstall, const bool forceInstall) {
     if (!manifestUrl || strlen(manifestUrl) == 0)
         return ESP_ERR_INVALID_ARG;
     if (m_isUpdating.load() || m_isCheckingVersion.exchange(true))
         return ESP_ERR_INVALID_STATE;
 
+    m_autoInstallAfterCheck.store(autoInstall, std::memory_order_relaxed);
+    m_forceInstallAfterCheck.store(forceInstall, std::memory_order_relaxed);
     {
         std::lock_guard<std::mutex> lock(m_infoMutex);
         m_manifestUrl = manifestUrl;
@@ -167,12 +198,107 @@ void OtaService::versionCheckTaskRunner(void* arg) {
         std::lock_guard<std::mutex> lock(self->m_infoMutex);
         urlCopy = self->m_manifestUrl;
     }
-    self->performVersionCheck(urlCopy.c_str());
+    const bool autoInstall = self->m_autoInstallAfterCheck.load(std::memory_order_relaxed);
+    const bool forceInstall = self->m_forceInstallAfterCheck.load(std::memory_order_relaxed);
+
+    self->performVersionCheck(urlCopy.c_str(), autoInstall, forceInstall);
     self->m_isCheckingVersion.store(false);
     vTaskDelete(nullptr);
 }
 
-void OtaService::performVersionCheck(const char* url) {
+bool OtaService::parseAndStoreManifest(const JsonDocument& doc, OtaVersionInfo& info) {
+    info = {};
+    info.lastCheckTsSec = esp_timer_get_time() / 1'000'000;
+
+    if (doc["tag_name"].is<const char*>()) {
+        std::string_view tag(doc["tag_name"].as<const char*>());
+        if (tag.starts_with("v") || tag.starts_with("V"))
+            tag.remove_prefix(1);
+        info.latestVersion.assign(tag.data(), tag.size());
+    } else if (doc["version"].is<const char*>()) {
+        std::string_view ver(doc["version"].as<const char*>());
+        if (ver.starts_with("v") || ver.starts_with("V"))
+            ver.remove_prefix(1);
+        info.latestVersion.assign(ver.data(), ver.size());
+    }
+
+    if (doc["html_url"].is<const char*>()) {
+        info.releaseUrl = doc["html_url"].as<const char*>();
+    } else if (doc["release_url"].is<const char*>()) {
+        info.releaseUrl = doc["release_url"].as<const char*>();
+    }
+
+    if (doc["firmware_url"].is<const char*>()) {
+        info.firmwareUrl = doc["firmware_url"].as<const char*>();
+    } else if (doc["url"].is<const char*>()) {
+        info.firmwareUrl = doc["url"].as<const char*>();
+    } else if (doc["assets"].is<JsonArrayConst>()) {
+        for (JsonObjectConst asset : doc["assets"].as<JsonArrayConst>()) {
+            if (asset["browser_download_url"].is<const char*>()) {
+                auto dlUrl = asset["browser_download_url"].as<const char*>();
+                const std::string_view urlSv(dlUrl);
+                if (urlSv.ends_with(".bin")) {
+#if defined(CONFIG_IDF_TARGET)
+                    if (urlSv.find(CONFIG_IDF_TARGET) != std::string_view::npos) {
+                        info.firmwareUrl = dlUrl;
+                        break;
+                    }
+#endif
+                    if (info.firmwareUrl.empty()) {
+                        info.firmwareUrl = dlUrl;
+                    }
+                } else if (info.firmwareUrl.empty()) {
+                    info.firmwareUrl = dlUrl;
+                }
+            }
+        }
+    }
+
+    if (info.latestVersion.empty() && info.firmwareUrl.empty()) {
+        return false;
+    }
+
+    if (info.latestVersion.empty()) {
+        info.latestVersion = DALIMQTT_VERSION;
+    }
+
+    info.updateAvailable = isNewerVersion(info.latestVersion.c_str(), DALIMQTT_VERSION);
+
+    {
+        std::lock_guard<std::mutex> lock(m_infoMutex);
+        m_versionInfo = info;
+    }
+
+    ESP_LOGI(TAG, "Manifest parsed: Installed=%s, Latest=%s, UpdateAvailable=%s, URL=%s", DALIMQTT_VERSION,
+             info.latestVersion.c_str(), info.updateAvailable ? "YES" : "NO", info.firmwareUrl.c_str());
+
+    if (m_versionCb) {
+        m_versionCb(info, m_versionCtx);
+    }
+    return true;
+}
+
+esp_err_t OtaService::applyInlineManifest(const JsonDocument& doc, const bool autoInstall, const bool forceInstall) {
+    if (m_isUpdating.load()) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    OtaVersionInfo info{};
+    if (!parseAndStoreManifest(doc, info)) {
+        ESP_LOGW(TAG, "Inline manifest is missing version or firmware_url");
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (autoInstall) {
+        if ((info.updateAvailable || forceInstall) && !info.firmwareUrl.empty()) {
+            return startUpdate(info.firmwareUrl.c_str());
+        }
+        ESP_LOGI(TAG, "Inline manifest checked: firmware is already up to date (use force=true to override)");
+    }
+    return ESP_OK;
+}
+
+void OtaService::performVersionCheck(const char* url, const bool autoInstall, const bool forceInstall) {
     ESP_LOGI(TAG, "Checking for updates at: %s", url);
     m_status.store(OtaStatus::CheckingVersion);
 
@@ -212,6 +338,7 @@ void OtaService::performVersionCheck(const char* url) {
     filter["html_url"] = true;
     filter["release_url"] = true;
     filter["firmware_url"] = true;
+    filter["url"] = true;
     filter["assets"][0]["browser_download_url"] = true;
 
     JsonDocument doc;
@@ -228,53 +355,11 @@ void OtaService::performVersionCheck(const char* url) {
     }
 
     OtaVersionInfo info{};
-    info.lastCheckTsSec = esp_timer_get_time() / 1000000;
-
-    if (doc["tag_name"].is<const char*>()) {
-        std::string_view tag(doc["tag_name"].as<const char*>());
-        if (tag.starts_with("v") || tag.starts_with("V"))
-            tag.remove_prefix(1);
-        info.latestVersion = tag.data();
-    } else if (doc["version"].is<const char*>()) {
-        info.latestVersion = doc["version"].as<const char*>();
-    }
-
-    if (doc["html_url"].is<const char*>()) {
-        info.releaseUrl = doc["html_url"].as<const char*>();
-    } else if (doc["release_url"].is<const char*>()) {
-        info.releaseUrl = doc["release_url"].as<const char*>();
-    }
-
-    if (doc["firmware_url"].is<const char*>()) {
-        info.firmwareUrl = doc["firmware_url"].as<const char*>();
-    } else if (doc["assets"].is<JsonArrayConst>()) {
-        for (JsonObjectConst asset : doc["assets"].as<JsonArrayConst>()) {
-            if (asset["browser_download_url"].is<const char*>()) {
-                const char* dlUrl = asset["browser_download_url"].as<const char*>();
-                if (std::string_view(dlUrl).ends_with(".bin")) {
-                    info.firmwareUrl = dlUrl;
-                    break;
-                }
-                if (info.firmwareUrl.empty()) {
-                    info.firmwareUrl = dlUrl;
-                }
-            }
-        }
-    }
-
-    if (!info.latestVersion.empty()) {
-        info.updateAvailable = (info.latestVersion != DALIMQTT_VERSION);
-
-        {
-            std::lock_guard<std::mutex> lock(m_infoMutex);
-            m_versionInfo = info;
-        }
-
-        ESP_LOGI(TAG, "Version Check: Installed=%s, Latest=%s, UpdateAvailable=%s", DALIMQTT_VERSION,
-                 info.latestVersion.c_str(), info.updateAvailable ? "YES" : "NO");
-
-        if (m_versionCb) {
-            m_versionCb(info, m_versionCtx);
+    if (parseAndStoreManifest(doc, info) && autoInstall) {
+        if ((info.updateAvailable || forceInstall) && !info.firmwareUrl.empty()) {
+            startUpdate(info.firmwareUrl.c_str());
+        } else {
+            ESP_LOGI(TAG, "Manifest check complete: no newer version to auto-install");
         }
     }
 }

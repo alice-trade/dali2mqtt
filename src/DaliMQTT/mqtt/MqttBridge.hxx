@@ -60,6 +60,7 @@ class MqttBridge {
                                 void (*runner)(void*)) const;
 
     void routeIncomingCommand(std::string_view topic, std::string_view payload) const;
+    void handleOtaCommand(std::string_view payload, bool isInstallTopic) const;
     void handleLightCommand(std::string_view targetPath, std::string_view payload) const;
     void handleGroupConfigCommand(std::string_view payload) const;
     void handleGroupConfigGetCommand() const;
