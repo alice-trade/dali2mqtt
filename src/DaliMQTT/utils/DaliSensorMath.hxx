@@ -20,7 +20,7 @@ inline float rawToLux(const uint8_t raw) noexcept {
  * @brief Checking the presence status of Part 303 by instance value
  */
 constexpr bool isOccupied(const uint8_t instanceValue) noexcept {
-  return (instanceValue & 0x03) != 0;
+    return (instanceValue & 0x03) != 0;
 }
 
 } // namespace daliMQTT::utils

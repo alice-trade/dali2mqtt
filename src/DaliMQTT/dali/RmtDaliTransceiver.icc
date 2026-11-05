@@ -151,6 +151,7 @@ inline void RmtDaliTransceiver::decodeSymbols(const rmt_symbol_word_t* symbols, 
 
     uint32_t rxData = 0;
     uint8_t decodedBits = 0;
+    bool manchesterViolation = false;
 
     for (size_t i = startIdx + 2; i + 1 < hbCount; i += 2) {
         const uint8_t h0 = halfBits[i];
@@ -165,23 +166,23 @@ inline void RmtDaliTransceiver::decodeSymbols(const rmt_symbol_word_t* symbols, 
             rxData = (rxData << 1) | 1;
             decodedBits++;
         } else {
+            manchesterViolation = true;
             break;
         }
     }
 
     if (m_txState.active) {
-        if (m_txState.bits == decodedBits && m_txState.data == rxData) {
+        if (!manchesterViolation && m_txState.bits == decodedBits && m_txState.data == rxData) {
             m_txState.active = false;
             dispatchFrame(DaliFrameType::TxEchoSuccess, rxData, decodedBits);
             return;
         }
-        if (decodedBits == 8 && m_txState.bits != 8) {
-            m_txState.active = false;
-            dispatchFrame(DaliFrameType::Backward8, rxData, 8);
-            return;
-        }
-
         m_txState.active = false;
+        dispatchFrame(DaliFrameType::Collision, rxData, decodedBits);
+        return;
+    }
+
+    if (manchesterViolation) {
         dispatchFrame(DaliFrameType::Collision, rxData, decodedBits);
         return;
     }

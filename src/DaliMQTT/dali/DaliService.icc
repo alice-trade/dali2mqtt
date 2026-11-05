@@ -19,12 +19,10 @@ inline esp_err_t DaliService::init(const BusHardwareConfig& cfg) {
 
     ESP_LOGI("DaliService", "Initializing DALI Subsystem on RX: %d, TX: %d", cfg.rxPin, cfg.txPin);
 
-    const RmtTransceiverConfig phyCfg{
-        .rxPin = static_cast<gpio_num_t>(cfg.rxPin),
-        .txPin = static_cast<gpio_num_t>(cfg.txPin),
-        .invertRx = true,
-        .invertTx = false
-    };
+    const RmtTransceiverConfig phyCfg{.rxPin = static_cast<gpio_num_t>(cfg.rxPin),
+                                      .txPin = static_cast<gpio_num_t>(cfg.txPin),
+                                      .invertRx = true,
+                                      .invertTx = false};
 
     ESP_RETURN_ON_ERROR(m_phy.init(phyCfg), "DaliService", "PHY init failed");
     ESP_RETURN_ON_ERROR(m_bus.start(), "DaliService", "Bus Engine start failed");

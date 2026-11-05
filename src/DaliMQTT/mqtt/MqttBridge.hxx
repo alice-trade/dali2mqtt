@@ -25,12 +25,8 @@ class MqttBridge {
   public:
     static constexpr size_t CMD_QUEUE_CAPACITY = 16;
 
-    MqttBridge(MqttClient& mqtt,
-               DaliDeviceRegistry& daliRegistry,
-               DaliBusEngine& daliBus,
-               ConfigStore& config,
-               OtaService& ota,
-               const NetworkPlatform& network);
+    MqttBridge(MqttClient& mqtt, DaliDeviceRegistry& daliRegistry, DaliBusEngine& daliBus, ConfigStore& config,
+               OtaService& ota, const NetworkPlatform& network);
     ~MqttBridge();
 
     MqttBridge(const MqttBridge&) = delete;
@@ -86,7 +82,7 @@ class MqttBridge {
     void handleBusInitializeCommand() const;
     void handleInputDeviceInitializeCommand() const;
     void publishBusSyncStatus(const char* status, const char* lastAction = nullptr) const;
-    
+
     static void onDaliDeviceAttributesLoaded(const ControlGear& gear, void* ctx);
     void publishDeviceAttributes(const ControlGear& gear) const;
 

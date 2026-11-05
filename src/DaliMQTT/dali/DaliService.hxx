@@ -3,15 +3,15 @@
 
 #ifndef DALIMQTT_DALISERVICE_HXX
 #define DALIMQTT_DALISERVICE_HXX
-#include "dali/RmtDaliTransceiver.hxx"
 #include "dali/DaliBusEngine.hxx"
 #include "dali/DaliDeviceRegistry.hxx"
+#include "dali/RmtDaliTransceiver.hxx"
 #include "system/ConfigStructure.hxx"
 
 namespace daliMQTT {
 
 class DaliService {
-public:
+  public:
     inline DaliService();
     ~DaliService() = default;
 
@@ -25,7 +25,7 @@ public:
     [[nodiscard]] inline DaliBusEngine& Bus();
     [[nodiscard]] inline RmtDaliTransceiver& Driver();
 
-private:
+  private:
     RmtDaliTransceiver m_phy;
     DaliBusEngine m_bus;
     DaliDeviceRegistry m_registry;

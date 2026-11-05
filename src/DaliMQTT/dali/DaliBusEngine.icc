@@ -132,7 +132,6 @@ inline void DaliBusEngine::unlockBus() const {
     xSemaphoreGiveRecursive(m_busMutex);
 }
 
-
 inline std::optional<uint8_t> DaliBusEngine::readMemoryLocation(const uint8_t shortAddr, const uint8_t bank,
                                                                 const uint8_t offset) const {
     DaliBusLock lock(*this);

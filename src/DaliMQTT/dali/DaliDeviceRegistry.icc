@@ -6,6 +6,10 @@
 
 namespace daliMQTT {
 
+inline void DaliDeviceRegistry::setPollIntervalMs(const uint32_t intervalMs) noexcept {
+    m_pollIntervalMs.store(std::max<uint32_t>(500, intervalMs), std::memory_order_relaxed);
+}
+
 inline size_t DaliDeviceRegistry::getDeviceCount() const noexcept {
     std::lock_guard<std::mutex> lock(m_registryMutex);
     return m_devices.size();
@@ -21,7 +25,7 @@ inline std::optional<DaliDevice> DaliDeviceRegistry::getDeviceAt(const size_t in
 
 inline DaliGroupState DaliDeviceRegistry::getGroupState(const uint8_t busId, const uint8_t groupId) const {
     std::lock_guard<std::mutex> lock(m_registryMutex);
-    if (busId < BUS_COUNT && groupId < 16) {
+    if (busId < BusCount && groupId < 16) {
         return m_groupStates[busId][groupId];
     }
     return DaliGroupState{};
@@ -48,7 +52,7 @@ inline std::optional<DaliLongAddress_t> DaliDeviceRegistry::getLongAddress(const
                                                                            const bool isInput) const {
     size_t index = (internalAddr.bus() * 64) + internalAddr.shortAddr();
     if (isInput)
-        index += (BUS_COUNT * 64);
+        index += (BusCount * 64);
 
     std::lock_guard<std::mutex> lock(m_registryMutex);
     if (index < m_internalToLongMap.size()) {

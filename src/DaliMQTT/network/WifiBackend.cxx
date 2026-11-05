@@ -18,7 +18,8 @@ WifiBackend::~WifiBackend() {
 }
 
 esp_err_t WifiBackend::init() {
-    if (m_initialized) return ESP_OK;
+    if (m_initialized)
+        return ESP_OK;
 
     esp_err_t err = esp_netif_init();
     if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
@@ -35,18 +36,22 @@ esp_err_t WifiBackend::init() {
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_RETURN_ON_ERROR(esp_wifi_init(&cfg), TAG, "Wi-Fi init failed");
 
-    ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifiEventHandler, this, nullptr));
-    ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &wifiEventHandler, this, nullptr));
+    ESP_ERROR_CHECK(
+        esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifiEventHandler, this, nullptr));
+    ESP_ERROR_CHECK(
+        esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &wifiEventHandler, this, nullptr));
 
     m_initialized = true;
     return ESP_OK;
 }
 
 esp_err_t WifiBackend::start(const ConfigStructure& cfg) {
-    if (cfg.wifiSsid.empty()) return ESP_ERR_INVALID_ARG;
+    if (cfg.wifiSsid.empty())
+        return ESP_ERR_INVALID_ARG;
     m_status.store(NetworkStatus::Connecting);
 
-    if (!m_staNetif) m_staNetif = esp_netif_create_default_wifi_sta();
+    if (!m_staNetif)
+        m_staNetif = esp_netif_create_default_wifi_sta();
 
     wifi_config_t wifiCfg{};
     strncpy(reinterpret_cast<char*>(wifiCfg.sta.ssid), cfg.wifiSsid.c_str(), sizeof(wifiCfg.sta.ssid) - 1);
@@ -61,7 +66,8 @@ esp_err_t WifiBackend::start(const ConfigStructure& cfg) {
 
 esp_err_t WifiBackend::startAccessPoint(const char* ssid, const char* password) {
     m_status.store(NetworkStatus::ProvisioningAp);
-    if (!m_apNetif) m_apNetif = esp_netif_create_default_wifi_ap();
+    if (!m_apNetif)
+        m_apNetif = esp_netif_create_default_wifi_ap();
 
     wifi_config_t wifiCfg{};
     strncpy(reinterpret_cast<char*>(wifiCfg.ap.ssid), ssid, sizeof(wifiCfg.ap.ssid) - 1);
@@ -98,8 +104,10 @@ etl::string<16> WifiBackend::getIpAddress() const {
 }
 
 void WifiBackend::startMdns(const char* hostname, const char* clientId) {
-    if (m_mdnsStarted) return;
-    if (mdns_init() != ESP_OK) return;
+    if (m_mdnsStarted)
+        return;
+    if (mdns_init() != ESP_OK)
+        return;
 
     mdns_hostname_set(hostname);
     char instanceName[64];
@@ -113,7 +121,8 @@ void WifiBackend::startMdns(const char* hostname, const char* clientId) {
 
 void WifiBackend::wifiEventHandler(void* arg, esp_event_base_t eventBase, int32_t eventId, void* eventData) {
     auto* self = static_cast<WifiBackend*>(arg);
-    if (!self) return;
+    if (!self)
+        return;
 
     if (eventBase == WIFI_EVENT) {
         switch (eventId) {

@@ -25,7 +25,8 @@ EthernetBackend::~EthernetBackend() {
 }
 
 esp_err_t EthernetBackend::init() {
-    if (m_initialized) return ESP_OK;
+    if (m_initialized)
+        return ESP_OK;
 
     esp_err_t err = esp_netif_init();
     if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
@@ -56,7 +57,8 @@ esp_err_t EthernetBackend::init() {
 #endif
 
     ESP_ERROR_CHECK(esp_event_handler_instance_register(ETH_EVENT, ESP_EVENT_ANY_ID, &ethEventHandler, this, nullptr));
-    ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT, IP_EVENT_ETH_GOT_IP, &ethEventHandler, this, nullptr));
+    ESP_ERROR_CHECK(
+        esp_event_handler_instance_register(IP_EVENT, IP_EVENT_ETH_GOT_IP, &ethEventHandler, this, nullptr));
 
     m_initialized = true;
     ESP_LOGI(TAG, "Ethernet subsystem initialized.");
@@ -71,19 +73,19 @@ esp_err_t EthernetBackend::setupW5500() {
         .quadwp_io_num = -1,
         .quadhd_io_num = -1,
     };
-    ESP_RETURN_ON_ERROR(spi_bus_initialize(static_cast<spi_host_device_t>(CONFIG_DALI2MQTT_ETH_SPI_HOST), &buscfg, SPI_DMA_CH_AUTO),
-                        TAG, "SPI bus init failed");
+    ESP_RETURN_ON_ERROR(
+        spi_bus_initialize(static_cast<spi_host_device_t>(CONFIG_DALI2MQTT_ETH_SPI_HOST), &buscfg, SPI_DMA_CH_AUTO),
+        TAG, "SPI bus init failed");
 
-    spi_device_interface_config_t devcfg = {
-        .command_bits = 16,
-        .address_bits = 8,
-        .mode = 0,
-        .clock_speed_hz = CONFIG_DALI2MQTT_ETH_SPI_CLOCK_MHZ * 1000 * 1000,
-        .spics_io_num = CONFIG_DALI2MQTT_ETH_SPI_CS_PIN,
-        .queue_size = 20
-    };
+    spi_device_interface_config_t devcfg = {.command_bits = 16,
+                                            .address_bits = 8,
+                                            .mode = 0,
+                                            .clock_speed_hz = CONFIG_DALI2MQTT_ETH_SPI_CLOCK_MHZ * 1000 * 1000,
+                                            .spics_io_num = CONFIG_DALI2MQTT_ETH_SPI_CS_PIN,
+                                            .queue_size = 20};
 
-    eth_w5500_config_t w5500_config = ETH_W5500_DEFAULT_CONFIG(static_cast<spi_host_device_t>(CONFIG_DALI2MQTT_ETH_SPI_HOST), &devcfg);
+    eth_w5500_config_t w5500_config =
+        ETH_W5500_DEFAULT_CONFIG(static_cast<spi_host_device_t>(CONFIG_DALI2MQTT_ETH_SPI_HOST), &devcfg);
     w5500_config.int_gpio_num = CONFIG_DALI2MQTT_ETH_SPI_INT_PIN;
 
     eth_mac_config_t mac_config = ETH_MAC_DEFAULT_CONFIG();
@@ -110,8 +112,8 @@ esp_err_t EthernetBackend::setupInternalRMII() {
 
     eth_esp32_emac_config_t emac_config = ETH_ESP32_EMAC_DEFAULT_CONFIG();
 
-    esp_eth_mac_t *mac = esp_eth_mac_new_esp32(&emac_config, &mac_config);
-    esp_eth_phy_t *phy = esp_eth_phy_new_lan87xx(&phy_config); // для LAN8720
+    esp_eth_mac_t* mac = esp_eth_mac_new_esp32(&emac_config, &mac_config);
+    esp_eth_phy_t* phy = esp_eth_phy_new_lan87xx(&phy_config); // для LAN8720
 
     esp_eth_config_t eth_config = ETH_DEFAULT_CONFIG(mac, phy);
     ESP_RETURN_ON_ERROR(esp_eth_driver_install(&eth_config, &m_ethHandle), TAG, "Install driver failed");
@@ -120,7 +122,8 @@ esp_err_t EthernetBackend::setupInternalRMII() {
 #endif
 
 esp_err_t EthernetBackend::start(const ConfigStructure&) {
-    if (!m_ethHandle) return ESP_ERR_INVALID_STATE;
+    if (!m_ethHandle)
+        return ESP_ERR_INVALID_STATE;
     m_status.store(NetworkStatus::Connecting);
     return esp_eth_start(m_ethHandle);
 }
@@ -146,8 +149,10 @@ etl::string<16> EthernetBackend::getIpAddress() const {
 }
 
 void EthernetBackend::startMdns(const char* hostname, const char* clientId) {
-    if (m_mdnsStarted) return;
-    if (mdns_init() != ESP_OK) return;
+    if (m_mdnsStarted)
+        return;
+    if (mdns_init() != ESP_OK)
+        return;
 
     mdns_hostname_set(hostname);
     char instanceName[64];
@@ -161,7 +166,8 @@ void EthernetBackend::startMdns(const char* hostname, const char* clientId) {
 
 void EthernetBackend::ethEventHandler(void* arg, esp_event_base_t eventBase, int32_t eventId, void* eventData) {
     auto* self = static_cast<EthernetBackend*>(arg);
-    if (!self) return;
+    if (!self)
+        return;
 
     if (eventBase == ETH_EVENT) {
         switch (eventId) {

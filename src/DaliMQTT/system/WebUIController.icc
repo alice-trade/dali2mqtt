@@ -8,8 +8,8 @@ namespace daliMQTT {
 
 #if defined(CONFIG_DALI2MQTT_ENABLE_WEBUI)
 
-inline WebUIController::WebUIController(ConfigStore& cfg, NetworkPlatform& net,
-                                        DaliDeviceRegistry& reg, MqttClient& mqtt, OtaService& ota)
+inline WebUIController::WebUIController(ConfigStore& cfg, NetworkPlatform& net, DaliDeviceRegistry& reg,
+                                        MqttClient& mqtt, OtaService& ota)
     : m_apiCtx(cfg, net, reg, mqtt, ota), m_webServer(m_apiCtx) {}
 
 inline esp_err_t WebUIController::start() {
@@ -30,8 +30,8 @@ inline bool WebUIController::isRunning() const noexcept {
 
 #else
 
-inline WebUIController::WebUIController(ConfigStore&, NetworkPlatform&,
-                                        DaliDeviceRegistry&, MqttClient&, OtaService&) {}
+inline WebUIController::WebUIController(ConfigStore&, NetworkPlatform&, DaliDeviceRegistry&, MqttClient&, OtaService&) {
+}
 
 inline esp_err_t WebUIController::start() {
     return ESP_OK;

@@ -4,9 +4,9 @@
 #ifndef DALIMQTT_DALICOLOR_HXX
 #define DALIMQTT_DALICOLOR_HXX
 
+#include <compare>
 #include <cstdint>
 #include <optional>
-#include <compare>
 
 namespace daliMQTT {
 

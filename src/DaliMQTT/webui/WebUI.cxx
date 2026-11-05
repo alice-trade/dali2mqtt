@@ -14,18 +14,18 @@ static constexpr char TAG[] = "WebServer";
 
 extern "C" {
 extern const uint8_t index_html_gz_start[] asm("_binary_index_html_gz_start");
-extern const uint8_t index_html_gz_end[]   asm("_binary_index_html_gz_end");
-extern const uint8_t app_js_gz_start[]     asm("_binary_app_js_gz_start");
-extern const uint8_t app_js_gz_end[]       asm("_binary_app_js_gz_end");
-extern const uint8_t app_css_gz_start[]    asm("_binary_app_css_gz_start");
-extern const uint8_t app_css_gz_end[]      asm("_binary_app_css_gz_end");
+extern const uint8_t index_html_gz_end[] asm("_binary_index_html_gz_end");
+extern const uint8_t app_js_gz_start[] asm("_binary_app_js_gz_start");
+extern const uint8_t app_js_gz_end[] asm("_binary_app_js_gz_end");
+extern const uint8_t app_css_gz_start[] asm("_binary_app_css_gz_start");
+extern const uint8_t app_css_gz_end[] asm("_binary_app_css_gz_end");
 
 extern __attribute__((weak)) const uint8_t _binary_index_html_gz_start[1] = {};
-extern __attribute__((weak)) const uint8_t _binary_index_html_gz_end[1]   = {};
-extern __attribute__((weak)) const uint8_t _binary_app_js_gz_start[1]     = {};
-extern __attribute__((weak)) const uint8_t _binary_app_js_gz_end[1]       = {};
-extern __attribute__((weak)) const uint8_t _binary_app_css_gz_start[1]    = {};
-extern __attribute__((weak)) const uint8_t _binary_app_css_gz_end[1]      = {};
+extern __attribute__((weak)) const uint8_t _binary_index_html_gz_end[1] = {};
+extern __attribute__((weak)) const uint8_t _binary_app_js_gz_start[1] = {};
+extern __attribute__((weak)) const uint8_t _binary_app_js_gz_end[1] = {};
+extern __attribute__((weak)) const uint8_t _binary_app_css_gz_start[1] = {};
+extern __attribute__((weak)) const uint8_t _binary_app_css_gz_end[1] = {};
 }
 
 WebUI::WebUI(ApiContext& apiCtx) : m_apiCtx(apiCtx) {}
@@ -65,8 +65,7 @@ esp_err_t WebUI::start() {
         {"/api/dali/scenes", HTTP_POST, ApiHandlers::setDaliScenes, &m_apiCtx},
         {"/api/ota/check", HTTP_POST, ApiHandlers::triggerOtaCheck, &m_apiCtx},
         {"/api/ota/install", HTTP_POST, ApiHandlers::triggerOtaInstall, &m_apiCtx},
-        {"/*", HTTP_GET, staticFileGetHandler, &m_apiCtx}
-    };
+        {"/*", HTTP_GET, staticFileGetHandler, &m_apiCtx}};
 
     for (const auto& route : apiRoutes) {
         httpd_register_uri_handler(m_serverHandle, &route);

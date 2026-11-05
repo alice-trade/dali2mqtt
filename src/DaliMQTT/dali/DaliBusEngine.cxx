@@ -118,8 +118,7 @@ void DaliBusEngine::busWorkerTaskRunner(void* arg) {
         DaliRawFrame frame{};
         const TickType_t waitTicks = getDynamicWaitTicks();
 
-        if (xQueueReceive(m_phyEventQueue, &frame, waitTicks) == pdTRUE &&
-           frame.type != DaliFrameType::Wakeup) {
+        if (xQueueReceive(m_phyEventQueue, &frame, waitTicks) == pdTRUE && frame.type != DaliFrameType::Wakeup) {
 
             if (m_rawSnifferCb && (frame.isValid() || frame.type == DaliFrameType::Collision)) {
                 m_rawSnifferCb(frame, m_busId, m_rawSnifferCtx);

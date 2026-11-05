@@ -282,7 +282,7 @@ void MqttBridge::replayAllCachedStates() const {
         }
     }
 
-    for (uint8_t busId = 0; busId < DaliDeviceRegistry::BUS_COUNT; ++busId) {
+    for (uint8_t busId = 0; busId < DaliDeviceRegistry::BusCount; ++busId) {
         for (uint8_t g = 0; g < 16; ++g) {
             DaliGroupState gState = m_daliRegistry.getGroupState(busId, g);
             GroupStateChangeEvent ev{.busId = busId,
@@ -383,25 +383,36 @@ void MqttBridge::publishRawMonitorFrame(const DaliRawFrame& frame) const {
 
     auto typeStr = "unknown";
     switch (frame.type) {
-    case DaliFrameType::Forward16: typeStr = "fwd16"; break;
-    case DaliFrameType::Forward24: typeStr = "fwd24"; break;
-    case DaliFrameType::Backward8: typeStr = "back8"; break;
-    case DaliFrameType::Collision: typeStr = "collision"; break;
-    case DaliFrameType::NoiseCorrupted: typeStr = "noise"; break;
-    default: break;
+    case DaliFrameType::Forward16:
+        typeStr = "fwd16";
+        break;
+    case DaliFrameType::Forward24:
+        typeStr = "fwd24";
+        break;
+    case DaliFrameType::Backward8:
+        typeStr = "back8";
+        break;
+    case DaliFrameType::Collision:
+        typeStr = "collision";
+        break;
+    case DaliFrameType::NoiseCorrupted:
+        typeStr = "noise";
+        break;
+    default:
+        break;
     }
 
     char payload[128];
     if (frame.bits == 16) {
-        snprintf(payload, sizeof(payload), R"({"type":"%s","bits":16,"data":"%04X","value":%u})",
-                 typeStr, static_cast<unsigned>(frame.data & 0xFFFF), static_cast<unsigned>(frame.data & 0xFFFF));
+        snprintf(payload, sizeof(payload), R"({"type":"%s","bits":16,"data":"%04X","value":%u})", typeStr,
+                 static_cast<unsigned>(frame.data & 0xFFFF), static_cast<unsigned>(frame.data & 0xFFFF));
     } else if (frame.bits == 24) {
-        snprintf(payload, sizeof(payload), R"({"type":"%s","bits":24,"data":"%06X","value":%u})",
-                 typeStr, static_cast<unsigned>(frame.data & 0xFFFFFF), static_cast<unsigned>(frame.data & 0xFFFFFF));
+        snprintf(payload, sizeof(payload), R"({"type":"%s","bits":24,"data":"%06X","value":%u})", typeStr,
+                 static_cast<unsigned>(frame.data & 0xFFFFFF), static_cast<unsigned>(frame.data & 0xFFFFFF));
     } else {
-        snprintf(payload, sizeof(payload), R"({"type":"%s","bits":%u,"data":"%02X","value":%u})",
-                 typeStr, static_cast<unsigned>(frame.bits),
-                 static_cast<unsigned>(frame.data & 0xFF), static_cast<unsigned>(frame.data & 0xFF));
+        snprintf(payload, sizeof(payload), R"({"type":"%s","bits":%u,"data":"%02X","value":%u})", typeStr,
+                 static_cast<unsigned>(frame.bits), static_cast<unsigned>(frame.data & 0xFF),
+                 static_cast<unsigned>(frame.data & 0xFF));
     }
 
     m_mqtt.publish(monTopic, payload, 0, false);
@@ -635,9 +646,12 @@ void MqttBridge::handleLightCommand(std::string_view targetPath, std::string_vie
                 .g = static_cast<uint8_t>(std::clamp(c["g"].as<int>(), 0, 254)),
                 .b = static_cast<uint8_t>(std::clamp(c["b"].as<int>(), 0, 254)),
             };
-            if (c["w"].is<int>()) pc.w = static_cast<uint8_t>(std::clamp(c["w"].as<int>(), 0, 254));
-            if (c["a"].is<int>()) pc.a = static_cast<uint8_t>(std::clamp(c["a"].as<int>(), 0, 254));
-            if (c["f"].is<int>()) pc.f = static_cast<uint8_t>(std::clamp(c["f"].as<int>(), 0, 254));
+            if (c["w"].is<int>())
+                pc.w = static_cast<uint8_t>(std::clamp(c["w"].as<int>(), 0, 254));
+            if (c["a"].is<int>())
+                pc.a = static_cast<uint8_t>(std::clamp(c["a"].as<int>(), 0, 254));
+            if (c["f"].is<int>())
+                pc.f = static_cast<uint8_t>(std::clamp(c["f"].as<int>(), 0, 254));
             color = pc;
         }
     }
@@ -953,6 +967,7 @@ void MqttBridge::handleConfigSetCommand(std::string_view payload) const {
     if (err != ESP_OK)
         return;
 
+    m_daliRegistry.setPollIntervalMs(newCfg.daliPollIntervalMs);
     if (result.hassDiscoveryToggled && !result.requiresReboot) {
         publishHomeAssistantDiscovery();
     }
@@ -1046,7 +1061,8 @@ void MqttBridge::handleNamesGetCommand() const {
 
     constexpr size_t MAX_NAMES_SIZE = 3072;
     auto buf = static_cast<char*>(m_bridgeArena.allocate(MAX_NAMES_SIZE));
-    if (!buf) return;
+    if (!buf)
+        return;
 
     strncpy(buf, "{}", MAX_NAMES_SIZE);
 
@@ -1073,7 +1089,8 @@ void MqttBridge::handleNamesSetCommand(std::string_view payload) const {
 
     constexpr size_t NAMES_BUF_SIZE = 3072;
     const auto currentRaw = static_cast<char*>(m_bridgeArena.allocate(NAMES_BUF_SIZE));
-    if (!currentRaw) return;
+    if (!currentRaw)
+        return;
 
     strncpy(currentRaw, "{}", NAMES_BUF_SIZE);
     {
@@ -1093,7 +1110,8 @@ void MqttBridge::handleNamesSetCommand(std::string_view payload) const {
 
     const size_t outSize = measureJson(currentNames) + 1;
     const auto outBuf = static_cast<char*>(m_bridgeArena.allocate(outSize));
-    if (!outBuf) return;
+    if (!outBuf)
+        return;
 
     serializeJson(currentNames, outBuf, outSize);
 

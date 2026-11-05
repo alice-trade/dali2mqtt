@@ -16,7 +16,7 @@
 namespace daliMQTT {
 
 class SyslogService {
-public:
+  public:
     SyslogService();
     ~SyslogService();
 
@@ -26,7 +26,7 @@ public:
     esp_err_t start(const char* serverAddr);
     void stop();
 
-private:
+  private:
     __attribute__((format(printf, 1, 0))) static int syslogVprintfHook(const char* format, va_list args);
     static void syslogTaskRunner(void* arg);
     void syslogWorkerLoop();

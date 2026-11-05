@@ -70,11 +70,11 @@ void DaliDeviceRegistry::notifyDeviceChange(const ControlGear& gear) const {
     m_deviceStateCb(ev, m_deviceStateCtx);
 }
 
-void DaliDeviceRegistry::notifyAffectedDevices(const std::bitset<MAX_TOTAL_DEVICES>& affectedMask) const {
+void DaliDeviceRegistry::notifyAffectedDevices(const DeviceMask& affectedMask) const {
     if (!m_deviceStateCb || affectedMask.none())
         return;
 
-    for (size_t i = 0; i < MAX_TOTAL_DEVICES; ++i) {
+    for (size_t i = 0; i < MaxTotalDevices; ++i) {
         if (!affectedMask.test(i))
             continue;
 
@@ -540,7 +540,7 @@ esp_err_t DaliDeviceRegistry::setColor(const DaliLongAddress_t longAddr, const u
 }
 
 esp_err_t DaliDeviceRegistry::setGroupColorTemp(const uint8_t busId, const uint8_t groupId, const uint16_t mireds) {
-    if (groupId >= 16 || busId >= BUS_COUNT)
+    if (groupId >= 16 || busId >= BusCount)
         return ESP_ERR_INVALID_ARG;
 
     const esp_err_t err = sendDt8ColorTemp(DaliAddressType::Group, groupId, mireds);
@@ -548,7 +548,7 @@ esp_err_t DaliDeviceRegistry::setGroupColorTemp(const uint8_t busId, const uint8
         return err;
 
     DaliGroupState updatedState;
-    std::bitset<MAX_TOTAL_DEVICES> affectedMask;
+    DeviceMask affectedMask;
     {
         std::lock_guard<std::mutex> lock(m_registryMutex);
         m_groupStates[busId][groupId].colorTemp = mireds;
@@ -579,7 +579,7 @@ esp_err_t DaliDeviceRegistry::setGroupColorTemp(const uint8_t busId, const uint8
 esp_err_t DaliDeviceRegistry::setGroupColor(const uint8_t busId, const uint8_t groupId, const uint8_t r,
                                             const uint8_t g, const uint8_t b, std::optional<uint8_t> w,
                                             std::optional<uint8_t> a, std::optional<uint8_t> f) {
-    if (groupId >= 16 || busId >= BUS_COUNT)
+    if (groupId >= 16 || busId >= BusCount)
         return ESP_ERR_INVALID_ARG;
 
     const esp_err_t err = sendDt8Color(DaliAddressType::Group, groupId, r, g, b, w, a, f);
@@ -587,7 +587,7 @@ esp_err_t DaliDeviceRegistry::setGroupColor(const uint8_t busId, const uint8_t g
         return err;
 
     DaliGroupState updatedState;
-    std::bitset<MAX_TOTAL_DEVICES> affectedMask;
+    DeviceMask affectedMask;
     {
         std::lock_guard<std::mutex> lock(m_registryMutex);
         m_groupStates[busId][groupId].rgb = DaliRGB{r, g, b};
@@ -616,12 +616,12 @@ esp_err_t DaliDeviceRegistry::setGroupColor(const uint8_t busId, const uint8_t g
 }
 
 esp_err_t DaliDeviceRegistry::setGroupBrightness(const uint8_t busId, const uint8_t groupId, const uint8_t level) {
-    if (groupId >= 16 || busId >= BUS_COUNT)
+    if (groupId >= 16 || busId >= BusCount)
         return ESP_ERR_INVALID_ARG;
     const esp_err_t err = m_bus.sendDAPC(DaliAddressType::Group, groupId, level);
     if (err == ESP_OK) {
         DaliGroupState updatedState;
-        std::bitset<MAX_TOTAL_DEVICES> affectedMask;
+        DeviceMask affectedMask;
 
         {
             std::lock_guard<std::mutex> lock(m_registryMutex);
@@ -653,13 +653,13 @@ esp_err_t DaliDeviceRegistry::setGroupBrightness(const uint8_t busId, const uint
 }
 
 esp_err_t DaliDeviceRegistry::setGroupPower(const uint8_t busId, const uint8_t groupId, const bool on) {
-    if (groupId >= 16 || busId >= BUS_COUNT)
+    if (groupId >= 16 || busId >= BusCount)
         return ESP_ERR_INVALID_ARG;
     if (!on) {
         const esp_err_t err = m_bus.sendGearCommand(DaliAddressType::Group, groupId, OpCode::Off);
         if (err == ESP_OK) {
             DaliGroupState updatedState;
-            std::bitset<MAX_TOTAL_DEVICES> affectedMask;
+            DeviceMask affectedMask;
             {
                 std::lock_guard<std::mutex> lock(m_registryMutex);
                 m_groupStates[busId][groupId].currentLevel = 0;
@@ -766,6 +766,7 @@ esp_err_t DaliDeviceRegistry::saveSceneLevels(const uint8_t, const uint8_t scene
     if (sceneId >= 16)
         return ESP_ERR_INVALID_ARG;
 
+    ScanCommissionGuard guard(m_scanCommissionActive, m_bus);
     for (uint8_t sa = 0; sa < 64; ++sa) {
         const uint8_t lvl = levels[sa];
         if (lvl != 255) {
@@ -790,6 +791,7 @@ SceneLevels DaliDeviceRegistry::querySceneLevels(const uint8_t, const uint8_t sc
     if (sceneId >= 16)
         return levels;
 
+    ScanCommissionGuard guard(m_scanCommissionActive, m_bus);
     for (uint8_t sa = 0; sa < 64; ++sa) {
         const auto queryOp = static_cast<OpCode>(0xB0 + sceneId);
         const auto res = m_bus.queryGear(DaliAddressType::Short, sa, queryOp);
@@ -889,9 +891,9 @@ void DaliDeviceRegistry::pollTaskRunner(void* arg) {
             pollSingleDevice(rrTarget);
         }
 
-        constexpr uint32_t pollCycleMs = 300'000;
+        const uint32_t pollCycleMs = m_pollIntervalMs.load(std::memory_order_relaxed);
         const uint32_t count = (totalDevices > 0) ? static_cast<uint32_t>(totalDevices) : 64;
-        constexpr uint32_t minDelayMs = 1000;
+        constexpr uint32_t minDelayMs = 100;
         constexpr uint32_t maxDelayMs = 15000;
         const uint32_t stepDelayMs = std::clamp(pollCycleMs / count, minDelayMs, maxDelayMs);
         vTaskDelay(pdMS_TO_TICKS(stepDelayMs));
@@ -911,7 +913,7 @@ esp_err_t DaliDeviceRegistry::removeDevice(const DaliLongAddress_t longAddr) {
         const auto intAddr = getIdentity(*it).internalAddress;
         size_t mapIdx = (intAddr.bus() * 64) + intAddr.shortAddr();
         if (etl::holds_alternative<InputDevice>(*it)) {
-            mapIdx += (BUS_COUNT * 64);
+            mapIdx += (BusCount * 64);
         }
         m_internalToLongMap[mapIdx] = InvalidLongAddr;
 
@@ -1030,8 +1032,8 @@ void DaliDeviceRegistry::scanBus() {
     ESP_LOGI(TAG, "Starting non-destructive DALI bus scan...");
     ScanCommissionGuard guard(m_scanCommissionActive, m_bus);
 
-    std::bitset<64> seenGears;
-    std::bitset<64> seenInputs;
+    ShortAddrMask seenGears;
+    ShortAddrMask seenInputs;
 
     const uint8_t busId = m_bus.getBusId();
 
@@ -1105,7 +1107,7 @@ void DaliDeviceRegistry::scanBus() {
                     auto& input = etl::get<InputDevice>(*it);
                     const uint8_t oldSa = input.internalAddress.shortAddr();
                     if (oldSa != sa && oldSa < 64) {
-                        m_internalToLongMap[(busId * 64) + oldSa + (BUS_COUNT * 64)] = InvalidLongAddr;
+                        m_internalToLongMap[(busId * 64) + oldSa + (BusCount * 64)] = InvalidLongAddr;
                     }
                     input.internalAddress = DaliInternalAddr(busId, sa);
                     input.available = true;
@@ -1116,7 +1118,7 @@ void DaliDeviceRegistry::scanBus() {
                     input.available = true;
                     m_devices.push_back(input);
                 }
-                m_internalToLongMap[(busId * 64) + sa + (BUS_COUNT * 64)] = longAddr;
+                m_internalToLongMap[(busId * 64) + sa + (BusCount * 64)] = longAddr;
             }
             ESP_LOGI(TAG, "Input Device detected at SA %d", sa);
         }
@@ -1158,7 +1160,7 @@ void DaliDeviceRegistry::commissionNewDevices() {
     m_bus.sendDeviceSpecial(0x00, 0x00, false);
     vTaskDelay(pdMS_TO_TICKS(50));
 
-    std::bitset<64> occupiedAddresses;
+    ShortAddrMask occupiedAddresses;
     for (uint8_t sa = 0; sa < 64; ++sa) {
         if (m_bus.queryGear(DaliAddressType::Short, sa, OpCode::QueryControlGear).has_value()) {
             occupiedAddresses.set(sa);
@@ -1176,6 +1178,8 @@ void DaliDeviceRegistry::commissionNewDevices() {
     m_bus.sendGearSpecial(SpecialOpCode::Terminate, 0, false);
 
     m_bus.sendGearSpecial(SpecialOpCode::Initialise, 0xFF, true);
+    m_bus.sendDeviceSpecial(0x00, 0x00, false);
+    vTaskDelay(pdMS_TO_TICKS(50));
     m_bus.sendGearSpecial(SpecialOpCode::Randomise, 0, true);
 
     vTaskDelay(pdMS_TO_TICKS(100));
@@ -1244,7 +1248,7 @@ void DaliDeviceRegistry::commission24BitDevices() {
     m_bus.sendGearSpecial(SpecialOpCode::Terminate, 0, false);
     vTaskDelay(pdMS_TO_TICKS(50));
 
-    std::bitset<64> occupiedInputAddresses;
+    ShortAddrMask occupiedInputAddresses;
     for (uint8_t sa = 0; sa < 64; ++sa) {
         const uint32_t queryFrame = (static_cast<uint32_t>((sa << 1) | 1) << 16) | (0xFE << 8) | 0x30;
         if (m_bus.queryRaw(queryFrame, 24).has_value()) {
@@ -1260,6 +1264,8 @@ void DaliDeviceRegistry::commission24BitDevices() {
     }
     m_bus.sendDeviceSpecial(0x00, 0x00, false);
     m_bus.sendDeviceSpecial(0x01, 0x00, true);
+    m_bus.sendGearSpecial(SpecialOpCode::Terminate, 0, false);
+    vTaskDelay(pdMS_TO_TICKS(50));
     m_bus.sendDeviceSpecial(0x02, 0x00, true);
 
     vTaskDelay(pdMS_TO_TICKS(100));
@@ -1376,7 +1382,7 @@ bool DaliDeviceRegistry::loadAddressMapFromNvs() {
             dev.gtin = item.gtin;
             dev.available = false;
             m_devices.push_back(dev);
-            m_internalToLongMap[mapIdx + (BUS_COUNT * 64)] = item.longAddress;
+            m_internalToLongMap[mapIdx + (BusCount * 64)] = item.longAddress;
         } else {
             ControlGear gear;
             gear.longAddress = item.longAddress;

@@ -63,9 +63,12 @@ enum class DaliOperationStatus : uint8_t { Idle, Scanning, Initializing, Refresh
 
 class DaliDeviceRegistry {
   public:
-    static constexpr size_t MAX_DEVICES_PER_BUS = 128;
-    static constexpr size_t BUS_COUNT = 1;
-    static constexpr size_t MAX_TOTAL_DEVICES = MAX_DEVICES_PER_BUS * BUS_COUNT;
+    static constexpr size_t MaxDevicesPerBus = 128;
+    static constexpr size_t BusCount = 1;
+    static constexpr size_t MaxTotalDevices = MaxDevicesPerBus * BusCount;
+
+    using DeviceMask = std::bitset<MaxTotalDevices>;
+    using ShortAddrMask = std::bitset<64>;
 
     explicit DaliDeviceRegistry(DaliBusEngine& busEngine);
     ~DaliDeviceRegistry();
@@ -76,6 +79,7 @@ class DaliDeviceRegistry {
     esp_err_t init();
     void start();
 
+    inline void setPollIntervalMs(uint32_t intervalMs) noexcept;
     [[nodiscard]] inline bool tryBeginOperation(DaliOperationStatus op) noexcept;
     inline void endOperation() noexcept;
     [[nodiscard]] inline DaliOperationStatus getOperationStatus() const noexcept;
@@ -176,7 +180,7 @@ class DaliDeviceRegistry {
     void pollSingleDevice(DaliInternalAddr addr);
 
     void notifyDeviceChange(const ControlGear& gear) const;
-    void notifyAffectedDevices(const std::bitset<MAX_TOTAL_DEVICES>& affectedMask) const;
+    void notifyAffectedDevices(const DeviceMask& affectedMask) const;
     void notifyGroupChange(uint8_t busId, uint8_t groupId, const DaliGroupState& state) const;
     void notifyInputEvent(const InputDeviceEvent& ev) const;
 
@@ -187,24 +191,25 @@ class DaliDeviceRegistry {
     DaliBusEngine& m_bus;
 
     mutable std::mutex m_registryMutex{};
-    etl::vector<DaliDevice, MAX_TOTAL_DEVICES> m_devices{};
-    std::array<DaliLongAddress_t, BUS_COUNT * 128> m_internalToLongMap{};
+    etl::vector<DaliDevice, MaxTotalDevices> m_devices{};
+    std::array<DaliLongAddress_t, BusCount * 128> m_internalToLongMap{};
     GroupAssignments m_groupAssignments{};
-    std::array<std::array<DaliGroupState, 16>, BUS_COUNT> m_groupStates{};
+    std::array<std::array<DaliGroupState, 16>, BusCount> m_groupStates{};
 
     mutable std::mutex m_queueMutex{};
-    etl::queue<DaliInternalAddr, MAX_TOTAL_DEVICES> m_prioritySyncQueue{};
-    etl::flat_set<DaliInternalAddr, MAX_TOTAL_DEVICES> m_prioritySyncSet{};
-    etl::vector<DeferredSyncRequest, MAX_TOTAL_DEVICES> m_deferredSyncRequests{};
+    etl::queue<DaliInternalAddr, MaxTotalDevices> m_prioritySyncQueue{};
+    etl::flat_set<DaliInternalAddr, MaxTotalDevices> m_prioritySyncSet{};
+    etl::vector<DeferredSyncRequest, MaxTotalDevices> m_deferredSyncRequests{};
 
-    std::array<AddressMapBlobItem, MAX_TOTAL_DEVICES> m_nvsBlobScratchpad{};
+    std::array<AddressMapBlobItem, MaxTotalDevices> m_nvsBlobScratchpad{};
     mutable std::mutex m_snifferMutex{};
     mutable std::mutex m_nvsWriteMutex{};
-    etl::vector<DeviceStateChangeEvent, MAX_TOTAL_DEVICES> m_snifferEventsScratchpad{};
+    etl::vector<DeviceStateChangeEvent, MaxTotalDevices> m_snifferEventsScratchpad{};
 
     DeviceStateCallback m_deviceStateCb{nullptr};
     void* m_deviceStateCtx{nullptr};
-    std::atomic<bool> m_scanCommissionActive{false};
+    mutable std::atomic<bool> m_scanCommissionActive{false};
+    std::atomic<uint32_t> m_pollIntervalMs{CONFIG_DALI2MQTT_DALI_DEFAULT_POLL_INTERVAL_MS};
     std::atomic<DaliOperationStatus> m_operationStatus{DaliOperationStatus::Idle};
 
     GroupStateCallback m_groupStateCb{nullptr};

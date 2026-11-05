@@ -30,7 +30,7 @@ void HomeAssistantDiscovery::publishAll(const ConfigStructure& config) const {
         }
     }
 
-    for (uint8_t b = 0; b < DaliDeviceRegistry::BUS_COUNT; ++b) {
+    for (uint8_t b = 0; b < DaliDeviceRegistry::BusCount; ++b) {
         for (uint8_t g = 0; g < 16; ++g) {
             publishGroup(b, g, config);
         }
@@ -38,7 +38,7 @@ void HomeAssistantDiscovery::publishAll(const ConfigStructure& config) const {
     }
 
     publishOtaUpdateEntity(config);
-    
+
     ESP_LOGI(TAG, "Home Assistant Discovery published successfully.");
 }
 
@@ -56,7 +56,8 @@ void HomeAssistantDiscovery::publishLight(const ControlGear& gear, const ConfigS
     char stateTopic[128], cmdTopic[128], bridgeAvTopic[128];
     snprintf(stateTopic, sizeof(stateTopic), "%s/light/%s/state", config.mqttBaseTopic.c_str(), addrStr.data());
     snprintf(cmdTopic, sizeof(cmdTopic), "%s/light/%s/set", config.mqttBaseTopic.c_str(), addrStr.data());
-    snprintf(bridgeAvTopic, sizeof(bridgeAvTopic), "%s%s", config.mqttBaseTopic.c_str(), CONFIG_DALI2MQTT_MQTT_AVAILABILITY_TOPIC);
+    snprintf(bridgeAvTopic, sizeof(bridgeAvTopic), "%s%s", config.mqttBaseTopic.c_str(),
+             CONFIG_DALI2MQTT_MQTT_AVAILABILITY_TOPIC);
 
     const std::string customName = utils::getDeviceCustomName(addrStr.data());
     char nameBuf[96];
@@ -119,7 +120,8 @@ void HomeAssistantDiscovery::publishLight(const ControlGear& gear, const ConfigS
              addrStr.data());
 
     char faultDiscTopic[128];
-    snprintf(faultDiscTopic, sizeof(faultDiscTopic), "%s/binary_sensor/%s/config", config.hassDiscoveryPrefix.c_str(), faultUniqueId);
+    snprintf(faultDiscTopic, sizeof(faultDiscTopic), "%s/binary_sensor/%s/config", config.hassDiscoveryPrefix.c_str(),
+             faultUniqueId);
 
     JsonDocument faultDoc;
     faultDoc["name"] = "Lamp Fault";

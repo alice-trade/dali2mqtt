@@ -44,16 +44,11 @@ struct ConfigStructure {
     bool hassDiscoveryEnabled{false};
     etl::string<32> hassDiscoveryPrefix{};
 
-
     bool configuredFlag{false};
 
-    [[nodiscard]] bool isMqttConfigured() const noexcept {
-        return !mqttUri.empty();
-    }
+    [[nodiscard]] bool isMqttConfigured() const noexcept { return !mqttUri.empty(); }
 
-    [[nodiscard]] bool isFullyConfigured() const noexcept {
-        return configuredFlag && isMqttConfigured();
-    }
+    [[nodiscard]] bool isFullyConfigured() const noexcept { return configuredFlag && isMqttConfigured(); }
 };
 
 } // namespace daliMQTT

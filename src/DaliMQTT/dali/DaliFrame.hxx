@@ -9,13 +9,13 @@
 namespace daliMQTT {
 
 enum class DaliFrameType : uint8_t {
-    Forward16,     ///< Standard 16-bit control/request command
-    Forward24,     ///< 24-bit DALI-2 command
-    Backward8,     ///< 8-bit ballast response to request
-    Collision,     ///< A bus collision has been detected
-    NoiseCorrupted,///< The frame was discarded due to a Manchester violation
-    TxEchoSuccess, ///< Successful completion of one's own broadcast
-    Wakeup 
+    Forward16,      ///< Standard 16-bit control/request command
+    Forward24,      ///< 24-bit DALI-2 command
+    Backward8,      ///< 8-bit ballast response to request
+    Collision,      ///< A bus collision has been detected
+    NoiseCorrupted, ///< The frame was discarded due to a Manchester violation
+    TxEchoSuccess,  ///< Successful completion of one's own broadcast
+    Wakeup
 };
 
 struct DaliRawFrame {

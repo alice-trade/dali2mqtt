@@ -4,8 +4,8 @@
 #ifndef DALIMQTT_DALIADDRESS_HXX
 #define DALIMQTT_DALIADDRESS_HXX
 
-#include <cstdint>
 #include <compare>
+#include <cstdint>
 
 namespace daliMQTT {
 
@@ -31,7 +31,7 @@ struct DaliInternalAddr {
 
 using DaliLongAddress_t = uint32_t;
 inline constexpr DaliLongAddress_t InvalidLongAddr = 0xFFFFFFFF;
-inline constexpr DaliLongAddress_t ClashLongAddr   = 0xFFFFFFFE;
+inline constexpr DaliLongAddress_t ClashLongAddr = 0xFFFFFFFE;
 
 } // namespace daliMQTT
 

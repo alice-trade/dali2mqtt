@@ -17,7 +17,7 @@
 namespace daliMQTT {
 
 class EthernetBackend {
-public:
+  public:
     EthernetBackend() = default;
     ~EthernetBackend();
 
@@ -35,7 +35,7 @@ public:
     static constexpr bool supportsAccessPoint() noexcept { return false; }
     static constexpr const char* interfaceName() noexcept { return "Ethernet"; }
 
-private:
+  private:
     static void ethEventHandler(void* arg, esp_event_base_t base, int32_t id, void* data);
     esp_err_t setupW5500();
 #if defined(CONFIG_DALI2MQTT_ETH_TYPE_INTERNAL_RMII)

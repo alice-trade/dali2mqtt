@@ -60,7 +60,8 @@ void SystemControls::setResetCallback(ResetActionCallback cb, void* ctx) noexcep
 
 void SystemControls::onButtonHeldTimer(TimerHandle_t xTimer) {
     const auto* self = static_cast<SystemControls*>(pvTimerGetTimerID(xTimer));
-    if (!self) return;
+    if (!self)
+        return;
 
     if (gpio_get_level(self->m_buttonPin) == 0) {
         const uint32_t nowMs = static_cast<uint32_t>(esp_timer_get_time() / 1000);

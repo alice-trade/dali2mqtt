@@ -83,7 +83,8 @@ esp_err_t MqttClient::init(const ConfigStructure& config) {
 
 void MqttClient::connect() {
     std::lock_guard<std::mutex> lock(m_mutex);
-    if (auto* client = m_clientHandle.load(std::memory_order_acquire); client && m_status.load() == MqttStatus::Disconnected) {
+    if (auto* client = m_clientHandle.load(std::memory_order_acquire);
+        client && m_status.load() == MqttStatus::Disconnected) {
         m_status.store(MqttStatus::Connecting);
         esp_mqtt_client_start(client);
     }

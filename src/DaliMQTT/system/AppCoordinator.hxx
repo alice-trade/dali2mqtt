@@ -4,15 +4,15 @@
 #ifndef DALIMQTT_APPCOORDINATOR_HXX
 #define DALIMQTT_APPCOORDINATOR_HXX
 
-#include "system/SystemEvent.hxx"
-#include "network/NetworkPlatform.hxx"
 #include "dali/DaliService.hxx"
 #include "mqtt/MqttBridge.hxx"
 #include "mqtt/MqttClient.hxx"
+#include "network/NetworkPlatform.hxx"
 #include "system/ConfigStore.hxx"
 #include "system/OtaService.hxx"
 #include "system/SyslogService.hxx"
 #include "system/SystemControls.hxx"
+#include "system/SystemEvent.hxx"
 #include "system/SystemScheduler.hxx"
 #include "system/WebUIController.hxx"
 #include <atomic>

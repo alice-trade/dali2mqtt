@@ -26,6 +26,7 @@ string(TIMESTAMP PROJ_BUILD_TIMESTAMP "%Y-%m-%dT%H:%M:%SZ")
 target_compile_definitions(DaliMQTT-Core PRIVATE
         $<$<CONFIG:Debug>:_DEBUG_DALIMQTT_>
         DALIMQTT_VERSION=\"${PROJVER}\"
+        DALIMQTT_CONFIGURED_TIMESTAMP=\"${PROJ_BUILD_TIMESTAMP}\"
 )
 
 target_compile_options(DaliMQTT-Core PRIVATE
@@ -34,11 +35,6 @@ target_compile_options(DaliMQTT-Core PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:${_idf_cxx_compile_options}>
 )
 
-set_source_files_properties(
-        "${CMAKE_CURRENT_SOURCE_DIR}/webui/api/InfoController.cxx"
-        PROPERTIES
-        COMPILE_DEFINITIONS "DALIMQTT_CONFIGURED_TIMESTAMP=\"${PROJ_BUILD_TIMESTAMP}\""
-)
 target_include_directories(DaliMQTT-Core PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
 )

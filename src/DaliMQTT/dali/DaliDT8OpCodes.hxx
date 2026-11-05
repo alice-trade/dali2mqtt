@@ -20,7 +20,6 @@ enum class DT8OpCode : uint8_t {
     QueryColourValue = 0xFA
 };
 
-
 } // namespace daliMQTT
 
 #endif // DALIMQTT_DALIDT8OPCODES_HXX

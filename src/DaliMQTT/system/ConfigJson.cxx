@@ -131,20 +131,25 @@ ConfigApplyResult ConfigJson::apply(const JsonDocument& doc, ConfigStructure& ta
             return res;
         }
     }
-    if (!assignStringSafe(target.httpUser, getString("http_user"), "http_user", res, false)) return res;
+    if (!assignStringSafe(target.httpUser, getString("http_user"), "http_user", res, false))
+        return res;
 
     if (const char* hPass = getString("http_pass")) {
         if (hPass[0] != '\0') {
-            if (!assignStringSafe(target.httpPass, hPass, "http_pass", res, false)) return res;
+            if (!assignStringSafe(target.httpPass, hPass, "http_pass", res, false))
+                return res;
         }
     }
 
-    if (!assignStringSafe(target.otaBaseUrl, getString("ota_url"), "ota_url", res, false)) return res;
+    if (!assignStringSafe(target.otaBaseUrl, getString("ota_url"), "ota_url", res, false))
+        return res;
 
-    if (!assignStringSafe(target.syslogServer, getString("syslog_server"), "syslog_server", res, false)) return res;
+    if (!assignStringSafe(target.syslogServer, getString("syslog_server"), "syslog_server", res, false))
+        return res;
 
-    if (!assignStringSafe(target.hassDiscoveryPrefix, getString("hass_discovery_prefix"), "hass_discovery_prefix", res, false)) return res;
-
+    if (!assignStringSafe(target.hassDiscoveryPrefix, getString("hass_discovery_prefix"), "hass_discovery_prefix", res,
+                          false))
+        return res;
 
     if (doc["dali_poll_interval_ms"].is<uint32_t>()) {
         target.daliPollIntervalMs = doc["dali_poll_interval_ms"].as<uint32_t>();

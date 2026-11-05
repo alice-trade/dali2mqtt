@@ -36,8 +36,7 @@ class JsonArenaAllocator final : public ArduinoJson::Allocator {
         return header + 1;
     }
 
-    void deallocate(void*) override {
-    }
+    void deallocate(void*) override {}
 
     void* reallocate(void* ptr, size_t new_size) override {
         if (!ptr) {

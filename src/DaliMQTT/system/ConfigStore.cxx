@@ -103,7 +103,7 @@ esp_err_t ConfigStore::load() {
             cfg->syslogEnabled = (flagU8 == 1);
 
         uint32_t pollMs = 0;
-        if (nvs_get_u32(nvs.get(), "dali_poll", &pollMs) == ESP_OK && pollMs >= 1000) {
+        if (nvs_get_u32(nvs.get(), "dali_poll", &pollMs) == ESP_OK && pollMs >= 500) {
             cfg->daliPollIntervalMs = pollMs;
         }
 
@@ -166,7 +166,7 @@ esp_err_t ConfigStore::save(const ConfigStructure& newConfig) {
     const esp_err_t err = nvs_commit(nvs.get());
     if (err == ESP_OK) {
         const auto updated = std::make_shared<ConfigStructure>(newConfig);
-        updated->configuredFlag = true;
+        updated->configuredFlag = isComplete;
         m_config = updated;
         ESP_LOGI(TAG, "Configuration successfully saved to NVS");
     }

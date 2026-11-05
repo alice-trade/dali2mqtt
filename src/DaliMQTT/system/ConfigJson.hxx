@@ -17,7 +17,7 @@ struct ConfigApplyResult {
 };
 
 class ConfigJson {
-public:
+  public:
     /**
      * @brief Serialization of configuration in JSON
      */

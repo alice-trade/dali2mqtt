@@ -16,7 +16,7 @@
 namespace daliMQTT {
 
 class WifiBackend {
-public:
+  public:
     WifiBackend() = default;
     ~WifiBackend();
 
@@ -34,7 +34,7 @@ public:
     static constexpr bool supportsAccessPoint() noexcept { return true; }
     static constexpr const char* interfaceName() noexcept { return "Wi-Fi"; }
 
-private:
+  private:
     static void wifiEventHandler(void* arg, esp_event_base_t base, int32_t id, void* data);
 
     std::atomic<NetworkStatus> m_status{NetworkStatus::Disconnected};

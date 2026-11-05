@@ -31,17 +31,21 @@ concept NetworkBackendConcept = requires(T b, const ConfigStructure& cfg, QueueH
 } // namespace daliMQTT
 
 #if defined(CONFIG_DALI2MQTT_NET_ETHERNET)
-    #include "network/EthernetBackend.hxx"
-    namespace daliMQTT { using SelectedBackend = EthernetBackend; }
+#include "network/EthernetBackend.hxx"
+namespace daliMQTT {
+using SelectedBackend = EthernetBackend;
+}
 #else
-    #include "network/WifiBackend.hxx"
-    namespace daliMQTT { using SelectedBackend = WifiBackend; }
+#include "network/WifiBackend.hxx"
+namespace daliMQTT {
+using SelectedBackend = WifiBackend;
+}
 #endif
 
 namespace daliMQTT {
 
 class NetworkPlatform {
-public:
+  public:
     NetworkPlatform() = default;
     ~NetworkPlatform() = default;
 
@@ -62,7 +66,7 @@ public:
 
     [[nodiscard]] static constexpr bool isConfigured(const ConfigStructure& cfg);
 
-private:
+  private:
     SelectedBackend m_backend{};
 };
 

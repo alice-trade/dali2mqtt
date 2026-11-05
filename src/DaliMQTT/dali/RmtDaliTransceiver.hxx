@@ -25,8 +25,8 @@ struct RmtTransceiverConfig {
     bool invertTx{false}; ///< Direct control of the TX key
 };
 enum class DaliBusPhysicalState : uint8_t {
-    NormalIdle,     // 16V on the rail (Idle)
-    StuckActive,    // Short circuit or voltage drop (< 9.5V) for more than 500 ms
+    NormalIdle,  // 16V on the rail (Idle)
+    StuckActive, // Short circuit or voltage drop (< 9.5V) for more than 500 ms
 };
 
 using PhyFrameCallback = void (*)(const DaliRawFrame& frame, void* userCtx);
@@ -74,12 +74,11 @@ class RmtDaliTransceiver {
     inline void decodeSymbols(const rmt_symbol_word_t* symbols, size_t count) noexcept;
     inline void dispatchFrame(DaliFrameType type, uint32_t data, uint8_t bits) const noexcept;
 
-    static constexpr rmt_symbol_word_t makeSymbol(uint32_t dur0, uint8_t lvl0, uint32_t dur1,
-                                                         uint8_t lvl1) noexcept;
+    static constexpr rmt_symbol_word_t makeSymbol(uint32_t dur0, uint8_t lvl0, uint32_t dur1, uint8_t lvl1) noexcept;
 
     static constexpr size_t RMT_SYMBOLS_CAPACITY = 64;
 
-    static constexpr uint32_t EVT_TX_QUEUED    = (1 << 2);
+    static constexpr uint32_t EVT_TX_QUEUED = (1 << 2);
     volatile uint32_t m_rxSymbolCount[2]{0, 0};
 
     RmtTransceiverConfig m_config{};

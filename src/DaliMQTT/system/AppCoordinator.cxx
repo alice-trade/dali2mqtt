@@ -28,6 +28,7 @@ void AppCoordinator::start() {
     m_deps.scheduler.setBusHealthCallback(&onBusHealthCheck, this, 10);
     m_deps.scheduler.setOtaCheckCallback(&onOtaCheck, this, static_cast<uint32_t>(cfg->otaCheckIntervalDays) * 86400);
 
+    m_deps.dali.Registry().setPollIntervalMs(cfg->daliPollIntervalMs);
     m_deps.dali.init(cfg->buses[0]);
 
     m_deps.network.setEventQueue(m_deps.systemQueue);
@@ -71,7 +72,8 @@ void AppCoordinator::handleNetworkConnected() {
         m_deps.mqttClient.connect();
         m_state.store(AppState::RunningNormal);
     } else {
-        ESP_LOGW(TAG, "MQTT broker URI is not configured! Please configure MQTT via WebUI at http://%s.local", cfg->httpDomain.c_str());
+        ESP_LOGW(TAG, "MQTT broker URI is not configured! Please configure MQTT via WebUI at http://%s.local",
+                 cfg->httpDomain.c_str());
         m_state.store(AppState::Provisioning);
     }
 }
@@ -85,6 +87,7 @@ void AppCoordinator::handleNetworkDisconnected() {
 
 void AppCoordinator::handleConfigReload() const {
     const auto cfg = m_deps.config.get();
+    m_deps.dali.Registry().setPollIntervalMs(cfg->daliPollIntervalMs);
     if (cfg->isMqttConfigured()) {
         ESP_LOGI(TAG, "Reloading MQTT parameters...");
         m_deps.mqttBridge.stop();
@@ -134,16 +137,16 @@ void AppCoordinator::onBusHealthCheck(void* ctx) {
         const auto cfg = self->m_deps.config.get();
         char topic[128];
         snprintf(topic, sizeof(topic), "%s/system/fault", cfg->mqttBaseTopic.c_str());
-        const char* payload = (health == BusHealth::ShortCircuit)
-            ? R"({"bus_fault":"short_circuit_or_no_power"})"
-            : R"({"bus_fault":"none"})";
+        const char* payload = (health == BusHealth::ShortCircuit) ? R"({"bus_fault":"short_circuit_or_no_power"})"
+                                                                  : R"({"bus_fault":"none"})";
         self->m_deps.mqttClient.publish(topic, payload, 1, true);
     }
 }
 
 void AppCoordinator::onOtaCheck(void* ctx) {
     auto* self = static_cast<AppCoordinator*>(ctx);
-    if (self->m_deps.network.getStatus() != NetworkStatus::Connected) return;
+    if (self->m_deps.network.getStatus() != NetworkStatus::Connected)
+        return;
 
     const auto cfg = self->m_deps.config.get();
     if (!cfg->otaBaseUrl.empty()) {

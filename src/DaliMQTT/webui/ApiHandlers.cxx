@@ -59,7 +59,8 @@ void ApiHandlers::webGroupRefreshTaskRunner(void* arg) {
     vTaskDelete(nullptr);
 }
 
-static char* readRequestBodyToArena(httpd_req_t* req, ApiContext* ctx, const size_t maxLen, size_t* outReceived = nullptr) {
+static char* readRequestBodyToArena(httpd_req_t* req, ApiContext* ctx, const size_t maxLen,
+                                    size_t* outReceived = nullptr) {
     if (req->content_len == 0 || req->content_len > maxLen) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Payload too large or empty");
         return nullptr;
@@ -186,6 +187,7 @@ esp_err_t ApiHandlers::setConfig(httpd_req_t* req) {
     }
 
     ctx->config.save(newCfg);
+    ctx->daliRegistry.setPollIntervalMs(newCfg.daliPollIntervalMs);
 
     httpd_resp_set_type(req, "application/json");
     if (result.requiresReboot) {

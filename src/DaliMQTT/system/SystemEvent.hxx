@@ -11,11 +11,6 @@ enum class SystemEventType : uint8_t {
     MqttDisconnected,
     FactoryResetRequested
 };
-enum class NetworkStatus : uint8_t {
-    Disconnected,
-    Connecting,
-    Connected,
-    ProvisioningAp
-};
+enum class NetworkStatus : uint8_t { Disconnected, Connecting, Connected, ProvisioningAp };
 } // namespace daliMQTT
 #endif // DALIMQTT_SYSTEMEVENT_HXX

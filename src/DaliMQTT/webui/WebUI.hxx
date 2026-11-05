@@ -11,7 +11,7 @@
 namespace daliMQTT {
 
 class WebUI {
-public:
+  public:
     explicit WebUI(ApiContext& apiCtx);
     ~WebUI();
 
@@ -23,7 +23,7 @@ public:
 
     [[nodiscard]] inline bool isRunning() const noexcept;
 
-private:
+  private:
     static esp_err_t staticFileGetHandler(httpd_req_t* req);
 
     ApiContext& m_apiCtx;

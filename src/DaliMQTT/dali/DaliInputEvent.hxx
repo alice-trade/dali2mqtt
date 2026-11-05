@@ -9,14 +9,7 @@
 
 namespace daliMQTT {
 
-enum class InputAddressType : uint8_t {
-    Short,
-    Group,
-    Instance,
-    InstanceGroup,
-    Broadcast,
-    Unknown
-};
+enum class InputAddressType : uint8_t { Short, Group, Instance, InstanceGroup, Broadcast, Unknown };
 
 struct InputDeviceEvent {
     uint8_t busId{0};
